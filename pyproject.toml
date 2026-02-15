@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shukketsu"
+version = "0.1.0"
+description = "WoW TBC raid performance analyzer with agentic AI"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "httpx>=0.28",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pydantic-settings>=2.7",
+    "langchain-core>=0.3",
+    "langchain-openai>=0.3",
+    "langgraph>=0.2",
+    "tenacity>=9.0",
+    "structlog>=24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "respx>=0.22",
+    "ruff>=0.9",
+]
+
+[project.scripts]
+pull-my-logs = "shukketsu.scripts.pull_my_logs:main"
+
+[tool.setuptools.packages.find]
+where = ["code"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["code/tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+src = ["code"]
+line-length = 99
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
