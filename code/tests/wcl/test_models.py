@@ -1,4 +1,3 @@
-import pytest
 
 from shukketsu.wcl.models import (
     Actor,

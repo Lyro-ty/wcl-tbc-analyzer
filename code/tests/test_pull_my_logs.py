@@ -2,8 +2,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from shukketsu.scripts.pull_my_logs import parse_args, run
 from shukketsu.pipeline.ingest import IngestResult
+from shukketsu.scripts.pull_my_logs import parse_args, run
 
 
 def test_parse_args_report_code():

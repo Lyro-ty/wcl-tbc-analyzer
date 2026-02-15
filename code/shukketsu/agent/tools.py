@@ -83,7 +83,9 @@ async def get_top_rankings(encounter_name: str, class_name: str, spec_name: str)
 
 
 @tool
-async def compare_to_top(encounter_name: str, player_name: str, class_name: str, spec_name: str) -> str:
+async def compare_to_top(
+    encounter_name: str, player_name: str, class_name: str, spec_name: str,
+) -> str:
     """Compare a player's performance to top rankings for the same class/spec.
     Shows side-by-side metrics for the player vs top 10 average."""
     session = await _get_session()
@@ -102,7 +104,8 @@ async def compare_to_top(encounter_name: str, player_name: str, class_name: str,
             f"Comparison for {player_name} ({row.player_spec} {row.player_class}) "
             f"on {encounter_name}:\n"
             f"  Your DPS: {row.dps:,.1f} | Parse: {row.parse_percentile}%\n"
-            f"  Top 10 avg DPS: {row.avg_dps:,.1f} (range: {row.min_dps:,.1f} - {row.max_dps:,.1f})\n"
+            f"  Top 10 avg DPS: {row.avg_dps:,.1f} "
+            f"(range: {row.min_dps:,.1f} - {row.max_dps:,.1f})\n"
             f"  Gap to top avg: {gap:.1f}%\n"
             f"  Your iLvl: {row.item_level} | Top avg iLvl: {row.avg_ilvl:.0f}\n"
             f"  Your deaths: {row.deaths}"

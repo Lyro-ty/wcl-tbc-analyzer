@@ -1,6 +1,7 @@
+from langchain_openai import ChatOpenAI
+
 from shukketsu.agent.llm import create_llm
 from shukketsu.config import Settings
-from langchain_openai import ChatOpenAI
 
 
 def test_create_llm_returns_chat_model(monkeypatch):

@@ -3,7 +3,7 @@ import pytest
 import respx
 
 from shukketsu.wcl.auth import WCLAuth
-from shukketsu.wcl.client import WCLClient, WCLAPIError
+from shukketsu.wcl.client import WCLAPIError, WCLClient
 from shukketsu.wcl.rate_limiter import RateLimiter
 
 API_URL = "https://www.warcraftlogs.com/api/v2/client"

@@ -40,9 +40,11 @@ async def analyze(request: AnalyzeRequest):
         result = await graph.ainvoke(
             {"messages": [HumanMessage(content=request.question)]}
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("Agent invocation failed")
-        raise HTTPException(status_code=503, detail="Analysis service unavailable")
+        raise HTTPException(
+            status_code=503, detail="Analysis service unavailable",
+        ) from exc
 
     messages = result.get("messages", [])
     answer = messages[-1].content if messages else "No response generated."

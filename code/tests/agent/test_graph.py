@@ -1,9 +1,8 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
-from shukketsu.agent.graph import create_graph, route_query, grade_results, MAX_RETRIES
+from shukketsu.agent.graph import MAX_RETRIES, create_graph, grade_results, route_query
 
 
 class TestCreateGraph:

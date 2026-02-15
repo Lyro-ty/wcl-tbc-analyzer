@@ -1,18 +1,12 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from langchain_core.tools import BaseTool
 
 from shukketsu.agent.tools import (
-    get_my_performance,
-    get_top_rankings,
-    compare_to_top,
-    get_fight_details,
-    get_progression,
-    get_deaths_and_mechanics,
-    get_raid_summary,
-    search_fights,
     ALL_TOOLS,
+    get_my_performance,
+    get_raid_summary,
+    get_top_rankings,
 )
 
 

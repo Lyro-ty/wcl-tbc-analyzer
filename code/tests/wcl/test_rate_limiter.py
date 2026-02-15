@@ -1,7 +1,5 @@
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from shukketsu.wcl.rate_limiter import RateLimiter
 
 

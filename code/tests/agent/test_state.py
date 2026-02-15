@@ -1,5 +1,5 @@
+from shukketsu.agent.prompts import GRADER_PROMPT, SYSTEM_PROMPT
 from shukketsu.agent.state import AnalyzerState
-from shukketsu.agent.prompts import SYSTEM_PROMPT, GRADER_PROMPT
 
 
 class TestAnalyzerState:

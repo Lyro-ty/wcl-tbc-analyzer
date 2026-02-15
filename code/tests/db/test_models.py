@@ -2,6 +2,8 @@ import pytest
 from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from shukketsu.config import Settings
+from shukketsu.db.engine import create_db_engine
 from shukketsu.db.models import (
     Base,
     Encounter,
@@ -12,8 +14,6 @@ from shukketsu.db.models import (
     Report,
     TopRanking,
 )
-from shukketsu.db.engine import create_db_engine
-from shukketsu.config import Settings
 
 
 class TestModelsInheritBase:

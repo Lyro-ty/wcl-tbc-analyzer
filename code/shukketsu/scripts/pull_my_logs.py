@@ -27,10 +27,9 @@ async def run(report_code: str) -> None:
         settings.wcl.client_secret.get_secret_value(),
         settings.wcl.oauth_url,
     )
-    async with WCLClient(auth, RateLimiter()) as wcl:
-        async with session_factory() as session:
-            result = await ingest_report(wcl, session, report_code)
-            await session.commit()
+    async with WCLClient(auth, RateLimiter()) as wcl, session_factory() as session:
+        result = await ingest_report(wcl, session, report_code)
+        await session.commit()
     await engine.dispose()
     logger.info(
         "Ingested report %s: %d fights, %d performances",

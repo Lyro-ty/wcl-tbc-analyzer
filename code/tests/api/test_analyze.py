@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -9,7 +9,9 @@ from langchain_core.messages import AIMessage
 def mock_graph():
     graph = AsyncMock()
     graph.ainvoke.return_value = {
-        "messages": [AIMessage(content="Your DPS on Gruul is 1500, which is a 95th percentile parse.")],
+        "messages": [
+            AIMessage(content="Your DPS on Gruul is 1500, a 95th percentile parse."),
+        ],
         "query_type": "my_performance",
     }
     return graph

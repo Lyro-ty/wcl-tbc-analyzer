@@ -73,7 +73,9 @@ class IngestResult:
     performances: int
 
 
-async def ingest_report(wcl, session, report_code: str, my_character_names: set[str] | None = None) -> IngestResult:
+async def ingest_report(
+    wcl, session, report_code: str, my_character_names: set[str] | None = None,
+) -> IngestResult:
     """Fetch a report from WCL and persist it to the database."""
     from shukketsu.wcl.queries import REPORT_FIGHTS, REPORT_RANKINGS
 
@@ -82,7 +84,10 @@ async def ingest_report(wcl, session, report_code: str, my_character_names: set[
 
     # Fetch report data
     report_data = await wcl.query(
-        REPORT_FIGHTS.replace("RATE_LIMIT", "rateLimitData { pointsSpentThisHour limitPerHour pointsResetIn }"),
+        REPORT_FIGHTS.replace(
+            "RATE_LIMIT",
+            "rateLimitData { pointsSpentThisHour limitPerHour pointsResetIn }",
+        ),
         variables={"code": report_code},
     )
     report_info = report_data["reportData"]["report"]
@@ -103,7 +108,10 @@ async def ingest_report(wcl, session, report_code: str, my_character_names: set[
     fight_ids = [f.fight_id for f in fights]
     if fight_ids:
         rankings_data = await wcl.query(
-            REPORT_RANKINGS.replace("RATE_LIMIT", "rateLimitData { pointsSpentThisHour limitPerHour pointsResetIn }"),
+            REPORT_RANKINGS.replace(
+                "RATE_LIMIT",
+                "rateLimitData { pointsSpentThisHour limitPerHour pointsResetIn }",
+            ),
             variables={"code": report_code, "fightIDs": fight_ids},
         )
         rankings = rankings_data["reportData"]["report"]["rankings"]

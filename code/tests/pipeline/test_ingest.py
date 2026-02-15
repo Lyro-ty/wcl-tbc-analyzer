@@ -1,7 +1,7 @@
 import pytest
 
+from shukketsu.pipeline.ingest import parse_fights, parse_rankings_to_performances, parse_report
 from shukketsu.pipeline.normalize import compute_dps, compute_hps, is_boss_fight
-from shukketsu.pipeline.ingest import parse_report, parse_fights, parse_rankings_to_performances
 
 
 class TestNormalize:
