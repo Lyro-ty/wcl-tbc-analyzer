@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from shukketsu.api.routes.analyze import router as analyze_router
 from shukketsu.api.routes.health import router as health_router
 
 
@@ -30,5 +31,6 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health_router)
+    app.include_router(analyze_router)
 
     return app
