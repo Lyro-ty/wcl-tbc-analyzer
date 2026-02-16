@@ -65,3 +65,27 @@ class ReportRanking(WCLBaseModel):
     rank_percent: float | None = None
     best_amount: float | None = None
     total_amount: float | None = None
+
+
+class SpeedRankingEntry(WCLBaseModel):
+    """Individual entry from fightRankings (speed) response."""
+
+    fight_id: int = Field(alias="fightID")
+    duration: int
+    report: dict  # {"code": str, "guild": {"name": str} | None}
+
+
+class ZoneRankingEntry(WCLBaseModel):
+    """Individual ranking entry from characterRankings response."""
+
+    name: str
+    class_id: int = Field(alias="class")
+    spec: str
+    amount: float
+    duration: int
+    server: dict | None = None
+    report_code: str
+    fight_id: int = Field(alias="fightID")
+    guild: dict | None = None
+    bracket_data: float | None = None
+    total: int = 0

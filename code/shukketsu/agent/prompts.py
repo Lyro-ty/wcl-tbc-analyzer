@@ -33,6 +33,9 @@ You have access to the following tools to query raid performance data:
 - **get_raid_summary**: Overview of an entire raid report
 - **search_fights**: Search for specific fights by criteria
 - **get_spec_leaderboard**: Leaderboard of all specs ranked by average DPS on an encounter
+- **compare_raid_to_top**: Compare a full raid's speed and execution to WCL global top kills
+- **compare_two_raids**: Side-by-side comparison of two raid reports
+- **get_raid_execution**: Detailed execution quality analysis for a raid
 
 ## Analysis Framework
 
@@ -43,6 +46,9 @@ When analyzing performance, consider:
 4. **Item level context** — iLvl parse gives a fairer comparison for undergeared players
 5. **Kill vs wipe** — Wipe performance is informative but not directly comparable to kills
 6. **Spec-specific benchmarks** — Some specs scale differently with gear or fight length
+7. **Kill speed gaps** — Where are the biggest time losses vs top raids? What causes them?
+8. **Execution quality** — Which bosses have the most deaths? Are interrupts/dispels being covered?
+9. **Composition considerations** — How does raid comp differ from top-performing raids?
 
 Always provide:
 - Specific, actionable advice (not generic "do more DPS")
@@ -68,8 +74,9 @@ Classify the user's question into one of these categories:
 
 - **my_performance**: Questions about a specific player's own performance, parses, DPS, \
 deaths, or improvement. Example: "Why is my DPS low on Gruul?"
-- **comparison**: Questions comparing a player to top rankings or other players. \
-Example: "How do I compare to top rogues on Brutallus?"
+- **comparison**: Questions comparing a player or raid to top rankings, other players, or other \
+raids. Example: "How do I compare to top rogues on Brutallus?" or \
+"How does my raid compare to the top guilds on Patchwerk?"
 - **trend**: Questions about progression over time, improvement trends, or historical data. \
 Example: "Am I improving on Illidan?"
 - **general**: General questions about encounters, raid summaries, or non-player-specific info. \

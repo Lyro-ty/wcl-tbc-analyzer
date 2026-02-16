@@ -4,7 +4,10 @@ from langchain_core.tools import BaseTool
 
 from shukketsu.agent.tools import (
     ALL_TOOLS,
+    compare_raid_to_top,
+    compare_two_raids,
     get_my_performance,
+    get_raid_execution,
     get_raid_summary,
     get_top_rankings,
 )
@@ -20,14 +23,15 @@ class TestToolDecorators:
             assert tool.description, f"{tool.name} has no description"
 
     def test_expected_tool_count(self):
-        assert len(ALL_TOOLS) == 8
+        assert len(ALL_TOOLS) == 12
 
     def test_tool_names(self):
         names = {t.name for t in ALL_TOOLS}
         expected = {
             "get_my_performance", "get_top_rankings", "compare_to_top",
             "get_fight_details", "get_progression", "get_deaths_and_mechanics",
-            "get_raid_summary", "search_fights",
+            "get_raid_summary", "search_fights", "get_spec_leaderboard",
+            "compare_raid_to_top", "compare_two_raids", "get_raid_execution",
         }
         assert names == expected
 
@@ -102,6 +106,125 @@ class TestGetRaidSummary:
             result = await get_raid_summary.ainvoke({"report_code": "abc123"})
 
         assert "Gruul" in result
+
+
+class TestCompareRaidToTop:
+    async def test_returns_formatted_string(self):
+        mock_rows = [
+            MagicMock(
+                fight_id=1, encounter_name="Patchwerk",
+                duration_ms=180000, player_count=25,
+                total_deaths=2, total_interrupts=0, total_dispels=0,
+                avg_dps=1500.0,
+                world_record_ms=120000, top10_avg_ms=130000, top100_median_ms=150000,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await compare_raid_to_top.ainvoke({"report_code": "abc123"})
+
+        assert "Patchwerk" in result
+        assert "abc123" in result
+        assert "Gap" in result
+
+    async def test_no_data(self):
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await compare_raid_to_top.ainvoke({"report_code": "missing"})
+
+        assert "no" in result.lower() or "not found" in result.lower()
+
+
+class TestCompareTwoRaids:
+    async def test_returns_formatted_string(self):
+        mock_rows = [
+            MagicMock(
+                encounter_name="Patchwerk",
+                a_duration_ms=180000, b_duration_ms=165000,
+                a_deaths=3, b_deaths=1,
+                a_interrupts=5, b_interrupts=8,
+                a_dispels=2, b_dispels=4,
+                a_avg_dps=1400.0, b_avg_dps=1600.0,
+                a_players=25, b_players=25,
+                a_comp="Arms Warrior, Combat Rogue",
+                b_comp="Fury Warrior, Combat Rogue",
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await compare_two_raids.ainvoke(
+                {"report_a": "abc123", "report_b": "def456"}
+            )
+
+        assert "Patchwerk" in result
+        assert "faster" in result
+
+    async def test_no_data(self):
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await compare_two_raids.ainvoke(
+                {"report_a": "abc123", "report_b": "def456"}
+            )
+
+        assert "no" in result.lower() or "not found" in result.lower()
+
+
+class TestGetRaidExecution:
+    async def test_returns_formatted_string(self):
+        mock_rows = [
+            MagicMock(
+                encounter_name="Patchwerk", fight_id=1,
+                duration_ms=180000, player_count=25,
+                total_deaths=2, avg_deaths_per_player=0.08,
+                total_interrupts=0, total_dispels=0,
+                raid_avg_dps=1500.0, raid_total_dps=37500.0,
+                avg_parse=75.0, avg_ilvl=142.0,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_raid_execution.ainvoke({"report_code": "abc123"})
+
+        assert "Patchwerk" in result
+        assert "abc123" in result
+        assert "Deaths" in result
+
+    async def test_no_data(self):
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_raid_execution.ainvoke({"report_code": "missing"})
+
+        assert "no" in result.lower() or "not found" in result.lower()
 
 
 class TestNoResults:

@@ -113,3 +113,26 @@ query ReportRankings($code: String!, $fightIDs: [Int]!) {
     RATE_LIMIT
 }
 """
+
+SPEED_RANKINGS = """
+query SpeedRankings($encounterID: Int!, $page: Int) {
+    worldData {
+        encounter(id: $encounterID) {
+            fightRankings(metric: speed, page: $page)
+        }
+    }
+    RATE_LIMIT
+}
+"""
+
+ZONE_ENCOUNTERS = """
+query ZoneEncounters($zoneID: Int!) {
+    worldData {
+        zone(id: $zoneID) {
+            name
+            encounters { id name }
+        }
+    }
+    RATE_LIMIT
+}
+"""

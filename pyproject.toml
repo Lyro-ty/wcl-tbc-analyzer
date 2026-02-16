@@ -33,6 +33,11 @@ dev = [
 
 [project.scripts]
 pull-my-logs = "shukketsu.scripts.pull_my_logs:main"
+pull-rankings = "shukketsu.scripts.pull_rankings:main"
+register-character = "shukketsu.scripts.register_character:main"
+seed-encounters = "shukketsu.scripts.seed_encounters:main"
+pull-speed-rankings = "shukketsu.scripts.pull_speed_rankings:main"
+snapshot-progression = "shukketsu.scripts.snapshot_progression:main"
 
 [tool.setuptools.packages.find]
 where = ["code"]

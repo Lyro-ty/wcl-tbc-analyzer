@@ -29,6 +29,7 @@ class Encounter(Base):
 
     fights: Mapped[list["Fight"]] = relationship(back_populates="encounter")
     top_rankings: Mapped[list["TopRanking"]] = relationship(back_populates="encounter")
+    speed_rankings: Mapped[list["SpeedRanking"]] = relationship(back_populates="encounter")
     progression_snapshots: Mapped[list["ProgressionSnapshot"]] = relationship(
         back_populates="encounter"
     )
@@ -134,6 +135,21 @@ class TopRanking(Base):
     fetched_at: Mapped[datetime] = mapped_column(default=func.now())
 
     encounter: Mapped["Encounter"] = relationship(back_populates="top_rankings")
+
+
+class SpeedRanking(Base):
+    __tablename__ = "speed_rankings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id"))
+    rank_position: Mapped[int] = mapped_column(Integer)
+    report_code: Mapped[str] = mapped_column(String(50))
+    fight_id: Mapped[int] = mapped_column(Integer)
+    duration_ms: Mapped[int] = mapped_column(BigInteger)
+    guild_name: Mapped[str | None] = mapped_column(String(200))
+    fetched_at: Mapped[datetime] = mapped_column(default=func.now())
+
+    encounter: Mapped["Encounter"] = relationship(back_populates="speed_rankings")
 
 
 class ProgressionSnapshot(Base):
