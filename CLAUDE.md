@@ -53,8 +53,8 @@ code/
 │   │   └── client.py       # GraphQL HTTP client
 │   ├── db/                 # Database layer
 │   │   ├── engine.py       # Async engine + session factory
-│   │   ├── models.py       # SQLAlchemy ORM models (7 tables)
-│   │   └── queries.py      # Analytical SQL queries for agent tools
+│   │   ├── models.py       # SQLAlchemy ORM models (8 tables)
+│   │   └── queries.py      # Analytical SQL queries for agent tools (12 queries)
 │   ├── pipeline/           # Data transformation
 │   │   ├── ingest.py       # WCL response → DB rows (auto-merges unknown encounters)
 │   │   ├── normalize.py    # Fight normalization (DPS/HPS calc, boss detection)
@@ -62,10 +62,11 @@ code/
 │   │   ├── constants.py    # TBC class/spec/zone data (ClassSpec, TBC_SPECS, TBC_ZONES)
 │   │   ├── progression.py  # Snapshot computation (best/median parse/DPS via statistics.median)
 │   │   ├── rankings.py     # Top rankings ingestion (delete-then-insert, staleness checks)
-│   │   └── seeds.py        # Encounter seed data (upsert from WCL API or manual list)
+│   │   ├── seeds.py        # Encounter seed data (upsert from WCL API or manual list)
+│   │   └── speed_rankings.py # Speed (kill time) rankings ingestion from fightRankings API
 │   ├── agent/              # LangGraph agent
 │   │   ├── llm.py          # LLM client (ChatOpenAI pointing at ollama)
-│   │   ├── tools.py        # 9 SQL query tools (@tool decorated)
+│   │   ├── tools.py        # 12 SQL query tools (@tool decorated)
 │   │   ├── state.py        # AnalyzerState (extends MessagesState)
 │   │   ├── prompts.py      # System prompts and templates
 │   │   └── graph.py        # CRAG state graph (7 nodes, MAX_RETRIES=2)
@@ -75,9 +76,10 @@ code/
 │   │   └── routes/
 │   │       ├── health.py   # GET /health
 │   │       └── analyze.py  # POST /api/analyze
-│   └── scripts/            # CLI entry points (5 total, registered in pyproject.toml)
+│   └── scripts/            # CLI entry points (6 total, registered in pyproject.toml)
 │       ├── pull_my_logs.py       # pull-my-logs: fetch report data from WCL
 │       ├── pull_rankings.py      # pull-rankings: fetch top rankings per encounter/spec
+│       ├── pull_speed_rankings.py # pull-speed-rankings: fetch speed (kill time) rankings
 │       ├── register_character.py # register-character: register tracked characters
 │       ├── seed_encounters.py    # seed-encounters: bootstrap encounter table from WCL
 │       └── snapshot_progression.py # snapshot-progression: compute progression snapshots
@@ -113,8 +115,9 @@ Tools use a **module-level global** pattern — no DI framework:
 3. Sessions are **always closed in `finally`** blocks — one session per tool invocation
 4. The compiled graph and its tools are also injected into the analyze route via `set_graph()`
 
-## Agent tools (9 total)
+## Agent tools (12 total)
 
+### Player/encounter-level tools
 | Tool | Purpose |
 |------|---------|
 | `get_my_performance` | Player's recent performance on an encounter |
@@ -127,9 +130,16 @@ Tools use a **module-level global** pattern — no DI framework:
 | `search_fights` | Search fights by encounter name |
 | `get_spec_leaderboard` | Cross-spec DPS leaderboard for an encounter |
 
+### Raid-level comparison tools
+| Tool | Purpose |
+|------|---------|
+| `compare_raid_to_top` | Compare full raid speed/execution to WCL global top kills |
+| `compare_two_raids` | Side-by-side comparison of two raid reports |
+| `get_raid_execution` | Detailed execution quality analysis for a raid |
+
 Tools are in `code/shukketsu/agent/tools.py`, SQL queries (raw `text()` with named params, PostgreSQL-specific) in `code/shukketsu/db/queries.py`.
 
-## Database schema (7 tables)
+## Database schema (8 tables)
 
 - `encounters` — WCL encounter definitions (PK: WCL encounter ID, not auto-increment)
 - `my_characters` — tracked player characters (unique: name+server+region)
@@ -137,13 +147,16 @@ Tools are in `code/shukketsu/agent/tools.py`, SQL queries (raw `text()` with nam
 - `fights` — individual boss fights (computed `duration_ms` at DB level, FK to encounters+reports)
 - `fight_performances` — per-player fight metrics (DPS, HPS, parse%, deaths, interrupts, dispels; `is_my_character` flag)
 - `top_rankings` — top player rankings per encounter/class/spec
+- `speed_rankings` — top 100 fastest kills per encounter (from WCL `fightRankings` API, indexed on `encounter_id, rank_position`)
 - `progression_snapshots` — time-series character progression data
 
 **Key DB patterns:**
 - `session.merge()` used everywhere for idempotent upserts (encounters, snapshots, characters)
 - Rankings use **delete-then-insert** refresh with staleness checks (default 24h)
+- Speed rankings follow the same delete-then-insert + staleness pattern, one API call per encounter
 - `register_character()` retroactively marks existing `fight_performances` rows via bulk UPDATE
 - Agent queries use raw SQL with CTEs and PostgreSQL functions (`PERCENTILE_CONT`, `ROUND(...::numeric, 1)`)
+- Raid comparison queries use CTEs to aggregate `fight_performances` per fight, then JOIN against `speed_rankings` or FULL OUTER JOIN two reports
 
 ## Configuration
 
@@ -183,6 +196,7 @@ uvicorn shukketsu.api.app:create_app --factory --port 8000
 # CLI scripts (all registered as entry points in pyproject.toml)
 pull-my-logs --report-code <CODE>
 pull-rankings --encounter "Patchwerk" --zone-id 2017
+pull-speed-rankings --zone-id 2017 --force
 register-character --name Lyro --server Whitemane --region US --class-name Warrior --spec Arms
 seed-encounters --zone-ids 2017
 snapshot-progression --character Lyro
@@ -209,6 +223,7 @@ curl -X POST http://localhost:8000/api/analyze \
 - Rate limited by points per hour; every response includes `rateLimitData`
 - Rankings API returns `{"data": [{"fightID": N, "roles": {...}}]}` — a list with fightID fields, not a dict keyed by fight ID
 - `characterRankings` may return JSON string OR dict — `parse_zone_rankings()` handles both
+- `fightRankings(metric: speed)` returns fastest raid kills per encounter; same JSON string/dict ambiguity — `parse_speed_rankings()` handles both
 - Fresh Classic zones are in the 2000+ ID range (zone 2017 = Fresh Naxxramas)
 - Reports may contain fights from other raids — the ingest pipeline auto-inserts unknown encounters as stubs via `session.merge()`
 
@@ -218,6 +233,7 @@ curl -X POST http://localhost:8000/api/analyze \
 - **429 rate limits:** WCL returns HTTP 429 when hourly points exhausted. The rate limiter tracks points proactively but doesn't yet handle 429 with retry/backoff.
 - **No event-level data:** DB stores fight-level aggregates only (DPS, parse%). No spell casts, buff uptimes, or ability breakdowns — rotation analysis questions get hallucinated answers.
 - **top_rankings table:** Only populated via `pull-rankings` script, not from report ingestion.
+- **speed_rankings table:** Only populated via `pull-speed-rankings` script, not from report ingestion.
 
 ## Conventions
 
