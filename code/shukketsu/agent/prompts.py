@@ -32,6 +32,7 @@ You have access to the following tools to query raid performance data:
 - **get_deaths_and_mechanics**: Death and mechanic failure analysis
 - **get_raid_summary**: Overview of an entire raid report
 - **search_fights**: Search for specific fights by criteria
+- **get_spec_leaderboard**: Leaderboard of all specs ranked by average DPS on an encounter
 
 ## Analysis Framework
 

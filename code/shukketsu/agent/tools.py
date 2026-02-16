@@ -250,6 +250,33 @@ async def search_fights(encounter_name: str) -> str:
         await session.close()
 
 
+@tool
+async def get_spec_leaderboard(encounter_name: str) -> str:
+    """Get a leaderboard of all class/spec combinations ranked by average DPS on an encounter.
+    Shows avg DPS, max DPS, median DPS, avg parse percentile, and sample size for each spec."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.SPEC_LEADERBOARD,
+            {"encounter_name": f"%{encounter_name}%"},
+        )
+        rows = result.fetchall()
+        if not rows:
+            return f"No spec performance data found for '{encounter_name}'."
+
+        lines = [f"Spec DPS leaderboard on {encounter_name} (kills only):\n"]
+        for i, r in enumerate(rows, 1):
+            lines.append(
+                f"#{i} {r.player_spec} {r.player_class} | "
+                f"Avg DPS: {r.avg_dps:,.1f} | Max: {r.max_dps:,.1f} | "
+                f"Median: {r.median_dps:,.1f} | Avg Parse: {r.avg_parse}% | "
+                f"iLvl: {r.avg_ilvl} | n={r.sample_size}"
+            )
+        return "\n".join(lines)
+    finally:
+        await session.close()
+
+
 ALL_TOOLS = [
     get_my_performance,
     get_top_rankings,
@@ -259,4 +286,5 @@ ALL_TOOLS = [
     get_deaths_and_mechanics,
     get_raid_summary,
     search_fights,
+    get_spec_leaderboard,
 ]

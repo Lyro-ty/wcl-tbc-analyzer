@@ -116,3 +116,22 @@ SEARCH_FIGHTS = text("""
     ORDER BY r.start_time DESC
     LIMIT 20
 """)
+
+SPEC_LEADERBOARD = text("""
+    SELECT fp.player_class, fp.player_spec,
+           COUNT(*) AS sample_size,
+           ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
+           ROUND(MAX(fp.dps)::numeric, 1) AS max_dps,
+           ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY fp.dps)::numeric, 1) AS median_dps,
+           ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse,
+           ROUND(AVG(fp.item_level)::numeric, 1) AS avg_ilvl
+    FROM fight_performances fp
+    JOIN fights f ON fp.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    WHERE e.name ILIKE :encounter_name
+      AND f.kill = true
+      AND fp.dps > 0
+    GROUP BY fp.player_class, fp.player_spec
+    HAVING COUNT(*) >= 3
+    ORDER BY avg_dps DESC
+""")
