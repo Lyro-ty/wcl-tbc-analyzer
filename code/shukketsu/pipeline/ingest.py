@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from shukketsu.db.models import Fight, FightPerformance, Report
+from shukketsu.db.models import Encounter, Fight, FightPerformance, Report
 from shukketsu.pipeline.normalize import is_boss_fight
 
 logger = logging.getLogger(__name__)
@@ -98,6 +98,21 @@ async def ingest_report(
 
     # Parse fights
     fights = parse_fights(report_info["fights"], report_code)
+
+    # Auto-insert any unknown encounters as stubs
+    encounter_ids = {f.encounter_id for f in fights}
+    for eid in encounter_ids:
+        fight_data = next(
+            fd for fd in report_info["fights"] if fd.get("encounterID") == eid
+        )
+        await session.merge(Encounter(
+            id=eid,
+            name=fight_data.get("name", f"Unknown ({eid})"),
+            zone_id=0,
+            zone_name="Unknown",
+            difficulty=fight_data.get("difficulty", 0),
+        ))
+
     for fight in fights:
         session.add(fight)
 
@@ -116,20 +131,27 @@ async def ingest_report(
         )
         rankings = rankings_data["reportData"]["report"]["rankings"]
 
-        # Rankings come back as a dict keyed by fight ID
+        # Rankings come back as {"data": [{"fightID": N, "roles": {...}}, ...]}
+        rankings_list = []
         if isinstance(rankings, dict):
-            for fight in fights:
-                fight_rankings = rankings.get(str(fight.fight_id), {})
-                if isinstance(fight_rankings, dict):
-                    roles = fight_rankings.get("roles", {})
-                    for role_data in roles.values():
-                        characters = role_data.get("characters", [])
-                        perfs = parse_rankings_to_performances(
-                            characters, fight.id, my_character_names,
-                        )
-                        for perf in perfs:
-                            session.add(perf)
-                        total_performances += len(perfs)
+            rankings_list = rankings.get("data", [])
+        elif isinstance(rankings, list):
+            rankings_list = rankings
+
+        # Index by fightID for lookup
+        rankings_by_fight = {r["fightID"]: r for r in rankings_list if "fightID" in r}
+
+        for fight in fights:
+            fight_rankings = rankings_by_fight.get(fight.fight_id, {})
+            roles = fight_rankings.get("roles", {})
+            for role_data in roles.values():
+                characters = role_data.get("characters", [])
+                perfs = parse_rankings_to_performances(
+                    characters, fight.id, my_character_names,
+                )
+                for perf in perfs:
+                    session.add(perf)
+                total_performances += len(perfs)
 
     logger.info(
         "Ingested report %s: %d fights, %d performances",
