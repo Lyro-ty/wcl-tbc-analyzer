@@ -4,7 +4,7 @@ from shukketsu.config import Settings, get_settings
 def test_default_settings_have_sane_defaults(monkeypatch):
     monkeypatch.setenv("WCL__CLIENT_ID", "x")
     monkeypatch.setenv("WCL__CLIENT_SECRET", "x")
-    settings = Settings()
+    settings = Settings(_env_file=None)
     assert settings.db.url == "postgresql+asyncpg://shukketsu:shukketsu@localhost:5432/shukketsu"
     assert settings.llm.model == "nemotron"
     assert settings.debug is False
