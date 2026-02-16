@@ -50,16 +50,16 @@ code/
 │   │   ├── rate_limiter.py # Points-based rate limiting
 │   │   ├── models.py       # WCL API response models (camelCase alias)
 │   │   ├── queries.py      # GraphQL query strings
-│   │   └── client.py       # GraphQL HTTP client
+│   │   └── client.py       # GraphQL HTTP client (tenacity retry on 429/5xx)
 │   ├── db/                 # Database layer
 │   │   ├── engine.py       # Async engine + session factory
 │   │   ├── models.py       # SQLAlchemy ORM models (8 tables)
 │   │   └── queries.py      # Analytical SQL queries for agent tools (12 queries)
 │   ├── pipeline/           # Data transformation
-│   │   ├── ingest.py       # WCL response → DB rows (auto-merges unknown encounters)
+│   │   ├── ingest.py       # WCL response → DB rows (delete-then-insert for idempotent re-ingestion)
 │   │   ├── normalize.py    # Fight normalization (DPS/HPS calc, boss detection)
 │   │   ├── characters.py   # Character registration + retroactive fight_performances marking
-│   │   ├── constants.py    # TBC class/spec/zone data (ClassSpec, TBC_SPECS, TBC_ZONES)
+│   │   ├── constants.py    # Class/spec/zone data (TBC_SPECS, TBC_ZONES, FRESH_ZONES, ALL_BOSS_NAMES)
 │   │   ├── progression.py  # Snapshot computation (best/median parse/DPS via statistics.median)
 │   │   ├── rankings.py     # Top rankings ingestion (delete-then-insert, staleness checks)
 │   │   ├── seeds.py        # Encounter seed data (upsert from WCL API or manual list)
@@ -75,7 +75,7 @@ code/
 │   │   ├── deps.py         # Dependency injection
 │   │   └── routes/
 │   │       ├── health.py   # GET /health
-│   │       └── analyze.py  # POST /api/analyze
+│   │       └── analyze.py  # POST /api/analyze (strips think tags from LLM output)
 │   └── scripts/            # CLI entry points (6 total, registered in pyproject.toml)
 │       ├── pull_my_logs.py       # pull-my-logs: fetch report data from WCL
 │       ├── pull_rankings.py      # pull-rankings: fetch top rankings per encounter/spec
@@ -102,7 +102,7 @@ route → query → [tool_executor if tool_calls] → grade
 - **route**: Classifies query as `my_performance | comparison | trend | general`
 - **query**: LLM with bound tools retrieves data
 - **tool_executor**: ToolNode executes tool calls, results feed back to grade
-- **grade**: LLM judges data as "relevant" or "insufficient"
+- **grade**: LLM judges data as "relevant" or "insufficient" (`_format_messages` includes ToolMessage content)
 - **rewrite**: Reformulates query, increments `retry_count`
 - **MAX_RETRIES = 2**: After 2 retries, grade forces "relevant" and proceeds
 
@@ -113,7 +113,8 @@ Tools use a **module-level global** pattern — no DI framework:
 1. `lifespan()` in `app.py` calls `set_session_factory(factory)` on `tools.py` module
 2. Each `@tool` function calls `_get_session()` → creates fresh session from factory
 3. Sessions are **always closed in `finally`** blocks — one session per tool invocation
-4. The compiled graph and its tools are also injected into the analyze route via `set_graph()`
+4. All tools catch `Exception` and return `"Error retrieving data: {e}"` instead of propagating tracebacks
+5. The compiled graph and its tools are also injected into the analyze route via `set_graph()`
 
 ## Agent tools (12 total)
 
@@ -151,7 +152,8 @@ Tools are in `code/shukketsu/agent/tools.py`, SQL queries (raw `text()` with nam
 - `progression_snapshots` — time-series character progression data
 
 **Key DB patterns:**
-- `session.merge()` used everywhere for idempotent upserts (encounters, snapshots, characters)
+- `session.merge()` used for idempotent upserts (encounters, reports, snapshots, characters)
+- Report ingestion uses **delete-then-insert** for fights+performances, `session.merge()` for the report itself
 - Rankings use **delete-then-insert** refresh with staleness checks (default 24h)
 - Speed rankings follow the same delete-then-insert + staleness pattern, one API call per encounter
 - `register_character()` retroactively marks existing `fight_performances` rows via bulk UPDATE
@@ -229,11 +231,17 @@ curl -X POST http://localhost:8000/api/analyze \
 
 ## Known issues
 
-- **Think tags in output:** Nemotron's reasoning sometimes leaks as `</think>` prefix text. Needs post-processing to strip.
-- **429 rate limits:** WCL returns HTTP 429 when hourly points exhausted. The rate limiter tracks points proactively but doesn't yet handle 429 with retry/backoff.
 - **No event-level data:** DB stores fight-level aggregates only (DPS, parse%). No spell casts, buff uptimes, or ability breakdowns — rotation analysis questions get hallucinated answers.
 - **top_rankings table:** Only populated via `pull-rankings` script, not from report ingestion.
 - **speed_rankings table:** Only populated via `pull-speed-rankings` script, not from report ingestion.
+
+## Resolved issues
+
+- **Think tags in output:** `_strip_think_tags()` in `analyze.py` strips Nemotron's leaked `<think>...</think>` reasoning from API responses via regex.
+- **429 rate limits:** `WCLClient.query()` has a `tenacity` retry decorator (exponential backoff, 5 attempts) for 429, 502/503/504, connection errors, and read timeouts.
+- **Grader blindness:** `_format_messages()` in `graph.py` now includes `ToolMessage` content so the grader can see DB query results.
+- **Ingest idempotency:** `ingest_report()` uses delete-then-insert for fights+performances, `session.merge()` for reports — safe to re-ingest the same report.
+- **Tool error handling:** All 12 agent tools catch exceptions and return friendly error strings instead of propagating tracebacks to the LLM.
 
 ## Conventions
 

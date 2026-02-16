@@ -1,10 +1,19 @@
 import logging
+import re
 
 from fastapi import APIRouter, HTTPException
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+_THINK_PATTERN = re.compile(r"^.*?</think>\s*", flags=re.DOTALL)
+
+
+def _strip_think_tags(text: str) -> str:
+    """Strip Nemotron's leaked reasoning/think tags from output."""
+    return _THINK_PATTERN.sub("", text)
+
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
@@ -47,7 +56,8 @@ async def analyze(request: AnalyzeRequest):
         ) from exc
 
     messages = result.get("messages", [])
-    answer = messages[-1].content if messages else "No response generated."
+    raw = messages[-1].content if messages else "No response generated."
+    answer = _strip_think_tags(raw)
 
     return AnalyzeResponse(
         answer=answer,

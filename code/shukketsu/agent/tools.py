@@ -51,6 +51,8 @@ async def get_my_performance(encounter_name: str, player_name: str) -> str:
                 f"{outcome} in {_format_duration(r.duration_ms)}"
             )
         return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 
@@ -78,6 +80,8 @@ async def get_top_rankings(encounter_name: str, class_name: str, spec_name: str)
                 f"Duration: {_format_duration(r.duration_ms)} | Guild: {r.guild_name}"
             )
         return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 
@@ -110,6 +114,8 @@ async def compare_to_top(
             f"  Your iLvl: {row.item_level} | Top avg iLvl: {row.avg_ilvl:.0f}\n"
             f"  Your deaths: {row.deaths}"
         )
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 
@@ -141,6 +147,8 @@ async def get_fight_details(report_code: str, fight_id: int) -> str:
                 f"Deaths: {r.deaths} | Int: {r.interrupts} | Disp: {r.dispels}"
             )
         return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 
@@ -168,6 +176,8 @@ async def get_progression(character_name: str, encounter_name: str) -> str:
                 f"Kills: {r.kill_count} | Avg Deaths: {r.avg_deaths:.1f}"
             )
         return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 
@@ -195,6 +205,8 @@ async def get_deaths_and_mechanics(encounter_name: str) -> str:
                 f"{outcome} ({_format_duration(r.duration_ms)})"
             )
         return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 
@@ -220,6 +232,8 @@ async def get_raid_summary(report_code: str) -> str:
                 f"{_format_duration(r.duration_ms)} | {r.player_count} players"
             )
         return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 
@@ -246,6 +260,8 @@ async def search_fights(encounter_name: str) -> str:
                 f"{outcome} | {_format_duration(r.duration_ms)} | {r.report_title}"
             )
         return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 
@@ -273,6 +289,8 @@ async def get_spec_leaderboard(encounter_name: str) -> str:
                 f"iLvl: {r.avg_ilvl} | n={r.sample_size}"
             )
         return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 
@@ -327,6 +345,8 @@ async def compare_raid_to_top(report_code: str) -> str:
         lines.append(f"  Total deaths across raid: {total_deaths}")
         lines.append(f"  Bosses killed: {len(rows)}")
         return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 
@@ -372,6 +392,8 @@ async def compare_two_raids(report_a: str, report_b: str) -> str:
                 lines.append(f"    Comp B: {r.b_comp}")
 
         return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 
@@ -409,6 +431,8 @@ async def get_raid_execution(report_code: str) -> str:
                 f"Parse: {parse_str} | iLvl: {ilvl_str}"
             )
         return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
     finally:
         await session.close()
 

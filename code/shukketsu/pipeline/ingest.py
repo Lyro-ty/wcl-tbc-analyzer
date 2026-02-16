@@ -2,6 +2,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import delete, select
+
 from shukketsu.db.models import Encounter, Fight, FightPerformance, Report
 from shukketsu.pipeline.normalize import is_boss_fight
 
@@ -92,9 +94,22 @@ async def ingest_report(
     )
     report_info = report_data["reportData"]["report"]
 
-    # Parse and merge report
+    # Parse and merge report (idempotent upsert by PK=code)
     report = parse_report(report_info, report_code)
-    session.add(report)
+    await session.merge(report)
+
+    # Delete existing fights + performances for this report (delete-then-insert)
+    existing_fight_ids = await session.execute(
+        select(Fight.id).where(Fight.report_code == report_code)
+    )
+    fight_id_list = [r[0] for r in existing_fight_ids]
+    if fight_id_list:
+        await session.execute(
+            delete(FightPerformance).where(FightPerformance.fight_id.in_(fight_id_list))
+        )
+        await session.execute(
+            delete(Fight).where(Fight.report_code == report_code)
+        )
 
     # Parse fights
     fights = parse_fights(report_info["fights"], report_code)

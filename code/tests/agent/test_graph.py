@@ -1,8 +1,14 @@
 from unittest.mock import AsyncMock, MagicMock
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from shukketsu.agent.graph import MAX_RETRIES, create_graph, grade_results, route_query
+from shukketsu.agent.graph import (
+    MAX_RETRIES,
+    _format_messages,
+    create_graph,
+    grade_results,
+    route_query,
+)
 
 
 class TestCreateGraph:
@@ -101,6 +107,47 @@ class TestGradeResults:
         result = await grade_results(state, mock_llm)
         # Should proceed to analyze even if insufficient, to avoid infinite loop
         assert result["grade"] == "relevant"
+
+
+class TestFormatMessages:
+    def test_includes_tool_message(self):
+        messages = [
+            HumanMessage(content="Show my parses"),
+            AIMessage(
+                content="",
+                tool_calls=[{"name": "get_my_performance", "args": {}, "id": "1"}],
+            ),
+            ToolMessage(content="DPS: 1500, Parse: 95%", tool_call_id="1"),
+        ]
+        result = _format_messages(messages)
+        assert "Tool result: DPS: 1500, Parse: 95%" in result
+
+    def test_skips_empty_ai_content(self):
+        messages = [
+            HumanMessage(content="question"),
+            AIMessage(content=""),
+        ]
+        result = _format_messages(messages)
+        assert "Assistant:" not in result
+
+    def test_includes_ai_with_content(self):
+        messages = [
+            AIMessage(content="Here is your data"),
+        ]
+        result = _format_messages(messages)
+        assert "Assistant: Here is your data" in result
+
+    def test_all_message_types(self):
+        messages = [
+            HumanMessage(content="query"),
+            AIMessage(content="", tool_calls=[{"name": "t", "args": {}, "id": "1"}]),
+            ToolMessage(content="result data", tool_call_id="1"),
+            AIMessage(content="Analysis complete"),
+        ]
+        result = _format_messages(messages)
+        assert "User: query" in result
+        assert "Tool result: result data" in result
+        assert "Assistant: Analysis complete" in result
 
 
 class TestMaxRetries:

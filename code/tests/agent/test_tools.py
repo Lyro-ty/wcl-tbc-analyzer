@@ -227,6 +227,39 @@ class TestGetRaidExecution:
         assert "no" in result.lower() or "not found" in result.lower()
 
 
+class TestToolErrorHandling:
+    async def test_db_error_returns_friendly_message(self):
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = Exception("connection lost")
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_my_performance.ainvoke(
+                {"encounter_name": "Gruul", "player_name": "Test"}
+            )
+
+        assert "Error" in result
+        assert "connection lost" in result
+
+    async def test_db_error_on_raid_summary(self):
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = Exception("timeout")
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_raid_summary.ainvoke({"report_code": "abc123"})
+
+        assert "Error" in result
+        assert "timeout" in result
+
+    async def test_db_error_on_compare_raid_to_top(self):
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = Exception("connection refused")
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await compare_raid_to_top.ainvoke({"report_code": "abc123"})
+
+        assert "Error" in result
+
+
 class TestNoResults:
     async def test_get_my_performance_no_data(self):
         mock_result = MagicMock()

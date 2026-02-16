@@ -19,9 +19,9 @@ class DatabaseConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    base_url: str = "http://localhost:5000/v1"
-    model: str = "nemotron"
-    api_key: str = "not-needed"
+    base_url: str = "http://localhost:11434/v1"
+    model: str = "nemotron-3-nano:30b"
+    api_key: str = "ollama"
     temperature: float = 0.1
 
 

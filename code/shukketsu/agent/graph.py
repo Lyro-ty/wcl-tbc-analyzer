@@ -4,7 +4,7 @@ import logging
 from functools import partial
 from typing import Any, Literal
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -132,7 +132,10 @@ def _format_messages(messages: list) -> str:
         if isinstance(msg, HumanMessage):
             parts.append(f"User: {msg.content}")
         elif isinstance(msg, AIMessage):
-            parts.append(f"Assistant: {msg.content}")
+            if msg.content:
+                parts.append(f"Assistant: {msg.content}")
+        elif isinstance(msg, ToolMessage):
+            parts.append(f"Tool result: {msg.content}")
     return "\n".join(parts)
 
 

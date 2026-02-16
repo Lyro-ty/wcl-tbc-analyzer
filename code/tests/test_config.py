@@ -6,7 +6,9 @@ def test_default_settings_have_sane_defaults(monkeypatch):
     monkeypatch.setenv("WCL__CLIENT_SECRET", "x")
     settings = Settings(_env_file=None)
     assert settings.db.url == "postgresql+asyncpg://shukketsu:shukketsu@localhost:5432/shukketsu"
-    assert settings.llm.model == "nemotron"
+    assert settings.llm.model == "nemotron-3-nano:30b"
+    assert "11434" in settings.llm.base_url
+    assert settings.llm.api_key == "ollama"
     assert settings.debug is False
 
 

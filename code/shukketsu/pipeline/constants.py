@@ -119,3 +119,19 @@ TBC_ZONES: dict[str, list[str]] = {
 TBC_BOSS_NAMES: frozenset[str] = frozenset(
     boss for bosses in TBC_ZONES.values() for boss in bosses
 )
+
+FRESH_ZONES: dict[str, list[str]] = {
+    "Naxxramas": [
+        "Anub'Rekhan", "Grand Widow Faerlina", "Maexxna",
+        "Noth the Plaguebringer", "Heigan the Unclean", "Loatheb",
+        "Instructor Razuvious", "Gothik the Harvester", "The Four Horsemen",
+        "Patchwerk", "Grobbulus", "Gluth", "Thaddius",
+        "Sapphiron", "Kel'Thuzad",
+    ],
+}
+
+FRESH_BOSS_NAMES: frozenset[str] = frozenset(
+    boss for bosses in FRESH_ZONES.values() for boss in bosses
+)
+
+ALL_BOSS_NAMES: frozenset[str] = TBC_BOSS_NAMES | FRESH_BOSS_NAMES

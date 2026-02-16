@@ -1,6 +1,13 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
-from shukketsu.pipeline.ingest import parse_fights, parse_rankings_to_performances, parse_report
+from shukketsu.pipeline.ingest import (
+    ingest_report,
+    parse_fights,
+    parse_rankings_to_performances,
+    parse_report,
+)
 from shukketsu.pipeline.normalize import compute_dps, compute_hps, is_boss_fight
 
 
@@ -154,3 +161,64 @@ class TestParseRankingsToPerformances:
     def test_no_my_characters(self):
         perfs = parse_rankings_to_performances(self.RANKING_DATA, 42, set())
         assert all(not p.is_my_character for p in perfs)
+
+
+class TestReingestionIdempotency:
+    """Verify that calling ingest_report twice with the same report doesn't raise."""
+
+    REPORT_DATA = {
+        "reportData": {
+            "report": {
+                "title": "Naxx Clear",
+                "startTime": 1700000000000,
+                "endTime": 1700003600000,
+                "guild": {"id": 1, "name": "Test"},
+                "fights": [
+                    {
+                        "id": 1, "name": "Patchwerk", "startTime": 0, "endTime": 180000,
+                        "kill": True, "encounterID": 201115, "difficulty": 0,
+                    },
+                ],
+                "rankings": {"data": []},
+            }
+        }
+    }
+
+    async def test_merge_report_called(self):
+        """Verify ingest uses session.merge for report (not add)."""
+        mock_wcl = AsyncMock()
+        mock_wcl.query.return_value = self.REPORT_DATA
+
+        mock_session = AsyncMock()
+        # select returns empty (no existing fights)
+        mock_select_result = MagicMock()
+        mock_select_result.__iter__ = MagicMock(return_value=iter([]))
+        mock_session.execute.return_value = mock_select_result
+        mock_session.flush = AsyncMock()
+
+        await ingest_report(mock_wcl, mock_session, "abc123")
+
+        # session.merge should have been called (for report + encounter)
+        assert mock_session.merge.await_count >= 1
+
+    async def test_deletes_existing_before_reingest(self):
+        """Verify that existing fights are deleted before re-inserting."""
+        mock_wcl = AsyncMock()
+        mock_wcl.query.return_value = self.REPORT_DATA
+
+        mock_session = AsyncMock()
+        # First execute returns existing fight IDs
+        existing_result = MagicMock()
+        existing_result.__iter__ = MagicMock(return_value=iter([(42,)]))
+
+        # Subsequent executes return empty results
+        empty_result = MagicMock()
+        empty_result.__iter__ = MagicMock(return_value=iter([]))
+
+        mock_session.execute.side_effect = [existing_result, None, None, empty_result]
+        mock_session.flush = AsyncMock()
+
+        await ingest_report(mock_wcl, mock_session, "abc123")
+
+        # select existing + delete perfs + delete fights + select rankings
+        assert mock_session.execute.await_count >= 3

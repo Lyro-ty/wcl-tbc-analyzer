@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 import httpx
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from shukketsu.wcl.auth import WCLAuth
 from shukketsu.wcl.rate_limiter import RateLimiter
@@ -13,6 +14,13 @@ DEFAULT_API_URL = "https://www.warcraftlogs.com/api/v2/client"
 
 class WCLAPIError(Exception):
     """Raised when the WCL GraphQL API returns errors."""
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Check if an exception is retryable (429, 5xx, connection errors)."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in (429, 502, 503, 504)
+    return isinstance(exc, (httpx.ConnectError, httpx.ReadTimeout))
 
 
 class WCLClient:
@@ -39,6 +47,12 @@ class WCLClient:
             await self._http.aclose()
             self._http = None
 
+    @retry(
+        retry=retry_if_exception(_is_retryable),
+        wait=wait_exponential(multiplier=2, min=4, max=120),
+        stop=stop_after_attempt(5),
+        reraise=True,
+    )
     async def query(
         self,
         graphql_query: str,
