@@ -217,8 +217,11 @@ export async function fetchOverhealAnalysis(code: string, fightId: number, playe
   return fetchJson(`/api/data/reports/${code}/fights/${fightId}/overheal/${encodeURIComponent(player)}`)
 }
 
-export async function fetchConsumableCheck(code: string, fightId: number, player: string): Promise<import('./types').ConsumableCheck> {
-  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/consumables/${encodeURIComponent(player)}`)
+export async function fetchConsumableCheck(code: string, fightId: number, player: string): Promise<import('./types').ConsumablePlayerEntry | null> {
+  const entries: import('./types').ConsumablePlayerEntry[] = await fetchJson(
+    `/api/data/reports/${code}/fights/${fightId}/consumables?player=${encodeURIComponent(player)}`
+  )
+  return entries.length > 0 ? entries[0] : null
 }
 
 export async function fetchEventsAvailable(code: string): Promise<EventsAvailable> {

@@ -10,44 +10,44 @@ from shukketsu.api.models import (
     AbilityMetricResponse,
     BuffUptimeResponse,
     CancelledCastResponse,
-    CastEventResponse,
     CastMetricResponse,
     CharacterFightSummary,
     CharacterInfo,
     CharacterProfile,
     CharacterRecentParse,
     CharacterReportSummary,
-    ConsumableCheckResponse,
-    ConsumableEntry,
+    ConsumableItem,
+    ConsumablePlayerEntry,
     CooldownUsageResponse,
-    CooldownWindowResponse,
     DashboardStats,
     DeathDetailResponse,
     DeathEntry,
-    DotRefreshResponse,
     EncounterInfo,
-    EventDataResponse,
-    EventsAvailableResponse,
     ExecutionBoss,
     FightPlayer,
+    GearChangeEntry,
+    GearSlotEntry,
     IngestRequest,
     IngestResponse,
     OverhealAbility,
     OverhealResponse,
-    PhaseMetricResponse,
+    PersonalBestEntry,
+    PhaseAnalysis,
+    PhaseInfo,
+    PhasePlayerPerformance,
     ProgressionPoint,
     RaidComparison,
+    RaidNightSummary,
     RaidSummaryFight,
     RankingsRefreshResponse,
     RecentReportSummary,
     RegisterCharacterRequest,
+    RegressionEntry,
     ReportSummary,
-    ResourceSnapshotResponse,
-    RotationScoreResponse,
     SpecLeaderboardEntry,
     SpeedComparison,
     TableDataResponse,
-    TrinketProcResponse,
+    WipeProgressionAttempt,
 )
 from shukketsu.db import queries as q
 
@@ -754,6 +754,43 @@ async def character_recent_parses(character_name: str):
 
 
 @router.get(
+    "/characters/{character_name}/personal-bests",
+    response_model=list[PersonalBestEntry],
+)
+async def character_personal_bests(
+    character_name: str, encounter: str | None = None,
+):
+    """Get a character's personal records per encounter."""
+    session = await _get_session()
+    try:
+        if encounter:
+            result = await session.execute(
+                q.PERSONAL_BESTS_BY_ENCOUNTER,
+                {"player_name": f"%{character_name}%",
+                 "encounter_name": f"%{encounter}%"},
+            )
+        else:
+            result = await session.execute(
+                q.PERSONAL_BESTS,
+                {"player_name": f"%{character_name}%"},
+            )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No personal bests found for {character_name}",
+            )
+        return [PersonalBestEntry(**dict(r._mapping)) for r in rows]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get personal bests")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
     "/reports/{report_code}/fights/{fight_id}/deaths",
     response_model=list[DeathDetailResponse],
 )
@@ -815,129 +852,63 @@ async def fight_cooldowns(report_code: str, fight_id: int, player: str):
 
 
 @router.get(
-    "/reports/{report_code}/fights/{fight_id}/cooldown-windows/{player}",
-    response_model=list[CooldownWindowResponse],
+    "/reports/{report_code}/fights/{fight_id}/consumables",
+    response_model=list[ConsumablePlayerEntry],
 )
-async def fight_cooldown_windows(
-    report_code: str, fight_id: int, player: str,
+async def get_fight_consumables(
+    report_code: str, fight_id: int, player: str | None = None,
 ):
     session = await _get_session()
     try:
-        result = await session.execute(
-            q.COOLDOWN_WINDOWS,
-            {
-                "report_code": report_code,
-                "fight_id": fight_id,
-                "player_name": player,
-            },
-        )
-        rows = result.fetchall()
-        return [
-            CooldownWindowResponse(**dict(r._mapping))
-            for r in rows
-        ]
-    except Exception as e:
-        logger.exception("Failed to get cooldown windows")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    finally:
-        await session.close()
-
-
-@router.get(
-    "/reports/{report_code}/fights/{fight_id}/resources/{player}",
-    response_model=list[ResourceSnapshotResponse],
-)
-async def fight_resources(
-    report_code: str, fight_id: int, player: str,
-):
-    session = await _get_session()
-    try:
-        result = await session.execute(
-            q.RESOURCE_USAGE,
-            {
-                "report_code": report_code,
-                "fight_id": fight_id,
-                "player_name": player,
-            },
-        )
-        rows = result.fetchall()
-        return [
-            ResourceSnapshotResponse(**dict(r._mapping))
-            for r in rows
-        ]
-    except Exception as e:
-        logger.exception("Failed to get resource data")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    finally:
-        await session.close()
-
-
-@router.get(
-    "/reports/{report_code}/fights/{fight_id}/consumables/{player}",
-    response_model=ConsumableCheckResponse,
-)
-async def fight_consumable_check(report_code: str, fight_id: int, player: str):
-    from shukketsu.pipeline.constants import ROLE_BY_SPEC, get_expected_consumables
-
-    session = await _get_session()
-    try:
-        # Get player's spec
-        perf_result = await session.execute(
-            q.FIGHT_DETAILS, {"report_code": report_code, "fight_id": fight_id}
-        )
-        perf_rows = perf_result.fetchall()
-        player_row = None
-        for r in perf_rows:
-            if r.player_name.lower() == player.lower():
-                player_row = r
-                break
-        if not player_row:
-            raise HTTPException(
-                status_code=404, detail=f"Player {player} not found in fight {fight_id}"
-            )
-
-        spec = player_row.player_spec
-        role = ROLE_BY_SPEC.get(spec, "melee_dps")
-        expected = get_expected_consumables(spec)
-
-        # Get actual buffs
         result = await session.execute(
             q.CONSUMABLE_CHECK,
-            {"report_code": report_code, "fight_id": fight_id, "player_name": player},
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": f"%{player}%" if player else None},
         )
         rows = result.fetchall()
-        actual_by_id = {r.spell_id: (r.ability_name, r.uptime_pct) for r in rows}
 
-        present_list = []
-        missing_list = []
-        for c in expected:
-            if c.spell_id in actual_by_id:
-                _, uptime = actual_by_id[c.spell_id]
-                present_list.append(ConsumableEntry(
-                    name=c.name, category=c.category,
-                    uptime_pct=uptime, present=True,
+        # Expected categories: flask OR elixir (mutually exclusive), food
+        required_categories = {"flask", "food"}
+        nice_to_have = {"weapon_oil"}
+
+        # Group by player
+        from collections import defaultdict
+        players: dict[str, list] = defaultdict(list)
+        for r in rows:
+            players[r.player_name].append(r)
+
+        entries = []
+        for pname, consumables in sorted(players.items()):
+            items = []
+            found_categories = set()
+            for c in consumables:
+                items.append(ConsumableItem(
+                    category=c.category,
+                    ability_name=c.ability_name,
+                    spell_id=c.spell_id,
                 ))
-            else:
-                missing_list.append(ConsumableEntry(
-                    name=c.name, category=c.category,
-                    uptime_pct=None, present=False,
-                ))
+                found_categories.add(c.category)
 
-        total = len(present_list) + len(missing_list)
-        score = (len(present_list) / total * 100) if total > 0 else 0.0
+            has_flask_or_elixir = (
+                "flask" in found_categories or "elixir" in found_categories
+            )
+            missing = []
+            if not has_flask_or_elixir:
+                missing.append("flask/elixir")
+            for cat in sorted(required_categories - {"flask"}):
+                if cat not in found_categories:
+                    missing.append(cat)
+            for cat in sorted(nice_to_have - found_categories):
+                missing.append(cat)
 
-        return ConsumableCheckResponse(
-            player_name=player,
-            player_spec=spec,
-            role=role,
-            present=present_list,
-            missing=missing_list,
-            score_pct=round(score, 1),
-        )
-    except HTTPException:
-        raise
+            entries.append(ConsumablePlayerEntry(
+                player_name=pname,
+                consumables=items,
+                missing=missing,
+            ))
+        return entries
     except Exception as e:
-        logger.exception("Failed to check consumables")
+        logger.exception("Failed to get fight consumables")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()
@@ -1018,116 +989,32 @@ async def fight_cancelled_casts(report_code: str, fight_id: int, player: str):
         await session.close()
 
 
+
+
+
 @router.get(
-    "/reports/{report_code}/fights/{fight_id}/cast-timeline/{player}",
-    response_model=list[CastEventResponse],
+    "/reports/{report_code}/wipe-progression/{encounter_name}",
+    response_model=list[WipeProgressionAttempt],
 )
-async def fight_cast_timeline(
-    report_code: str, fight_id: int, player: str,
-):
+async def wipe_progression(report_code: str, encounter_name: str):
+    """Get attempt-by-attempt progression for an encounter in a report."""
     session = await _get_session()
     try:
         result = await session.execute(
-            q.CAST_TIMELINE,
-            {
-                "report_code": report_code,
-                "fight_id": fight_id,
-                "player_name": player,
-            },
+            q.WIPE_PROGRESSION,
+            {"report_code": report_code, "encounter_name": f"%{encounter_name}%"},
         )
         rows = result.fetchall()
-        return [
-            CastEventResponse(**dict(r._mapping)) for r in rows
-        ]
-    except Exception as e:
-        logger.exception("Failed to get cast timeline")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    finally:
-        await session.close()
-
-
-@router.get(
-    "/reports/{report_code}/fights/{fight_id}/phases/{player}",
-    response_model=list[PhaseMetricResponse],
-)
-async def fight_phases(
-    report_code: str, fight_id: int, player: str,
-):
-    session = await _get_session()
-    try:
-        result = await session.execute(
-            q.PHASE_BREAKDOWN,
-            {
-                "report_code": report_code,
-                "fight_id": fight_id,
-                "player_name": player,
-            },
-        )
-        rows = result.fetchall()
-        return [
-            PhaseMetricResponse(**dict(r._mapping))
-            for r in rows
-        ]
-    except Exception as e:
-        logger.exception("Failed to get phase metrics")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    finally:
-        await session.close()
-
-
-@router.get(
-    "/reports/{report_code}/events-available",
-    response_model=EventsAvailableResponse,
-)
-async def events_available(report_code: str):
-    session = await _get_session()
-    try:
-        result = await session.execute(
-            q.EVENT_DATA_EXISTS, {"report_code": report_code}
-        )
-        row = result.fetchone()
-        return EventsAvailableResponse(has_data=row.has_data if row else False)
-    except Exception as e:
-        logger.exception("Failed to check events availability")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    finally:
-        await session.close()
-
-
-@router.post(
-    "/reports/{report_code}/event-data",
-    response_model=EventDataResponse,
-)
-async def fetch_event_data(report_code: str):
-    from shukketsu.config import get_settings
-    from shukketsu.pipeline.event_data import ingest_event_data_for_report
-    from shukketsu.wcl.auth import WCLAuth
-    from shukketsu.wcl.client import WCLClient
-    from shukketsu.wcl.rate_limiter import RateLimiter
-
-    settings = get_settings()
-    if not settings.wcl.client_id:
-        raise HTTPException(
-            status_code=503, detail="WCL credentials not configured"
-        )
-
-    session = await _get_session()
-    try:
-        auth = WCLAuth(
-            settings.wcl.client_id,
-            settings.wcl.client_secret.get_secret_value(),
-            settings.wcl.oauth_url,
-        )
-        async with WCLClient(auth, RateLimiter()) as wcl:
-            rows = await ingest_event_data_for_report(wcl, session, report_code)
-        await session.commit()
-        logger.info("Fetched event data for %s: %d rows", report_code, rows)
-        return EventDataResponse(report_code=report_code, event_rows=rows)
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No attempts found for '{encounter_name}' in report {report_code}",
+            )
+        return [WipeProgressionAttempt(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
     except Exception as e:
-        await session.rollback()
-        logger.exception("Failed to fetch event data for %s", report_code)
+        logger.exception("Failed to get wipe progression")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()
@@ -1167,108 +1054,258 @@ async def dashboard_recent():
 
 
 @router.get(
-    "/reports/{report_code}/fights/{fight_id}/dot-refreshes/{player}",
-    response_model=list[DotRefreshResponse],
+    "/reports/{report_code}/fights/{fight_id}/gear/{player_name}",
+    response_model=list[GearSlotEntry],
 )
-async def fight_dot_refreshes(
-    report_code: str, fight_id: int, player: str,
-):
+async def get_gear_snapshot(report_code: str, fight_id: int, player_name: str):
+    """Get gear snapshot for a player in a fight."""
+    from shukketsu.pipeline.constants import GEAR_SLOTS
+
     session = await _get_session()
     try:
         result = await session.execute(
-            q.DOT_REFRESH_ANALYSIS,
-            {
-                "report_code": report_code,
-                "fight_id": fight_id,
-                "player_name": player,
-            },
+            q.GEAR_SNAPSHOT,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": f"%{player_name}%"},
         )
         rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"No gear data for {player_name} in fight {fight_id} "
+                    f"of report {report_code}"
+                ),
+            )
         return [
-            DotRefreshResponse(**dict(r._mapping))
+            GearSlotEntry(
+                slot=r.slot,
+                slot_name=GEAR_SLOTS.get(r.slot, f"Slot {r.slot}"),
+                item_id=r.item_id,
+                item_level=r.item_level,
+            )
             for r in rows
         ]
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception("Failed to get DoT refresh data")
+        logger.exception("Failed to get gear snapshot")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()
 
 
-@router.get(
-    "/reports/{report_code}/fights/{fight_id}/rotation/{player}",
-    response_model=RotationScoreResponse | None,
-)
-async def fight_rotation_score(
-    report_code: str, fight_id: int, player: str,
-):
-    session = await _get_session()
-    try:
-        result = await session.execute(
-            q.ROTATION_SCORE,
-            {
-                "report_code": report_code,
-                "fight_id": fight_id,
-                "player_name": player,
-            },
-        )
-        row = result.fetchone()
-        if not row:
-            return None
-        return RotationScoreResponse(**dict(row._mapping))
-    except Exception as e:
-        logger.exception("Failed to get rotation score")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    finally:
-        await session.close()
-
-
-@router.get(
-    "/reports/{report_code}/fights/{fight_id}/trinkets/{player}",
-    response_model=list[TrinketProcResponse],
-)
-async def fight_trinket_procs(
-    report_code: str, fight_id: int, player: str,
-):
-    from shukketsu.pipeline.constants import CLASSIC_TRINKETS, TRINKET_SPELL_IDS
+@router.get("/gear/compare", response_model=list[GearChangeEntry])
+async def get_gear_comparison(player: str, old: str, new: str):
+    """Compare gear between two reports."""
+    from shukketsu.pipeline.constants import GEAR_SLOTS
 
     session = await _get_session()
     try:
         result = await session.execute(
-            q.TRINKET_PROCS,
-            {
-                "report_code": report_code,
-                "fight_id": fight_id,
-                "player_name": player,
-                "trinket_ids": list(TRINKET_SPELL_IDS),
-            },
+            q.GEAR_CHANGES,
+            {"player_name": f"%{player}%",
+             "report_code_old": old,
+             "report_code_new": new},
         )
         rows = result.fetchall()
-        expected = {t.spell_id: t for t in CLASSIC_TRINKETS}
-        responses = []
-        for row in rows:
-            trinket = expected.get(row.spell_id)
-            exp_uptime = trinket.expected_uptime_pct if trinket else 0
-            name = trinket.name if trinket else row.ability_name
-            if exp_uptime > 0 and row.uptime_pct >= exp_uptime:
-                grade = "GOOD"
-            elif exp_uptime > 0 and row.uptime_pct >= exp_uptime * 0.6:
-                grade = "OK"
-            elif exp_uptime > 0:
-                grade = "LOW"
-            else:
-                grade = "UNKNOWN"
-            responses.append(TrinketProcResponse(
-                player_name=row.player_name,
-                trinket_name=name,
-                spell_id=row.spell_id,
-                uptime_pct=row.uptime_pct,
-                expected_uptime_pct=exp_uptime,
-                grade=grade,
+        entries = []
+        for r in rows:
+            old_ilvl = r.old_ilvl
+            new_ilvl = r.new_ilvl
+            delta = None
+            if old_ilvl is not None and new_ilvl is not None:
+                delta = new_ilvl - old_ilvl
+            entries.append(GearChangeEntry(
+                slot=r.slot,
+                slot_name=GEAR_SLOTS.get(r.slot, f"Slot {r.slot}"),
+                old_item_id=r.old_item_id,
+                old_ilvl=old_ilvl,
+                new_item_id=r.new_item_id,
+                new_ilvl=new_ilvl,
+                ilvl_delta=delta,
             ))
-        return responses
+        return entries
     except Exception as e:
-        logger.exception("Failed to get trinket proc data")
+        logger.exception("Failed to compare gear")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get("/regressions", response_model=list[RegressionEntry])
+async def get_regressions_endpoint(player: str | None = None):
+    """Get performance regressions/improvements for tracked characters."""
+    session = await _get_session()
+    try:
+        if player:
+            result = await session.execute(
+                q.REGRESSION_CHECK_PLAYER,
+                {"player_name": f"%{player}%"},
+            )
+        else:
+            result = await session.execute(q.REGRESSION_CHECK)
+        rows = result.fetchall()
+        return [RegressionEntry(**dict(r._mapping)) for r in rows]
+    except Exception as e:
+        logger.exception("Failed to get regressions")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/phases",
+    response_model=PhaseAnalysis,
+)
+async def fight_phases(report_code: str, fight_id: int):
+    """Get phase breakdown for a specific fight."""
+    from shukketsu.pipeline.constants import ENCOUNTER_PHASES, PhaseDef
+
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.PHASE_BREAKDOWN,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": None},
+        )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No data for fight {fight_id} in report {report_code}",
+            )
+
+        first = rows[0]
+        encounter_name = first.encounter_name
+        duration_ms = first.duration_ms
+
+        # Look up phase definitions
+        phases = ENCOUNTER_PHASES.get(encounter_name, [
+            PhaseDef("Full Fight", 0.0, 1.0, "No phase data available"),
+        ])
+
+        phase_infos = []
+        for phase in phases:
+            est_start = int(duration_ms * phase.pct_start)
+            est_end = int(duration_ms * phase.pct_end)
+            phase_infos.append(PhaseInfo(
+                name=phase.name,
+                pct_start=phase.pct_start,
+                pct_end=phase.pct_end,
+                estimated_start_ms=est_start,
+                estimated_end_ms=est_end,
+                estimated_duration_ms=est_end - est_start,
+                description=phase.description,
+            ))
+
+        players = []
+        for r in rows:
+            players.append(PhasePlayerPerformance(
+                player_name=r.player_name,
+                player_class=r.player_class,
+                player_spec=r.player_spec,
+                dps=r.dps,
+                total_damage=r.total_damage,
+                hps=r.hps,
+                total_healing=r.total_healing,
+                deaths=r.deaths,
+                parse_percentile=r.parse_percentile,
+            ))
+
+        return PhaseAnalysis(
+            report_code=report_code,
+            fight_id=fight_id,
+            encounter_name=encounter_name,
+            duration_ms=duration_ms,
+            kill=first.kill,
+            phases=phase_infos,
+            players=players,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get phase breakdown")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get("/reports/{report_code}/night-summary")
+async def night_summary(
+    report_code: str, output_format: str | None = None,
+):
+    """Generate a post-raid night summary for a report.
+
+    When format=discord, returns a PlainTextResponse with Discord-ready
+    markdown. Otherwise returns the JSON RaidNightSummary model.
+    """
+    from shukketsu.pipeline.summaries import build_raid_night_summary
+
+    session = await _get_session()
+    try:
+        # Fetch fight-level aggregates
+        fight_result = await session.execute(
+            q.NIGHT_SUMMARY_FIGHTS, {"report_code": report_code},
+        )
+        fight_rows = fight_result.fetchall()
+        if not fight_rows:
+            raise HTTPException(
+                status_code=404, detail=f"No data for report {report_code}",
+            )
+
+        # Fetch player-level details
+        player_result = await session.execute(
+            q.NIGHT_SUMMARY_PLAYERS, {"report_code": report_code},
+        )
+        player_rows = player_result.fetchall()
+
+        # Fetch week-over-week comparison
+        wow_data = None
+        wow_result = await session.execute(
+            q.WEEK_OVER_WEEK, {"report_code": report_code},
+        )
+        wow_row = wow_result.fetchone()
+        if wow_row:
+            wow_data = {
+                "previous_report": wow_row.previous_report,
+                "clear_time_delta_ms": wow_row.clear_time_delta_ms,
+                "kills_delta": wow_row.kills_delta,
+                "avg_parse_delta": (
+                    float(wow_row.avg_parse_delta)
+                    if wow_row.avg_parse_delta is not None else None
+                ),
+            }
+
+        # Fetch player parse deltas for most improved / biggest regression
+        player_deltas = None
+        delta_result = await session.execute(
+            q.PLAYER_PARSE_DELTAS, {"report_code": report_code},
+        )
+        delta_rows = delta_result.fetchall()
+        if delta_rows:
+            player_deltas = delta_rows
+
+        summary = build_raid_night_summary(
+            report_code, fight_rows, player_rows,
+            wow_data=wow_data, player_deltas=player_deltas,
+        )
+
+        if output_format == "discord":
+            from fastapi.responses import PlainTextResponse
+
+            from shukketsu.pipeline.discord_format import (
+                format_raid_summary_discord,
+            )
+
+            text = format_raid_summary_discord(summary)
+            return PlainTextResponse(content=text)
+
+        return RaidNightSummary(**summary)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to generate night summary for %s", report_code)
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

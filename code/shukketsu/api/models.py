@@ -310,9 +310,6 @@ class CooldownUsageResponse(BaseModel):
     efficiency_pct: float
 
 
-class EventsAvailableResponse(BaseModel):
-    has_data: bool
-
 
 class OverhealAbility(BaseModel):
     ability_name: str
@@ -330,20 +327,16 @@ class OverhealResponse(BaseModel):
     abilities: list[OverhealAbility]
 
 
-class ConsumableEntry(BaseModel):
-    name: str
+class ConsumableItem(BaseModel):
     category: str
-    uptime_pct: float | None
-    present: bool
+    ability_name: str
+    spell_id: int
 
 
-class ConsumableCheckResponse(BaseModel):
+class ConsumablePlayerEntry(BaseModel):
     player_name: str
-    player_spec: str
-    role: str
-    present: list[ConsumableEntry]
-    missing: list[ConsumableEntry]
-    score_pct: float
+    consumables: list[ConsumableItem]
+    missing: list[str]
 
 
 class CancelledCastResponse(BaseModel):
@@ -355,78 +348,134 @@ class CancelledCastResponse(BaseModel):
     top_cancelled_json: str | None
 
 
-class CastEventResponse(BaseModel):
+
+class PersonalBestEntry(BaseModel):
+    encounter_name: str
+    best_dps: float
+    best_parse: float | None
+    best_hps: float
+    kill_count: int
+    peak_ilvl: float | None
+
+
+class WipeProgressionAttempt(BaseModel):
+    fight_id: int
+    kill: bool
+    fight_percentage: float | None
+    duration_ms: int
+    player_count: int
+    avg_dps: float
+    total_deaths: int
+    avg_parse: float | None
+
+
+class RegressionEntry(BaseModel):
     player_name: str
-    timestamp_ms: int
-    spell_id: int
-    ability_name: str
-    event_type: str
-    target_name: str | None
-
-
-class ResourceSnapshotResponse(BaseModel):
-    player_name: str
-    resource_type: str
-    min_value: int
-    max_value: int
-    avg_value: float
-    time_at_zero_ms: int
-    time_at_zero_pct: float
-    samples_json: str | None
-
-
-class CooldownWindowResponse(BaseModel):
-    player_name: str
-    ability_name: str
-    spell_id: int
-    window_start_ms: int
-    window_end_ms: int
-    window_damage: int
-    window_dps: float
+    encounter_name: str
+    recent_parse: float
+    baseline_parse: float
+    recent_dps: float
     baseline_dps: float
-    dps_gain_pct: float
+    parse_delta: float
+    dps_delta_pct: float | None
 
 
-class PhaseMetricResponse(BaseModel):
+class GearSlotEntry(BaseModel):
+    slot: int
+    slot_name: str
+    item_id: int
+    item_level: int
+
+
+class GearChangeEntry(BaseModel):
+    slot: int
+    slot_name: str
+    old_item_id: int | None
+    old_ilvl: int | None
+    new_item_id: int | None
+    new_ilvl: int | None
+    ilvl_delta: int | None
+
+
+class PhaseInfo(BaseModel):
+    name: str
+    pct_start: float
+    pct_end: float
+    estimated_start_ms: int
+    estimated_end_ms: int
+    estimated_duration_ms: int
+    description: str
+
+
+class PhasePlayerPerformance(BaseModel):
     player_name: str
-    phase_name: str
-    phase_start_ms: int
-    phase_end_ms: int
-    is_downtime: bool
-    phase_dps: float | None
-    phase_casts: int | None
-    phase_gcd_uptime_pct: float | None
+    player_class: str
+    player_spec: str
+    dps: float
+    total_damage: int
+    hps: float
+    total_healing: int
+    deaths: int
+    parse_percentile: float | None
 
 
-class DotRefreshResponse(BaseModel):
-    player_name: str
-    spell_id: int
-    ability_name: str
-    total_refreshes: int
-    early_refreshes: int
-    early_refresh_pct: float
-    avg_remaining_ms: float
-    clipped_ticks_est: int
-
-
-class RotationScoreResponse(BaseModel):
-    player_name: str
-    spec: str
-    score_pct: float
-    rules_checked: int
-    rules_passed: int
-    violations_json: str | None
-
-
-class TrinketProcResponse(BaseModel):
-    player_name: str
-    trinket_name: str
-    spell_id: int
-    uptime_pct: float
-    expected_uptime_pct: float
-    grade: str
-
-
-class EventDataResponse(BaseModel):
+class PhaseAnalysis(BaseModel):
     report_code: str
-    event_rows: int
+    fight_id: int
+    encounter_name: str
+    duration_ms: int
+    kill: bool
+    phases: list[PhaseInfo]
+    players: list[PhasePlayerPerformance]
+
+
+class AutoIngestStatus(BaseModel):
+    enabled: bool
+    status: str
+    last_poll: str | None
+    last_error: str | None
+    guild_id: int
+    guild_name: str
+    poll_interval_minutes: int
+    stats: dict
+
+
+class FightHighlight(BaseModel):
+    encounter: str
+    duration_ms: int | None = None
+    deaths: int | None = None
+
+
+class PlayerHighlight(BaseModel):
+    player: str
+    dps: float | None = None
+    encounter: str | None = None
+    parse_delta: float | None = None
+    total_interrupts: int | None = None
+
+
+class RaidNightSummary(BaseModel):
+    report_code: str
+    report_title: str
+    date: str
+    guild_name: str | None
+    # Totals
+    total_bosses: int
+    total_kills: int
+    total_wipes: int
+    total_clear_time_ms: int
+    # Fight highlights
+    fastest_kill: FightHighlight | None
+    slowest_kill: FightHighlight | None
+    most_deaths_boss: FightHighlight | None
+    cleanest_kill: FightHighlight | None
+    # Player highlights
+    top_dps_overall: PlayerHighlight | None
+    most_improved: PlayerHighlight | None
+    biggest_regression: PlayerHighlight | None
+    mvp_interrupts: PlayerHighlight | None
+    # Week-over-week comparison
+    previous_report: str | None
+    clear_time_delta_ms: int | None
+    kills_delta: int | None
+    avg_parse_delta: float | None

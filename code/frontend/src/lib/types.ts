@@ -275,20 +275,16 @@ export interface OverhealSummary {
   abilities: OverhealAbility[]
 }
 
-export interface ConsumableEntry {
-  name: string
+export interface ConsumableItem {
   category: string
-  uptime_pct: number | null
-  present: boolean
+  ability_name: string
+  spell_id: number
 }
 
-export interface ConsumableCheck {
+export interface ConsumablePlayerEntry {
   player_name: string
-  player_spec: string
-  role: string
-  present: ConsumableEntry[]
-  missing: ConsumableEntry[]
-  score_pct: number
+  consumables: ConsumableItem[]
+  missing: string[]
 }
 
 export interface CancelledCastSummary {

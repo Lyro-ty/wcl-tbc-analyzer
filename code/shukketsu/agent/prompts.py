@@ -54,42 +54,41 @@ longest gap, and activity grade.
 - **get_cooldown_efficiency**: Major cooldown usage efficiency for a player in a fight \
 (requires event data — report_code + fight_id + player_name). Shows times used vs \
 max possible uses, efficiency %, and first/last use timing.
-- **get_consumable_check**: Check a player's consumable and prep buff usage for a fight \
-(requires table data — report_code + fight_id + player_name). Shows present consumables \
-with uptimes and flags missing ones by role/spec.
+- **get_consumable_check**: Check consumable preparation (flasks, food, oils) for players in \
+a fight (requires event data — report_code + fight_id, optional player_name). Shows what \
+each player had active and flags missing consumable categories.
 - **get_overheal_analysis**: Get overhealing analysis for a healer in a fight \
 (requires table data — report_code + fight_id + player_name). Shows per-ability overheal %, \
 flags abilities >30% overheal as wasteful.
 - **get_cancelled_casts**: Get cancelled cast analysis for a player in a fight \
 (requires event data — report_code + fight_id + player_name). Shows how many casts were \
 started but not completed, with cancel rate grade.
-- **get_resource_usage**: Get resource (mana/energy/rage) usage analysis for a player in a fight \
-(requires event data — report_code + fight_id + player_name). Shows min/max/avg resource levels, \
-time spent at zero, and resource trends. Use for OOM healers, energy-starved rogues.
-- **get_cooldown_windows**: Get cooldown window throughput analysis for a player in a fight \
-(requires event data — report_code + fight_id + player_name). Shows DPS during cooldown windows \
-vs baseline DPS, revealing how effectively the player capitalizes on burst windows.
-- **get_phase_breakdown**: Get boss phase breakdown for a player in a fight \
-(requires event data — report_code + fight_id + player_name). Shows per-phase DPS, casts, \
-and GCD uptime. Downtime phases (transitions, air phases) are marked separately.
-- **get_dot_analysis**: Get DoT refresh analysis for a player in a fight \
-(requires event data — report_code + fight_id + player_name). Detects early DoT refreshes \
-that clip remaining ticks, wasting GCDs. Useful for Shadow Priests, Warlocks, Druids.
-- **get_rotation_score**: Get rotation validation score for a player in a fight \
-(requires event data — report_code + fight_id + player_name). Evaluates cast sequence against \
-spec-specific rotation rules (APL). Currently supports: Fury Warrior, Combat Rogue, Arcane Mage.
-- **get_trinket_procs**: Get trinket proc analysis for a player in a fight \
-(requires table data — report_code + fight_id + player_name). Shows which trinkets procced, \
-their uptime %, and whether uptime meets expected thresholds.
-- **get_raid_buff_coverage**: Check raid buff coverage for all players in a fight \
-(requires table data — report_code + fight_id). Shows which key raid buffs are present, \
-how many players have each buff, and flags missing buffs.
-- **get_gear_audit**: Check a player's gear for missing enchants and gems \
-(report_code + fight_id + player_name). Note: requires WCL combatantInfo data which is not \
-yet ingested — returns a stub message.
-- **get_threat_analysis**: Get threat and tank performance analysis for a player in a fight \
-(report_code + fight_id + player_name). Shows available tank metrics from existing data. \
-Full TPS analysis requires WCL Threat events (not yet fetched).
+- **get_personal_bests**: Get a player's personal records (best DPS/parse/HPS) per encounter. \
+Shows PR values and kill count per boss. Useful for tracking personal progression \
+(player_name, optional encounter_name).
+- **get_wipe_progression**: Show wipe-to-kill progression for a boss encounter in a raid. \
+Lists each attempt with boss HP% at wipe, DPS trends, deaths, and duration. Useful for \
+seeing how quickly the raid learned the fight (report_code + encounter_name).
+- **get_regressions**: Check for performance regressions or improvements on farm bosses. \
+Compares recent kills (last 2) against rolling baseline (kills 3-7). Flags significant \
+drops (>=15 percentile points) as regressions. Only tracks registered characters \
+(optional player_name).
+- **resolve_my_fights**: Find your recent kills with report codes and fight IDs. \
+Use this when the user refers to fights without specifying a report code \
+(optional encounter_name, optional count — default 5).
+- **get_gear_changes**: Compare a player's gear between two raids. Shows which equipment \
+slots changed, old/new item IDs, and item level deltas for upgrades/downgrades. \
+Requires event data ingestion (player_name + report_code_old + report_code_new).
+- **get_phase_analysis**: Break down a boss fight by phase. Shows known phase structure \
+with estimated time ranges (e.g., Kel'Thuzad P1 Adds / P2 Active / P3 Ice Tombs) \
+and per-player DPS, deaths, and performance for the fight. Useful for understanding \
+fight pacing and which phases are critical (report_code + fight_id, optional player_name).
+
+## Context Resolution
+
+When the user refers to "my last fight", "my recent kills", "last raid", or similar \
+relative references, use the resolve_my_fights tool first to find the relevant report \
+codes and fight IDs, then use other tools with those specific identifiers.
 
 ## Analysis Framework
 

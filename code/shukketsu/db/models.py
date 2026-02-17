@@ -88,6 +88,7 @@ class Fight(Base):
     )
     kill: Mapped[bool] = mapped_column(Boolean)
     difficulty: Mapped[int] = mapped_column(Integer, default=0)
+    fight_percentage: Mapped[float | None] = mapped_column(Float)
 
     report: Mapped["Report"] = relationship(back_populates="fights")
     encounter: Mapped["Encounter"] = relationship(back_populates="fights")
@@ -98,22 +99,8 @@ class Fight(Base):
     cast_metrics: Mapped[list["CastMetric"]] = relationship(back_populates="fight")
     cooldown_usage: Mapped[list["CooldownUsage"]] = relationship(back_populates="fight")
     cancelled_casts: Mapped[list["CancelledCast"]] = relationship(back_populates="fight")
-    cast_events: Mapped[list["CastEvent"]] = relationship(back_populates="fight")
-    resource_snapshots: Mapped[list["ResourceSnapshot"]] = relationship(
-        back_populates="fight"
-    )
-    cooldown_windows: Mapped[list["CooldownWindow"]] = relationship(
-        back_populates="fight"
-    )
-    phase_metrics: Mapped[list["PhaseMetric"]] = relationship(
-        back_populates="fight"
-    )
-    dot_refreshes: Mapped[list["DotRefresh"]] = relationship(
-        back_populates="fight"
-    )
-    rotation_scores: Mapped[list["RotationScore"]] = relationship(
-        back_populates="fight"
-    )
+    consumables: Mapped[list["FightConsumable"]] = relationship(back_populates="fight")
+    gear_snapshots: Mapped[list["GearSnapshot"]] = relationship(back_populates="fight")
 
 
 class FightPerformance(Base):
@@ -328,139 +315,34 @@ class CancelledCast(Base):
     fight: Mapped["Fight"] = relationship(back_populates="cancelled_casts")
 
 
-class CastEvent(Base):
-    __tablename__ = "cast_events"
+class FightConsumable(Base):
+    __tablename__ = "fight_consumables"
     __table_args__ = (
-        Index(
-            "ix_cast_events_fight_player_ts",
-            "fight_id", "player_name", "timestamp_ms",
-        ),
+        Index("ix_fight_consumables_fight_player", "fight_id", "player_name"),
     )
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
     player_name: Mapped[str] = mapped_column(String(100))
-    timestamp_ms: Mapped[int] = mapped_column(BigInteger)
+    category: Mapped[str] = mapped_column(String(50))
     spell_id: Mapped[int] = mapped_column(Integer)
     ability_name: Mapped[str] = mapped_column(String(200))
-    event_type: Mapped[str] = mapped_column(String(20))
-    target_name: Mapped[str | None] = mapped_column(
-        String(100), nullable=True
-    )
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    fight: Mapped["Fight"] = relationship(back_populates="cast_events")
+    fight: Mapped["Fight"] = relationship(back_populates="consumables")
 
 
-class ResourceSnapshot(Base):
-    __tablename__ = "resource_snapshots"
+class GearSnapshot(Base):
+    __tablename__ = "gear_snapshots"
     __table_args__ = (
-        Index("ix_resource_snapshots_fight_player", "fight_id", "player_name"),
+        Index("ix_gear_snapshots_fight_player", "fight_id", "player_name"),
     )
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
     player_name: Mapped[str] = mapped_column(String(100))
-    resource_type: Mapped[str] = mapped_column(String(20))
-    min_value: Mapped[int] = mapped_column(Integer, default=0)
-    max_value: Mapped[int] = mapped_column(Integer, default=0)
-    avg_value: Mapped[float] = mapped_column(Float, default=0.0)
-    time_at_zero_ms: Mapped[int] = mapped_column(BigInteger, default=0)
-    time_at_zero_pct: Mapped[float] = mapped_column(Float, default=0.0)
-    samples_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    slot: Mapped[int] = mapped_column(Integer)
+    item_id: Mapped[int] = mapped_column(Integer)
+    item_level: Mapped[int] = mapped_column(Integer, default=0)
 
-    fight: Mapped["Fight"] = relationship(back_populates="resource_snapshots")
-
-
-class CooldownWindow(Base):
-    __tablename__ = "cooldown_windows"
-    __table_args__ = (
-        Index("ix_cooldown_windows_fight_player", "fight_id", "player_name"),
-    )
-
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
-    player_name: Mapped[str] = mapped_column(String(100))
-    ability_name: Mapped[str] = mapped_column(String(200))
-    spell_id: Mapped[int] = mapped_column(Integer)
-    window_start_ms: Mapped[int] = mapped_column(BigInteger)
-    window_end_ms: Mapped[int] = mapped_column(BigInteger)
-    window_damage: Mapped[int] = mapped_column(BigInteger, default=0)
-    window_dps: Mapped[float] = mapped_column(Float, default=0.0)
-    baseline_dps: Mapped[float] = mapped_column(Float, default=0.0)
-    dps_gain_pct: Mapped[float] = mapped_column(Float, default=0.0)
-
-    fight: Mapped["Fight"] = relationship(back_populates="cooldown_windows")
-
-
-class PhaseMetric(Base):
-    __tablename__ = "phase_metrics"
-    __table_args__ = (
-        Index("ix_phase_metrics_fight_player", "fight_id", "player_name"),
-    )
-
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
-    player_name: Mapped[str] = mapped_column(String(100))
-    phase_name: Mapped[str] = mapped_column(String(100))
-    phase_start_ms: Mapped[int] = mapped_column(BigInteger)
-    phase_end_ms: Mapped[int] = mapped_column(BigInteger)
-    is_downtime: Mapped[bool] = mapped_column(Boolean, default=False)
-    phase_dps: Mapped[float | None] = mapped_column(Float, nullable=True)
-    phase_casts: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    phase_gcd_uptime_pct: Mapped[float | None] = mapped_column(
-        Float, nullable=True
-    )
-
-    fight: Mapped["Fight"] = relationship(back_populates="phase_metrics")
-
-
-class DotRefresh(Base):
-    __tablename__ = "dot_refreshes"
-    __table_args__ = (
-        Index("ix_dot_refreshes_fight_player", "fight_id", "player_name"),
-    )
-
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
-    player_name: Mapped[str] = mapped_column(String(100))
-    spell_id: Mapped[int] = mapped_column(Integer)
-    ability_name: Mapped[str] = mapped_column(String(200))
-    total_refreshes: Mapped[int] = mapped_column(Integer, default=0)
-    early_refreshes: Mapped[int] = mapped_column(Integer, default=0)
-    early_refresh_pct: Mapped[float] = mapped_column(Float, default=0.0)
-    avg_remaining_ms: Mapped[float] = mapped_column(Float, default=0.0)
-    clipped_ticks_est: Mapped[int] = mapped_column(Integer, default=0)
-
-    fight: Mapped["Fight"] = relationship(back_populates="dot_refreshes")
-
-
-class RotationScore(Base):
-    __tablename__ = "rotation_scores"
-    __table_args__ = (
-        Index("ix_rotation_scores_fight_player", "fight_id", "player_name"),
-    )
-
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
-    player_name: Mapped[str] = mapped_column(String(100))
-    spec: Mapped[str] = mapped_column(String(50))
-    score_pct: Mapped[float] = mapped_column(Float, default=0.0)
-    rules_checked: Mapped[int] = mapped_column(Integer, default=0)
-    rules_passed: Mapped[int] = mapped_column(Integer, default=0)
-    violations_json: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-
-    fight: Mapped["Fight"] = relationship(back_populates="rotation_scores")
+    fight: Mapped["Fight"] = relationship(back_populates="gear_snapshots")

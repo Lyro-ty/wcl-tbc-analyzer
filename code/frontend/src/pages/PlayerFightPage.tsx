@@ -581,7 +581,7 @@ export default function PlayerFightPage() {
       )}
 
       {/* Consumable Check */}
-      {consumables && (consumables.present.length > 0 || consumables.missing.length > 0) && (
+      {consumables && (consumables.consumables.length > 0 || consumables.missing.length > 0) && (
         <div className="mb-8">
           <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
             <ClipboardCheck className="h-5 w-5 text-teal-400" />

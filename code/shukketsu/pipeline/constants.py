@@ -276,153 +276,121 @@ def get_expected_consumables(spec: str) -> list[ConsumableDef]:
     return REQUIRED_CONSUMABLES.get("all", []) + REQUIRED_CONSUMABLES.get(role, [])
 
 
-# --- Boss Phase definitions ---
+# --- CombatantInfo consumable category mapping ---
+# Maps known WCL CombatantInfo aura spell IDs to (category, display_name).
+# Used by combatant_info.py to classify auras from CombatantInfo events.
+CONSUMABLE_CATEGORIES: dict[int, tuple[str, str]] = {
+    # Flasks (Classic Fresh)
+    17628: ("flask", "Flask of Supreme Power"),
+    17626: ("flask", "Flask of the Titans"),
+    17627: ("flask", "Flask of Distilled Wisdom"),
+    17629: ("flask", "Flask of Chromatic Resistance"),
+    # Battle Elixirs
+    28490: ("elixir", "Elixir of Major Strength"),
+    28491: ("elixir", "Elixir of Healing Power"),
+    28493: ("elixir", "Elixir of Major Frost Power"),
+    28501: ("elixir", "Elixir of Major Firepower"),
+    28503: ("elixir", "Elixir of Major Shadow Power"),
+    11390: ("elixir", "Elixir of the Mongoose"),
+    # Guardian Elixirs
+    28502: ("elixir", "Elixir of Major Armor"),
+    28509: ("elixir", "Elixir of Major Mageblood"),
+    28514: ("elixir", "Elixir of Empowerment"),
+    # Food
+    33254: ("food", "Well Fed"),
+    33257: ("food", "Well Fed"),
+    # Weapon Oils / Stones
+    28898: ("weapon_oil", "Brilliant Wizard Oil"),
+    28891: ("weapon_oil", "Superior Wizard Oil"),
+    25123: ("weapon_oil", "Adamantite Sharpening Stone"),
+    25118: ("weapon_oil", "Adamantite Weightstone"),
+}
+
+GEAR_SLOTS: dict[int, str] = {
+    0: "Head", 1: "Neck", 2: "Shoulder", 3: "Shirt",
+    4: "Chest", 5: "Waist", 6: "Legs", 7: "Feet",
+    8: "Wrist", 9: "Hands", 10: "Ring 1", 11: "Ring 2",
+    12: "Trinket 1", 13: "Trinket 2", 14: "Back",
+    15: "Main Hand", 16: "Off Hand", 17: "Ranged",
+}
+
+
+# --- Boss Fight Phase Definitions ---
 
 @dataclass(frozen=True)
-class BossPhase:
+class PhaseDef:
     name: str
-    start_pct: float | None  # HP % where phase starts (None = time-based)
-    end_pct: float | None  # HP % where phase ends
-    is_downtime: bool  # True = expected downtime (transitions, air phases)
+    pct_start: float   # Approximate % of fight when this phase starts (0.0 = start)
+    pct_end: float     # Approximate % of fight when this phase ends (1.0 = end)
+    description: str = ""
 
 
-# Encounter phases for boss encounters with clear phase transitions.
-# Uses encounter names (not IDs) for portability.
-ENCOUNTER_PHASES: dict[str, list[BossPhase]] = {
-    "Heigan the Unclean": [
-        BossPhase("Phase 1 (Dance)", None, None, False),
-        BossPhase("Phase 2 (Platform)", None, None, True),
+# Phase definitions for Fresh Naxxramas encounters.
+# These are approximate time-based splits for MVP phase annotation.
+# Actual phase transitions depend on boss HP or scripted events, but
+# these percentages give a useful estimate when we lack event-level data.
+ENCOUNTER_PHASES: dict[str, list[PhaseDef]] = {
+    "Patchwerk": [
+        PhaseDef("Full Fight", 0.0, 1.0, "Single phase DPS race"),
+    ],
+    "Grobbulus": [
+        PhaseDef("Full Fight", 0.0, 1.0, "Kite and kill, poison clouds"),
+    ],
+    "Gluth": [
+        PhaseDef("P1 - DPS", 0.0, 0.7, "DPS boss while kiting zombies"),
+        PhaseDef("P2 - Decimate", 0.7, 1.0, "Zombies decimated, burn phase"),
     ],
     "Thaddius": [
-        BossPhase("Phase 1 (Stalagg & Feugen)", None, None, False),
-        BossPhase("Transition", None, None, True),
-        BossPhase("Phase 2 (Thaddius)", None, None, False),
+        PhaseDef("P1 - Stalagg & Feugen", 0.0, 0.35,
+                 "Kill both adds within 5 seconds"),
+        PhaseDef("P2 - Thaddius", 0.35, 1.0,
+                 "DPS with polarity shifts"),
+    ],
+    "Noth the Plaguebringer": [
+        PhaseDef("P1 - Ground", 0.0, 0.5, "DPS boss on ground"),
+        PhaseDef("P2 - Balcony", 0.5, 1.0,
+                 "Add waves while boss is immune"),
+    ],
+    "Heigan the Unclean": [
+        PhaseDef("P1 - Platform", 0.0, 0.55, "DPS on platform phase"),
+        PhaseDef("P2 - Dance", 0.55, 1.0, "Safety dance, limited DPS"),
+    ],
+    "Loatheb": [
+        PhaseDef("Full Fight", 0.0, 1.0, "Single phase, timed heals"),
+    ],
+    "Anub'Rekhan": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "Single phase with locust swarm kiting"),
+    ],
+    "Grand Widow Faerlina": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "Single phase, manage enrage"),
+    ],
+    "Maexxna": [
+        PhaseDef("P1 - Above 30%", 0.0, 0.7,
+                 "Normal DPS with web wraps"),
+        PhaseDef("P2 - Enrage", 0.7, 1.0, "Below 30%, burn phase"),
+    ],
+    "Instructor Razuvious": [
+        PhaseDef("Full Fight", 0.0, 1.0, "Mind control tanking"),
     ],
     "Gothik the Harvester": [
-        BossPhase("Phase 1 (Living)", None, None, False),
-        BossPhase("Phase 2 (Dead)", None, None, False),
-        BossPhase("Phase 3 (Combined)", None, None, False),
+        PhaseDef("P1 - Waves", 0.0, 0.55,
+                 "Add waves, live/dead side"),
+        PhaseDef("P2 - Gothik", 0.55, 1.0, "Boss comes down, burn"),
+    ],
+    "The Four Horsemen": [
+        PhaseDef("Full Fight", 0.0, 1.0, "Tank rotation with marks"),
     ],
     "Sapphiron": [
-        BossPhase("Ground Phase", None, None, False),
-        BossPhase("Air Phase", None, None, True),
+        PhaseDef("P1 - Ground", 0.0, 0.6, "DPS on ground"),
+        PhaseDef("P2 - Air", 0.6, 1.0, "Ice block phase, blizzard"),
     ],
     "Kel'Thuzad": [
-        BossPhase("Phase 1 (Adds)", None, None, False),
-        BossPhase("Phase 2 (Kel'Thuzad)", None, None, False),
-        BossPhase("Phase 3 (KT + Guardians)", None, None, False),
+        PhaseDef("P1 - Adds", 0.0, 0.2,
+                 "Kill add waves, no boss DPS"),
+        PhaseDef("P2 - Active", 0.2, 0.7, "Main DPS phase"),
+        PhaseDef("P3 - Ice Tombs", 0.7, 1.0,
+                 "Ice blocks and guardians"),
     ],
-    "Lady Vashj": [
-        BossPhase("Phase 1", None, None, False),
-        BossPhase("Phase 2 (Tainted Cores)", None, None, False),
-        BossPhase("Phase 3", None, None, False),
-    ],
-    "Kael'thas Sunstrider": [
-        BossPhase("Phase 1 (Advisors)", None, None, False),
-        BossPhase("Phase 2 (Weapons)", None, None, False),
-        BossPhase("Phase 3 (Advisors Revived)", None, None, False),
-        BossPhase("Phase 4 (Kael'thas)", None, None, False),
-    ],
-    "Archimonde": [
-        BossPhase("Full Fight", None, None, False),
-    ],
-    "Illidan Stormrage": [
-        BossPhase("Phase 1 (Normal)", None, None, False),
-        BossPhase("Phase 2 (Flames)", None, None, True),
-        BossPhase("Phase 3 (Demon)", None, None, False),
-        BossPhase("Phase 4 (Maiev)", None, None, False),
-    ],
-}
-
-
-# --- DoT definitions for early refresh detection ---
-
-@dataclass(frozen=True)
-class DotDef:
-    spell_id: int
-    name: str
-    duration_ms: int
-    tick_interval_ms: int
-    pandemic_window_ms: int  # Safe refresh window (last 30% of duration)
-
-
-CLASS_DOTS: dict[str, list[DotDef]] = {
-    "Priest": [
-        DotDef(25368, "Shadow Word: Pain", 18000, 3000, 5400),
-        DotDef(34917, "Vampiric Touch", 15000, 3000, 4500),
-        DotDef(25467, "Devouring Plague", 24000, 3000, 7200),
-    ],
-    "Warlock": [
-        DotDef(27216, "Corruption", 18000, 3000, 5400),
-        DotDef(27215, "Immolate", 15000, 3000, 4500),
-        DotDef(27218, "Curse of Agony", 24000, 2000, 7200),
-        DotDef(30910, "Curse of Doom", 60000, 60000, 18000),
-        DotDef(30405, "Unstable Affliction", 18000, 3000, 5400),
-        DotDef(27264, "Siphon Life", 30000, 3000, 9000),
-    ],
-    "Druid": [
-        DotDef(26988, "Moonfire", 12000, 3000, 3600),
-        DotDef(27013, "Insect Swarm", 12000, 2000, 3600),
-    ],
-    "Hunter": [
-        DotDef(27016, "Serpent Sting", 15000, 3000, 4500),
-    ],
-}
-
-
-# --- Trinket proc definitions ---
-
-@dataclass(frozen=True)
-class TrinketDef:
-    spell_id: int  # Proc buff spell ID (appears in WCL buff data)
-    name: str
-    expected_uptime_pct: float  # Approximate expected uptime for good RNG/usage
-
-
-# Classic Fresh / TBC trinket procs (WoW spell IDs for the proc buffs).
-CLASSIC_TRINKETS: list[TrinketDef] = [
-    TrinketDef(34775, "Dragonspine Trophy", 30.0),
-    TrinketDef(42084, "Tsunami Talisman", 25.0),
-    TrinketDef(35163, "Icon of the Silver Crescent", 20.0),
-    TrinketDef(35166, "Bloodlust Brooch", 20.0),
-    TrinketDef(35165, "Essence of the Martyr", 20.0),
-    TrinketDef(39200, "Madness of the Betrayer", 20.0),
-    TrinketDef(38348, "Sextant of Unstable Currents", 20.0),
-    TrinketDef(33370, "Quagmirran's Eye", 20.0),
-    TrinketDef(39958, "Darkmoon Card: Crusade", 20.0),
-    TrinketDef(28830, "Eye of the Dead", 20.0),
-    TrinketDef(33807, "Abacus of Violent Odds", 20.0),
-    TrinketDef(40477, "Shard of Contempt", 30.0),
-]
-
-# Set of known trinket proc spell IDs for quick lookup.
-TRINKET_SPELL_IDS: frozenset[int] = frozenset(
-    t.spell_id for t in CLASSIC_TRINKETS
-)
-
-
-# --- Raid buff definitions for coverage checks ---
-
-RAID_BUFFS: dict[str, list[int]] = {
-    "Battle Shout": [2048, 25289],
-    "Blessing of Kings": [25898],
-    "Blessing of Might": [27141],
-    "Blessing of Salvation": [1038],
-    "Blessing of Wisdom": [27143],
-    "Mark of the Wild": [26990],
-    "Arcane Intellect": [27126],
-    "Power Word: Fortitude": [25389],
-    "Divine Spirit": [32999],
-    "Shadow Protection": [39374],
-    "Windfury Totem": [25587],
-    "Grace of Air Totem": [25359],
-    "Strength of Earth Totem": [25528],
-    "Mana Spring Totem": [25570],
-    "Totem of Wrath": [30708],
-    "Wrath of Air Totem": [3738],
-    "Trueshot Aura": [27066],
-    "Leader of the Pack": [17007],
-    "Moonkin Aura": [24907],
-    "Heroic Presence": [6562],
-    "Unleashed Rage": [30811],
 }

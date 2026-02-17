@@ -6,6 +6,7 @@ from sqlalchemy import delete, select
 
 from shukketsu.db.models import Encounter, Fight, FightPerformance, Report
 from shukketsu.pipeline.normalize import is_boss_fight
+from shukketsu.pipeline.progression import snapshot_all_characters
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ def parse_fights(fights_data: list[dict[str, Any]], report_code: str) -> list[Fi
             end_time=f["endTime"],
             kill=f["kill"],
             difficulty=f.get("difficulty", 0),
+            fight_percentage=f.get("fightPercentage"),
         ))
     return result
 
@@ -75,6 +77,7 @@ class IngestResult:
     performances: int
     table_rows: int = 0
     event_rows: int = 0
+    snapshots: int = 0
 
 
 async def ingest_report(
@@ -188,18 +191,37 @@ async def ingest_report(
             )
             table_rows += rows
 
-    # Optionally ingest event data (deaths, cast metrics, cooldowns)
-    event_rows = 0
+    # Optionally ingest CombatantInfo (consumables + gear snapshots)
+    combatant_rows = 0
     if ingest_events and fights:
-        from shukketsu.pipeline.event_data import ingest_event_data_for_report
+        from shukketsu.pipeline.combatant_info import ingest_combatant_info_for_report
 
-        event_rows = await ingest_event_data_for_report(wcl, session, report_code)
+        try:
+            combatant_rows = await ingest_combatant_info_for_report(
+                wcl, session, report_code,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to ingest combatant info for %s", report_code,
+            )
+            combatant_rows = 0
+
+    # Auto-snapshot progression for tracked characters
+    try:
+        snapshot_count = await snapshot_all_characters(session)
+    except Exception:
+        logger.exception("Failed to auto-snapshot progression after ingest")
+        snapshot_count = 0
 
     logger.info(
-        "Ingested report %s: %d fights, %d performances, %d table rows, %d event rows",
-        report_code, len(fights), total_performances, table_rows, event_rows,
+        "Ingested report %s: %d fights, %d performances, %d table rows, "
+        "%d combatant rows, %d snapshots",
+        report_code, len(fights), total_performances, table_rows,
+        combatant_rows, snapshot_count,
     )
     return IngestResult(
         fights=len(fights), performances=total_performances,
-        table_rows=table_rows, event_rows=event_rows,
+        table_rows=table_rows,
+        event_rows=combatant_rows,
+        snapshots=snapshot_count,
     )

@@ -376,13 +376,6 @@ TABLE_DATA_EXISTS = text("""
     ) AS has_data
 """)
 
-EVENT_DATA_EXISTS = text("""
-    SELECT EXISTS(
-        SELECT 1 FROM death_details dd
-        JOIN fights f ON dd.fight_id = f.id
-        WHERE f.report_code = :report_code
-    ) AS has_data
-""")
 
 DEATH_ANALYSIS = text("""
     SELECT dd.player_name, dd.death_index, dd.timestamp_ms,
@@ -559,26 +552,336 @@ CANCELLED_CASTS = text("""
       AND cc.player_name = :player_name
 """)
 
-CAST_TIMELINE = text("""
-    SELECT ce.player_name, ce.timestamp_ms, ce.spell_id,
-           ce.ability_name, ce.event_type, ce.target_name
-    FROM cast_events ce
-    JOIN fights f ON ce.fight_id = f.id
+PERSONAL_BESTS = text("""
+    SELECT e.name AS encounter_name,
+           MAX(fp.dps) AS best_dps,
+           MAX(fp.parse_percentile) AS best_parse,
+           MAX(fp.hps) AS best_hps,
+           COUNT(*) AS kill_count,
+           MAX(fp.item_level) AS peak_ilvl
+    FROM fight_performances fp
+    JOIN fights f ON fp.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    WHERE fp.player_name ILIKE :player_name
+      AND f.kill = true
+    GROUP BY e.id, e.name
+    ORDER BY e.name
+""")
+
+PERSONAL_BESTS_BY_ENCOUNTER = text("""
+    SELECT e.name AS encounter_name,
+           MAX(fp.dps) AS best_dps,
+           MAX(fp.parse_percentile) AS best_parse,
+           MAX(fp.hps) AS best_hps,
+           COUNT(*) AS kill_count,
+           MAX(fp.item_level) AS peak_ilvl
+    FROM fight_performances fp
+    JOIN fights f ON fp.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    WHERE fp.player_name ILIKE :player_name
+      AND f.kill = true
+      AND e.name ILIKE :encounter_name
+    GROUP BY e.id, e.name
+    ORDER BY e.name
+""")
+
+WIPE_PROGRESSION = text("""
+    SELECT f.fight_id,
+           f.kill,
+           f.fight_percentage,
+           f.duration_ms,
+           COUNT(fp.id) AS player_count,
+           ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
+           SUM(fp.deaths) AS total_deaths,
+           ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse
+    FROM fights f
+    JOIN fight_performances fp ON f.id = fp.fight_id
     WHERE f.report_code = :report_code
-      AND f.fight_id = :fight_id
-      AND ce.player_name = :player_name
-    ORDER BY ce.timestamp_ms ASC
+      AND f.encounter_id = (
+          SELECT id FROM encounters WHERE name ILIKE :encounter_name LIMIT 1
+      )
+    GROUP BY f.id, f.fight_id, f.kill, f.fight_percentage, f.duration_ms
+    ORDER BY f.fight_id
 """)
 
 CONSUMABLE_CHECK = text("""
-    SELECT bu.ability_name, bu.spell_id, bu.uptime_pct
-    FROM buff_uptimes bu
-    JOIN fights f ON bu.fight_id = f.id
+    SELECT fc.player_name, fc.category, fc.ability_name, fc.spell_id, fc.active
+    FROM fight_consumables fc
+    JOIN fights f ON fc.fight_id = f.id
+    WHERE f.report_code = :report_code AND f.fight_id = :fight_id
+      AND (:player_name IS NULL OR fc.player_name ILIKE :player_name)
+    ORDER BY fc.player_name, fc.category
+""")
+
+REGRESSION_CHECK = text("""
+    WITH ranked_fights AS (
+        SELECT fp.player_name, e.name AS encounter_name,
+               fp.dps, fp.parse_percentile,
+               f.end_time,
+               ROW_NUMBER() OVER (
+                   PARTITION BY fp.player_name, e.id
+                   ORDER BY f.end_time DESC
+               ) AS rn
+        FROM fight_performances fp
+        JOIN fights f ON fp.fight_id = f.id
+        JOIN encounters e ON f.encounter_id = e.id
+        WHERE fp.is_my_character = true AND f.kill = true
+    ),
+    baseline AS (
+        SELECT player_name, encounter_name,
+               AVG(parse_percentile) AS baseline_parse,
+               AVG(dps) AS baseline_dps
+        FROM ranked_fights WHERE rn BETWEEN 3 AND 7
+        GROUP BY player_name, encounter_name
+        HAVING COUNT(*) >= 3
+    ),
+    recent AS (
+        SELECT player_name, encounter_name,
+               AVG(parse_percentile) AS recent_parse,
+               AVG(dps) AS recent_dps
+        FROM ranked_fights WHERE rn BETWEEN 1 AND 2
+        GROUP BY player_name, encounter_name
+    )
+    SELECT r.player_name, r.encounter_name,
+           ROUND(r.recent_parse::numeric, 1) AS recent_parse,
+           ROUND(b.baseline_parse::numeric, 1) AS baseline_parse,
+           ROUND(r.recent_dps::numeric, 1) AS recent_dps,
+           ROUND(b.baseline_dps::numeric, 1) AS baseline_dps,
+           ROUND((r.recent_parse - b.baseline_parse)::numeric, 1) AS parse_delta,
+           ROUND(((r.recent_dps - b.baseline_dps)
+               / NULLIF(b.baseline_dps, 0) * 100)::numeric, 1) AS dps_delta_pct
+    FROM recent r
+    JOIN baseline b ON r.player_name = b.player_name
+                   AND r.encounter_name = b.encounter_name
+    WHERE ABS(r.recent_parse - b.baseline_parse) >= 15
+    ORDER BY parse_delta ASC
+""")
+
+MY_RECENT_KILLS = text("""
+    SELECT f.report_code, f.fight_id, e.name AS encounter_name,
+           fp.dps, fp.parse_percentile, fp.deaths, fp.item_level,
+           f.duration_ms, r.title AS report_title, r.start_time AS report_time
+    FROM fight_performances fp
+    JOIN fights f ON fp.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    JOIN reports r ON f.report_code = r.code
+    WHERE fp.is_my_character = true
+      AND f.kill = true
+      AND (:encounter_name IS NULL OR e.name ILIKE :encounter_name)
+    ORDER BY r.start_time DESC, f.fight_id DESC
+    LIMIT :limit
+""")
+
+GEAR_SNAPSHOT = text("""
+    SELECT gs.slot, gs.item_id, gs.item_level, gs.player_name
+    FROM gear_snapshots gs
+    JOIN fights f ON gs.fight_id = f.id
+    WHERE f.report_code = :report_code AND f.fight_id = :fight_id
+      AND gs.player_name ILIKE :player_name
+    ORDER BY gs.slot
+""")
+
+GEAR_CHANGES = text("""
+    WITH old_gear AS (
+        SELECT gs.slot, gs.item_id, gs.item_level
+        FROM gear_snapshots gs
+        JOIN fights f ON gs.fight_id = f.id
+        WHERE f.report_code = :report_code_old
+          AND gs.player_name ILIKE :player_name
+          AND f.fight_id = (
+              SELECT MIN(f2.fight_id) FROM fights f2
+              WHERE f2.report_code = :report_code_old
+          )
+    ),
+    new_gear AS (
+        SELECT gs.slot, gs.item_id, gs.item_level
+        FROM gear_snapshots gs
+        JOIN fights f ON gs.fight_id = f.id
+        WHERE f.report_code = :report_code_new
+          AND gs.player_name ILIKE :player_name
+          AND f.fight_id = (
+              SELECT MIN(f2.fight_id) FROM fights f2
+              WHERE f2.report_code = :report_code_new
+          )
+    )
+    SELECT COALESCE(o.slot, n.slot) AS slot,
+           o.item_id AS old_item_id, o.item_level AS old_ilvl,
+           n.item_id AS new_item_id, n.item_level AS new_ilvl
+    FROM old_gear o
+    FULL OUTER JOIN new_gear n ON o.slot = n.slot
+    WHERE o.item_id IS DISTINCT FROM n.item_id
+    ORDER BY COALESCE(o.slot, n.slot)
+""")
+
+REGRESSION_CHECK_PLAYER = text("""
+    WITH ranked_fights AS (
+        SELECT fp.player_name, e.name AS encounter_name,
+               fp.dps, fp.parse_percentile,
+               f.end_time,
+               ROW_NUMBER() OVER (
+                   PARTITION BY fp.player_name, e.id
+                   ORDER BY f.end_time DESC
+               ) AS rn
+        FROM fight_performances fp
+        JOIN fights f ON fp.fight_id = f.id
+        JOIN encounters e ON f.encounter_id = e.id
+        WHERE fp.is_my_character = true AND f.kill = true
+          AND fp.player_name ILIKE :player_name
+    ),
+    baseline AS (
+        SELECT player_name, encounter_name,
+               AVG(parse_percentile) AS baseline_parse,
+               AVG(dps) AS baseline_dps
+        FROM ranked_fights WHERE rn BETWEEN 3 AND 7
+        GROUP BY player_name, encounter_name
+        HAVING COUNT(*) >= 3
+    ),
+    recent AS (
+        SELECT player_name, encounter_name,
+               AVG(parse_percentile) AS recent_parse,
+               AVG(dps) AS recent_dps
+        FROM ranked_fights WHERE rn BETWEEN 1 AND 2
+        GROUP BY player_name, encounter_name
+    )
+    SELECT r.player_name, r.encounter_name,
+           ROUND(r.recent_parse::numeric, 1) AS recent_parse,
+           ROUND(b.baseline_parse::numeric, 1) AS baseline_parse,
+           ROUND(r.recent_dps::numeric, 1) AS recent_dps,
+           ROUND(b.baseline_dps::numeric, 1) AS baseline_dps,
+           ROUND((r.recent_parse - b.baseline_parse)::numeric, 1) AS parse_delta,
+           ROUND(((r.recent_dps - b.baseline_dps)
+               / NULLIF(b.baseline_dps, 0) * 100)::numeric, 1) AS dps_delta_pct
+    FROM recent r
+    JOIN baseline b ON r.player_name = b.player_name
+                   AND r.encounter_name = b.encounter_name
+    WHERE ABS(r.recent_parse - b.baseline_parse) >= 15
+    ORDER BY parse_delta ASC
+""")
+
+NIGHT_SUMMARY_FIGHTS = text("""
+    SELECT r.title AS report_title, r.start_time, r.guild_name,
+           e.name AS encounter_name, f.fight_id,
+           f.kill, f.duration_ms,
+           COUNT(fp.id) AS player_count,
+           COALESCE(SUM(fp.deaths), 0) AS total_deaths,
+           COALESCE(SUM(fp.interrupts), 0) AS total_interrupts,
+           ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse,
+           ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps
+    FROM fights f
+    JOIN encounters e ON f.encounter_id = e.id
+    JOIN reports r ON f.report_code = r.code
+    LEFT JOIN fight_performances fp ON fp.fight_id = f.id
     WHERE f.report_code = :report_code
-      AND f.fight_id = :fight_id
-      AND bu.player_name = :player_name
-      AND bu.metric_type = 'buff'
-    ORDER BY bu.uptime_pct DESC
+    GROUP BY r.title, r.start_time, r.guild_name,
+             e.name, f.fight_id, f.kill, f.duration_ms
+    ORDER BY f.fight_id ASC
+""")
+
+NIGHT_SUMMARY_PLAYERS = text("""
+    SELECT fp.player_name, e.name AS encounter_name, f.fight_id,
+           fp.dps, fp.parse_percentile, fp.deaths, fp.interrupts,
+           f.kill
+    FROM fight_performances fp
+    JOIN fights f ON fp.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    WHERE f.report_code = :report_code
+    ORDER BY f.fight_id ASC, fp.dps DESC
+""")
+
+WEEK_OVER_WEEK = text("""
+    WITH current_report AS (
+        SELECT r.code, r.guild_name, r.start_time,
+               SUM(CASE WHEN f.kill THEN f.duration_ms ELSE 0 END) AS clear_time_ms,
+               SUM(CASE WHEN f.kill THEN 1 ELSE 0 END) AS kill_count,
+               ROUND(AVG(fp.parse_percentile) FILTER (WHERE f.kill)::numeric, 1)
+                   AS avg_parse
+        FROM reports r
+        LEFT JOIN fights f ON f.report_code = r.code
+        LEFT JOIN fight_performances fp ON fp.fight_id = f.id
+        WHERE r.code = :report_code
+        GROUP BY r.code, r.guild_name, r.start_time
+    ),
+    prev_report AS (
+        SELECT r.code, r.start_time,
+               SUM(CASE WHEN f.kill THEN f.duration_ms ELSE 0 END) AS clear_time_ms,
+               SUM(CASE WHEN f.kill THEN 1 ELSE 0 END) AS kill_count,
+               ROUND(AVG(fp.parse_percentile) FILTER (WHERE f.kill)::numeric, 1)
+                   AS avg_parse
+        FROM reports r
+        LEFT JOIN fights f ON f.report_code = r.code
+        LEFT JOIN fight_performances fp ON fp.fight_id = f.id
+        WHERE r.guild_name = (SELECT guild_name FROM current_report)
+          AND r.start_time < (SELECT start_time FROM current_report)
+          AND r.code != :report_code
+        GROUP BY r.code, r.start_time
+        ORDER BY r.start_time DESC
+        LIMIT 1
+    )
+    SELECT pr.code AS previous_report,
+           (cr.clear_time_ms - pr.clear_time_ms) AS clear_time_delta_ms,
+           (cr.kill_count - pr.kill_count) AS kills_delta,
+           ROUND((cr.avg_parse - pr.avg_parse)::numeric, 1) AS avg_parse_delta
+    FROM current_report cr, prev_report pr
+""")
+
+PHASE_BREAKDOWN = text("""
+    SELECT f.report_code, f.fight_id, f.duration_ms, f.kill,
+           e.name AS encounter_name,
+           fp.player_name, fp.player_class, fp.player_spec,
+           fp.dps, fp.total_damage, fp.hps, fp.total_healing,
+           fp.deaths, fp.parse_percentile
+    FROM fights f
+    JOIN encounters e ON f.encounter_id = e.id
+    JOIN fight_performances fp ON fp.fight_id = f.id
+    WHERE f.report_code = :report_code AND f.fight_id = :fight_id
+      AND (:player_name IS NULL OR fp.player_name ILIKE :player_name)
+    ORDER BY fp.dps DESC
+""")
+
+PLAYER_PARSE_DELTAS = text("""
+    WITH current_parses AS (
+        SELECT fp.player_name, e.name AS encounter_name,
+               ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse
+        FROM fight_performances fp
+        JOIN fights f ON fp.fight_id = f.id
+        JOIN encounters e ON f.encounter_id = e.id
+        WHERE f.report_code = :report_code
+          AND f.kill = true
+          AND fp.parse_percentile IS NOT NULL
+        GROUP BY fp.player_name, e.name
+    ),
+    prev_report AS (
+        SELECT r.code
+        FROM reports r
+        WHERE r.guild_name = (
+            SELECT guild_name FROM reports WHERE code = :report_code
+        )
+          AND r.start_time < (
+            SELECT start_time FROM reports WHERE code = :report_code
+        )
+          AND r.code != :report_code
+        ORDER BY r.start_time DESC
+        LIMIT 1
+    ),
+    prev_parses AS (
+        SELECT fp.player_name, e.name AS encounter_name,
+               ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse
+        FROM fight_performances fp
+        JOIN fights f ON fp.fight_id = f.id
+        JOIN encounters e ON f.encounter_id = e.id
+        WHERE f.report_code = (SELECT code FROM prev_report)
+          AND f.kill = true
+          AND fp.parse_percentile IS NOT NULL
+        GROUP BY fp.player_name, e.name
+    )
+    SELECT cp.player_name, cp.encounter_name,
+           cp.avg_parse AS current_parse,
+           pp.avg_parse AS previous_parse,
+           ROUND((cp.avg_parse - pp.avg_parse)::numeric, 1) AS parse_delta
+    FROM current_parses cp
+    JOIN prev_parses pp ON cp.player_name = pp.player_name
+                       AND cp.encounter_name = pp.encounter_name
+    ORDER BY parse_delta DESC
 """)
 
 RESOURCE_USAGE = text("""
@@ -593,80 +896,3 @@ RESOURCE_USAGE = text("""
       AND rs.player_name = :player_name
 """)
 
-COOLDOWN_WINDOWS = text("""
-    SELECT cw.player_name, cw.ability_name, cw.spell_id,
-           cw.window_start_ms, cw.window_end_ms,
-           cw.window_damage, cw.window_dps,
-           cw.baseline_dps, cw.dps_gain_pct
-    FROM cooldown_windows cw
-    JOIN fights f ON cw.fight_id = f.id
-    WHERE f.report_code = :report_code
-      AND f.fight_id = :fight_id
-      AND cw.player_name = :player_name
-    ORDER BY cw.window_start_ms ASC
-""")
-
-PHASE_BREAKDOWN = text("""
-    SELECT pm.player_name, pm.phase_name, pm.phase_start_ms,
-           pm.phase_end_ms, pm.is_downtime, pm.phase_dps,
-           pm.phase_casts, pm.phase_gcd_uptime_pct
-    FROM phase_metrics pm
-    JOIN fights f ON pm.fight_id = f.id
-    WHERE f.report_code = :report_code
-      AND f.fight_id = :fight_id
-      AND pm.player_name = :player_name
-    ORDER BY pm.phase_start_ms ASC
-""")
-
-DOT_REFRESH_ANALYSIS = text("""
-    SELECT dr.player_name, dr.spell_id, dr.ability_name,
-           dr.total_refreshes, dr.early_refreshes, dr.early_refresh_pct,
-           dr.avg_remaining_ms, dr.clipped_ticks_est
-    FROM dot_refreshes dr
-    JOIN fights f ON dr.fight_id = f.id
-    WHERE f.report_code = :report_code
-      AND f.fight_id = :fight_id
-      AND dr.player_name = :player_name
-    ORDER BY dr.early_refreshes DESC
-""")
-
-ROTATION_SCORE = text("""
-    SELECT rs.player_name, rs.spec, rs.score_pct,
-           rs.rules_checked, rs.rules_passed, rs.violations_json
-    FROM rotation_scores rs
-    JOIN fights f ON rs.fight_id = f.id
-    WHERE f.report_code = :report_code
-      AND f.fight_id = :fight_id
-      AND rs.player_name = :player_name
-""")
-
-TRINKET_PROCS = text("""
-    SELECT bu.player_name, bu.ability_name, bu.spell_id,
-           bu.uptime_pct, bu.stack_count
-    FROM buff_uptimes bu
-    JOIN fights f ON bu.fight_id = f.id
-    WHERE f.report_code = :report_code
-      AND f.fight_id = :fight_id
-      AND bu.player_name = :player_name
-      AND bu.spell_id = ANY(:trinket_ids)
-    ORDER BY bu.uptime_pct DESC
-""")
-
-RAID_BUFF_COVERAGE = text("""
-    SELECT bu.ability_name, bu.spell_id,
-           COUNT(DISTINCT bu.player_name) AS players_with_buff,
-           ROUND(AVG(bu.uptime_pct)::numeric, 1) AS avg_uptime_pct,
-           (SELECT COUNT(DISTINCT fp.player_name)
-            FROM fight_performances fp
-            JOIN fights f2 ON fp.fight_id = f2.id
-            WHERE f2.report_code = :report_code
-              AND f2.fight_id = :fight_id) AS total_players
-    FROM buff_uptimes bu
-    JOIN fights f ON bu.fight_id = f.id
-    WHERE f.report_code = :report_code
-      AND f.fight_id = :fight_id
-      AND bu.metric_type = 'buff'
-      AND bu.spell_id = ANY(:buff_ids)
-    GROUP BY bu.ability_name, bu.spell_id
-    ORDER BY players_with_buff DESC
-""")
