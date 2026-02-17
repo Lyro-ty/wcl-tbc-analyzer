@@ -79,6 +79,10 @@ Use this when the user refers to fights without specifying a report code \
 - **get_gear_changes**: Compare a player's gear between two raids. Shows which equipment \
 slots changed, old/new item IDs, and item level deltas for upgrades/downgrades. \
 Requires event data ingestion (player_name + report_code_old + report_code_new).
+- **get_phase_analysis**: Break down a boss fight by phase. Shows known phase structure \
+with estimated time ranges (e.g., Kel'Thuzad P1 Adds / P2 Active / P3 Ice Tombs) \
+and per-player DPS, deaths, and performance for the fight. Useful for understanding \
+fight pacing and which phases are critical (report_code + fight_id, optional player_name).
 
 ## Context Resolution
 

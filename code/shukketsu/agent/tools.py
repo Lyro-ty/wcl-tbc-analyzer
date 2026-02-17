@@ -1107,6 +1107,78 @@ async def resolve_my_fights(
         await session.close()
 
 
+@tool
+async def get_phase_analysis(
+    report_code: str, fight_id: int, player_name: str | None = None,
+) -> str:
+    """Break down a boss fight by phase. Shows the encounter's phase structure
+    with estimated time ranges and per-player DPS, deaths, and performance.
+    Identifies which phases are critical for the encounter.
+    Use this to understand fight pacing and where time is spent."""
+    from shukketsu.pipeline.constants import ENCOUNTER_PHASES, PhaseDef
+
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.PHASE_BREAKDOWN,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": f"%{player_name}%" if player_name else None},
+        )
+        rows = result.fetchall()
+        if not rows:
+            return (
+                f"No data found for fight {fight_id} in report {report_code}."
+            )
+
+        first = rows[0]
+        encounter_name = first.encounter_name
+        duration_ms = first.duration_ms
+        outcome = "Kill" if first.kill else "Wipe"
+
+        # Look up phase definitions; default to single "Full Fight" phase
+        phases = ENCOUNTER_PHASES.get(encounter_name, [
+            PhaseDef("Full Fight", 0.0, 1.0, "No phase data available"),
+        ])
+
+        lines = [
+            f"Phase Analysis: {encounter_name} ({outcome}, "
+            f"{_format_duration(duration_ms)}) — {report_code}#{fight_id}\n"
+        ]
+
+        # Phase timeline
+        lines.append("Phase Timeline:")
+        for phase in phases:
+            est_start = int(duration_ms * phase.pct_start)
+            est_end = int(duration_ms * phase.pct_end)
+            est_dur = est_end - est_start
+            lines.append(
+                f"  {phase.name}: {_format_duration(est_start)} - "
+                f"{_format_duration(est_end)} "
+                f"({_format_duration(est_dur)}) — {phase.description}"
+            )
+
+        # Player performances
+        lines.append("\nPlayer Performance:")
+        for r in rows:
+            parse_str = (
+                f"{r.parse_percentile}%"
+                if r.parse_percentile is not None else "N/A"
+            )
+            metrics = f"DPS: {r.dps:,.1f} | Damage: {r.total_damage:,}"
+            if r.hps and r.hps > 0:
+                metrics += f" | HPS: {r.hps:,.1f} | Healing: {r.total_healing:,}"
+            lines.append(
+                f"  {r.player_name} ({r.player_spec} {r.player_class}) | "
+                f"{metrics} | Deaths: {r.deaths} | Parse: {parse_str}"
+            )
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
 ALL_TOOLS = [
     get_my_performance,
     get_top_rankings,
@@ -1133,4 +1205,5 @@ ALL_TOOLS = [
     get_regressions,
     resolve_my_fights,
     get_gear_changes,
+    get_phase_analysis,
 ]

@@ -312,3 +312,84 @@ GEAR_SLOTS: dict[int, str] = {
     12: "Trinket 1", 13: "Trinket 2", 14: "Back",
     15: "Main Hand", 16: "Off Hand", 17: "Ranged",
 }
+
+
+# --- Boss Fight Phase Definitions ---
+
+@dataclass(frozen=True)
+class PhaseDef:
+    name: str
+    pct_start: float   # Approximate % of fight when this phase starts (0.0 = start)
+    pct_end: float     # Approximate % of fight when this phase ends (1.0 = end)
+    description: str = ""
+
+
+# Phase definitions for Fresh Naxxramas encounters.
+# These are approximate time-based splits for MVP phase annotation.
+# Actual phase transitions depend on boss HP or scripted events, but
+# these percentages give a useful estimate when we lack event-level data.
+ENCOUNTER_PHASES: dict[str, list[PhaseDef]] = {
+    "Patchwerk": [
+        PhaseDef("Full Fight", 0.0, 1.0, "Single phase DPS race"),
+    ],
+    "Grobbulus": [
+        PhaseDef("Full Fight", 0.0, 1.0, "Kite and kill, poison clouds"),
+    ],
+    "Gluth": [
+        PhaseDef("P1 - DPS", 0.0, 0.7, "DPS boss while kiting zombies"),
+        PhaseDef("P2 - Decimate", 0.7, 1.0, "Zombies decimated, burn phase"),
+    ],
+    "Thaddius": [
+        PhaseDef("P1 - Stalagg & Feugen", 0.0, 0.35,
+                 "Kill both adds within 5 seconds"),
+        PhaseDef("P2 - Thaddius", 0.35, 1.0,
+                 "DPS with polarity shifts"),
+    ],
+    "Noth the Plaguebringer": [
+        PhaseDef("P1 - Ground", 0.0, 0.5, "DPS boss on ground"),
+        PhaseDef("P2 - Balcony", 0.5, 1.0,
+                 "Add waves while boss is immune"),
+    ],
+    "Heigan the Unclean": [
+        PhaseDef("P1 - Platform", 0.0, 0.55, "DPS on platform phase"),
+        PhaseDef("P2 - Dance", 0.55, 1.0, "Safety dance, limited DPS"),
+    ],
+    "Loatheb": [
+        PhaseDef("Full Fight", 0.0, 1.0, "Single phase, timed heals"),
+    ],
+    "Anub'Rekhan": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "Single phase with locust swarm kiting"),
+    ],
+    "Grand Widow Faerlina": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "Single phase, manage enrage"),
+    ],
+    "Maexxna": [
+        PhaseDef("P1 - Above 30%", 0.0, 0.7,
+                 "Normal DPS with web wraps"),
+        PhaseDef("P2 - Enrage", 0.7, 1.0, "Below 30%, burn phase"),
+    ],
+    "Instructor Razuvious": [
+        PhaseDef("Full Fight", 0.0, 1.0, "Mind control tanking"),
+    ],
+    "Gothik the Harvester": [
+        PhaseDef("P1 - Waves", 0.0, 0.55,
+                 "Add waves, live/dead side"),
+        PhaseDef("P2 - Gothik", 0.55, 1.0, "Boss comes down, burn"),
+    ],
+    "The Four Horsemen": [
+        PhaseDef("Full Fight", 0.0, 1.0, "Tank rotation with marks"),
+    ],
+    "Sapphiron": [
+        PhaseDef("P1 - Ground", 0.0, 0.6, "DPS on ground"),
+        PhaseDef("P2 - Air", 0.6, 1.0, "Ice block phase, blizzard"),
+    ],
+    "Kel'Thuzad": [
+        PhaseDef("P1 - Adds", 0.0, 0.2,
+                 "Kill add waves, no boss DPS"),
+        PhaseDef("P2 - Active", 0.2, 0.7, "Main DPS phase"),
+        PhaseDef("P3 - Ice Tombs", 0.7, 1.0,
+                 "Ice blocks and guardians"),
+    ],
+}
