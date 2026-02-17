@@ -1,4 +1,4 @@
-"""Tests for the new ability/buff data API endpoints."""
+"""Tests for data API endpoints."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,6 +20,15 @@ def app(mock_session_factory):
     with patch("shukketsu.api.routes.data._session_factory", factory):
         from shukketsu.api.app import create_app
         return create_app()
+
+
+def _mock_settings(has_creds=True):
+    """Create a mock settings object for WCL endpoints."""
+    settings = MagicMock()
+    settings.wcl.client_id = "test_id" if has_creds else ""
+    settings.wcl.client_secret.get_secret_value.return_value = "test_secret"
+    settings.wcl.oauth_url = "https://www.warcraftlogs.com/oauth/token"
+    return settings
 
 
 class TestFightAbilities:
@@ -150,3 +159,246 @@ class TestAbilitiesAvailable:
 
         assert resp.status_code == 200
         assert resp.json()["has_data"] is False
+
+
+class TestFetchTableData:
+    async def test_200_success(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_ingest = AsyncMock(return_value=42)
+
+        with (
+            patch("shukketsu.api.routes.data._session_factory", factory),
+            patch("shukketsu.config.get_settings", return_value=_mock_settings()),
+            patch(
+                "shukketsu.pipeline.table_data.ingest_table_data_for_report",
+                mock_ingest,
+            ),
+            patch("shukketsu.wcl.auth.WCLAuth"),
+            patch("shukketsu.wcl.client.WCLClient") as mock_wcl_cls,
+        ):
+            mock_wcl_cls.return_value.__aenter__ = AsyncMock()
+            mock_wcl_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.post("/api/data/reports/abc123/table-data")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["report_code"] == "abc123"
+        assert data["table_rows"] == 42
+
+    async def test_503_no_creds(self, app, mock_session_factory):
+        factory, _ = mock_session_factory
+        with (
+            patch("shukketsu.api.routes.data._session_factory", factory),
+            patch(
+                "shukketsu.config.get_settings",
+                return_value=_mock_settings(has_creds=False),
+            ),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.post("/api/data/reports/abc123/table-data")
+
+        assert resp.status_code == 503
+
+
+class TestRefreshRankings:
+    async def test_503_no_creds(self, app, mock_session_factory):
+        factory, _ = mock_session_factory
+        with (
+            patch("shukketsu.api.routes.data._session_factory", factory),
+            patch(
+                "shukketsu.config.get_settings",
+                return_value=_mock_settings(has_creds=False),
+            ),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.post("/api/data/rankings/refresh")
+
+        assert resp.status_code == 503
+
+    async def test_404_no_encounters(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.__iter__ = MagicMock(return_value=iter([]))
+        mock_session.execute.return_value = mock_result
+
+        with (
+            patch("shukketsu.api.routes.data._session_factory", factory),
+            patch("shukketsu.config.get_settings", return_value=_mock_settings()),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.post("/api/data/rankings/refresh")
+
+        assert resp.status_code == 404
+
+
+class TestRefreshSpeedRankings:
+    async def test_503_no_creds(self, app, mock_session_factory):
+        factory, _ = mock_session_factory
+        with (
+            patch("shukketsu.api.routes.data._session_factory", factory),
+            patch(
+                "shukketsu.config.get_settings",
+                return_value=_mock_settings(has_creds=False),
+            ),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.post("/api/data/speed-rankings/refresh")
+
+        assert resp.status_code == 503
+
+    async def test_404_no_encounters(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.__iter__ = MagicMock(return_value=iter([]))
+        mock_session.execute.return_value = mock_result
+
+        with (
+            patch("shukketsu.api.routes.data._session_factory", factory),
+            patch("shukketsu.config.get_settings", return_value=_mock_settings()),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.post("/api/data/speed-rankings/refresh")
+
+        assert resp.status_code == 404
+
+
+class TestCharacterProfile:
+    async def test_200_success(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = MagicMock(_mapping={
+            "id": 1, "name": "Lyro", "server_slug": "whitemane",
+            "server_region": "US", "character_class": "Warrior",
+            "spec": "Arms", "total_fights": 50, "total_kills": 40,
+            "total_deaths": 5, "avg_dps": 1200.5, "best_dps": 1800.3,
+            "avg_parse": 75.2, "best_parse": 98.0, "avg_ilvl": 100.5,
+        })
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.get("/api/data/characters/Lyro/profile")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "Lyro"
+        assert data["total_fights"] == 50
+
+    async def test_404_not_found(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = None
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.get("/api/data/characters/Nobody/profile")
+
+        assert resp.status_code == 404
+
+
+class TestCharacterRecentParses:
+    async def test_200_success(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = [
+            MagicMock(_mapping={
+                "encounter_name": "Patchwerk", "dps": 1500.0, "hps": 0.0,
+                "parse_percentile": 85.0, "deaths": 0, "item_level": 100.0,
+                "player_class": "Warrior", "player_spec": "Arms",
+                "kill": True, "duration_ms": 120000,
+                "report_code": "abc123", "fight_id": 1,
+                "report_date": 1700000000000,
+            }),
+        ]
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.get(
+                    "/api/data/characters/Lyro/recent-parses"
+                )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["encounter_name"] == "Patchwerk"
+
+
+class TestDashboardStats:
+    async def test_200_success(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = MagicMock(_mapping={
+            "total_reports": 10, "total_kills": 80,
+            "total_wipes": 20, "total_characters": 3,
+            "total_encounters": 15,
+        })
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.get("/api/data/dashboard/stats")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_reports"] == 10
+        assert data["total_kills"] == 80
+
+
+class TestDashboardRecent:
+    async def test_200_success(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = [
+            MagicMock(_mapping={
+                "code": "abc123", "title": "Naxx Clear",
+                "guild_name": "Shukketsu", "start_time": 1700000000000,
+                "fight_count": 15, "kill_count": 13,
+                "wipe_count": 2, "avg_kill_dps": 1200.5,
+            }),
+        ]
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.get("/api/data/dashboard/recent")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["code"] == "abc123"

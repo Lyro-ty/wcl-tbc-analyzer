@@ -11,7 +11,10 @@ from shukketsu.api.models import (
     BuffUptimeResponse,
     CharacterFightSummary,
     CharacterInfo,
+    CharacterProfile,
+    CharacterRecentParse,
     CharacterReportSummary,
+    DashboardStats,
     DeathEntry,
     EncounterInfo,
     ExecutionBoss,
@@ -21,10 +24,13 @@ from shukketsu.api.models import (
     ProgressionPoint,
     RaidComparison,
     RaidSummaryFight,
+    RankingsRefreshResponse,
+    RecentReportSummary,
     RegisterCharacterRequest,
     ReportSummary,
     SpecLeaderboardEntry,
     SpeedComparison,
+    TableDataResponse,
 )
 from shukketsu.db import queries as q
 
@@ -525,6 +531,236 @@ async def ingest_report_endpoint(req: IngestRequest):
     except Exception as e:
         await session.rollback()
         logger.exception("Failed to ingest report %s", req.report_code)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.post(
+    "/reports/{report_code}/table-data",
+    response_model=TableDataResponse,
+)
+async def fetch_table_data(report_code: str):
+    from shukketsu.config import get_settings
+    from shukketsu.pipeline.table_data import ingest_table_data_for_report
+    from shukketsu.wcl.auth import WCLAuth
+    from shukketsu.wcl.client import WCLClient
+    from shukketsu.wcl.rate_limiter import RateLimiter
+
+    settings = get_settings()
+    if not settings.wcl.client_id:
+        raise HTTPException(
+            status_code=503, detail="WCL credentials not configured"
+        )
+
+    session = await _get_session()
+    try:
+        auth = WCLAuth(
+            settings.wcl.client_id,
+            settings.wcl.client_secret.get_secret_value(),
+            settings.wcl.oauth_url,
+        )
+        async with WCLClient(auth, RateLimiter()) as wcl:
+            rows = await ingest_table_data_for_report(wcl, session, report_code)
+        await session.commit()
+        logger.info("Fetched table data for %s: %d rows", report_code, rows)
+        return TableDataResponse(report_code=report_code, table_rows=rows)
+    except HTTPException:
+        raise
+    except Exception as e:
+        await session.rollback()
+        logger.exception("Failed to fetch table data for %s", report_code)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.post("/rankings/refresh", response_model=RankingsRefreshResponse)
+async def refresh_rankings(zone_id: int | None = None, force: bool = False):
+    from sqlalchemy import select
+
+    from shukketsu.config import get_settings
+    from shukketsu.db.models import Encounter
+    from shukketsu.pipeline.constants import TBC_SPECS
+    from shukketsu.pipeline.rankings import ingest_all_rankings
+    from shukketsu.wcl.auth import WCLAuth
+    from shukketsu.wcl.client import WCLClient
+    from shukketsu.wcl.rate_limiter import RateLimiter
+
+    settings = get_settings()
+    if not settings.wcl.client_id:
+        raise HTTPException(
+            status_code=503, detail="WCL credentials not configured"
+        )
+
+    session = await _get_session()
+    try:
+        stmt = select(Encounter.id)
+        if zone_id is not None:
+            stmt = stmt.where(Encounter.zone_id == zone_id)
+        rows = await session.execute(stmt)
+        encounter_ids = [r[0] for r in rows]
+        if not encounter_ids:
+            raise HTTPException(
+                status_code=404, detail="No encounters found"
+            )
+
+        auth = WCLAuth(
+            settings.wcl.client_id,
+            settings.wcl.client_secret.get_secret_value(),
+            settings.wcl.oauth_url,
+        )
+        async with WCLClient(auth, RateLimiter()) as wcl:
+            result = await ingest_all_rankings(
+                wcl, session, encounter_ids, list(TBC_SPECS), force=force,
+            )
+        logger.info(
+            "Rankings refresh: %d fetched, %d skipped, %d errors",
+            result.fetched, result.skipped, len(result.errors),
+        )
+        return RankingsRefreshResponse(
+            fetched=result.fetched,
+            skipped=result.skipped,
+            errors=result.errors,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to refresh rankings")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.post("/speed-rankings/refresh", response_model=RankingsRefreshResponse)
+async def refresh_speed_rankings(zone_id: int | None = None, force: bool = False):
+    from sqlalchemy import select
+
+    from shukketsu.config import get_settings
+    from shukketsu.db.models import Encounter
+    from shukketsu.pipeline.speed_rankings import ingest_all_speed_rankings
+    from shukketsu.wcl.auth import WCLAuth
+    from shukketsu.wcl.client import WCLClient
+    from shukketsu.wcl.rate_limiter import RateLimiter
+
+    settings = get_settings()
+    if not settings.wcl.client_id:
+        raise HTTPException(
+            status_code=503, detail="WCL credentials not configured"
+        )
+
+    session = await _get_session()
+    try:
+        stmt = select(Encounter.id)
+        if zone_id is not None:
+            stmt = stmt.where(Encounter.zone_id == zone_id)
+        rows = await session.execute(stmt)
+        encounter_ids = [r[0] for r in rows]
+        if not encounter_ids:
+            raise HTTPException(
+                status_code=404, detail="No encounters found"
+            )
+
+        auth = WCLAuth(
+            settings.wcl.client_id,
+            settings.wcl.client_secret.get_secret_value(),
+            settings.wcl.oauth_url,
+        )
+        async with WCLClient(auth, RateLimiter()) as wcl:
+            result = await ingest_all_speed_rankings(
+                wcl, session, encounter_ids, force=force,
+            )
+        logger.info(
+            "Speed rankings refresh: %d fetched, %d skipped, %d errors",
+            result.fetched, result.skipped, len(result.errors),
+        )
+        return RankingsRefreshResponse(
+            fetched=result.fetched,
+            skipped=result.skipped,
+            errors=result.errors,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to refresh speed rankings")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/characters/{character_name}/profile",
+    response_model=CharacterProfile,
+)
+async def character_profile(character_name: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.CHARACTER_PROFILE, {"character_name": character_name}
+        )
+        row = result.fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Character {character_name} not found",
+            )
+        return CharacterProfile(**dict(row._mapping))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get character profile")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/characters/{character_name}/recent-parses",
+    response_model=list[CharacterRecentParse],
+)
+async def character_recent_parses(character_name: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.CHARACTER_RECENT_PARSES, {"character_name": character_name}
+        )
+        rows = result.fetchall()
+        return [CharacterRecentParse(**dict(r._mapping)) for r in rows]
+    except Exception as e:
+        logger.exception("Failed to get recent parses")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get("/dashboard/stats", response_model=DashboardStats)
+async def dashboard_stats():
+    session = await _get_session()
+    try:
+        result = await session.execute(q.DASHBOARD_STATS)
+        row = result.fetchone()
+        if not row:
+            return DashboardStats(
+                total_reports=0, total_kills=0, total_wipes=0,
+                total_characters=0, total_encounters=0,
+            )
+        return DashboardStats(**dict(row._mapping))
+    except Exception as e:
+        logger.exception("Failed to get dashboard stats")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get("/dashboard/recent", response_model=list[RecentReportSummary])
+async def dashboard_recent():
+    session = await _get_session()
+    try:
+        result = await session.execute(q.RECENT_REPORTS)
+        rows = result.fetchall()
+        return [RecentReportSummary(**dict(r._mapping)) for r in rows]
+    except Exception as e:
+        logger.exception("Failed to get recent reports")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

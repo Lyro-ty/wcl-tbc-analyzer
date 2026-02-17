@@ -6,23 +6,14 @@ import {
   fetchPlayerBuffs,
   getFightDetails,
 } from '../lib/api'
-import type { AbilityMetric, BuffUptime, FightPlayer } from '../lib/types'
+import type { AbilityMetric, FightPlayer } from '../lib/types'
 import { useApiQuery } from '../hooks/useApiQuery'
 import AbilityBarChart from '../components/charts/AbilityBarChart'
 import UptimeBarChart from '../components/charts/UptimeBarChart'
 import DataTable, { type Column } from '../components/ui/DataTable'
+import ErrorBoundary from '../components/ui/ErrorBoundary'
 import QuickAction from '../components/ui/QuickAction'
-import { classColor, formatDuration, formatNumber } from '../lib/wow-classes'
-
-function parseColor(parse: number | null): string {
-  if (parse == null) return 'text-zinc-500'
-  if (parse >= 99) return 'text-orange-300'
-  if (parse >= 95) return 'text-orange-400'
-  if (parse >= 75) return 'text-purple-400'
-  if (parse >= 50) return 'text-blue-400'
-  if (parse >= 25) return 'text-green-400'
-  return 'text-zinc-400'
-}
+import { classColor, formatDuration, formatNumber, parseColor } from '../lib/wow-classes'
 
 export default function PlayerFightPage() {
   const { code, fightId, player } = useParams<{
@@ -41,13 +32,13 @@ export default function PlayerFightPage() {
 
   // Load ability breakdown
   const { data: abilities, loading: loadingAbilities, error: abilitiesError } = useApiQuery(
-    () => fetchPlayerAbilities(code!, fightIdNum, player!).catch(() => [] as AbilityMetric[]),
+    () => fetchPlayerAbilities(code!, fightIdNum, player!),
     [code, fightId, player],
   )
 
   // Load buff uptimes
-  const { data: buffs, loading: loadingBuffs } = useApiQuery(
-    () => fetchPlayerBuffs(code!, fightIdNum, player!).catch(() => [] as BuffUptime[]),
+  const { data: buffs, loading: loadingBuffs, error: buffsError } = useApiQuery(
+    () => fetchPlayerBuffs(code!, fightIdNum, player!),
     [code, fightId, player],
   )
 
@@ -199,6 +190,20 @@ export default function PlayerFightPage() {
         </div>
       )}
 
+      {/* Ability error */}
+      {abilitiesError && (
+        <div className="mb-4 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400">
+          Failed to load abilities: {abilitiesError}
+        </div>
+      )}
+
+      {/* Buff error */}
+      {buffsError && (
+        <div className="mb-4 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400">
+          Failed to load buffs: {buffsError}
+        </div>
+      )}
+
       {/* No data CTA */}
       {!loadingAbilities && !hasAbilityData && !abilitiesError && (
         <div className="mb-8 rounded-lg border border-zinc-800 bg-zinc-900/30 p-6 text-center">
@@ -220,9 +225,11 @@ export default function PlayerFightPage() {
             <Swords className="h-5 w-5 text-red-400" />
             Damage Breakdown
           </h2>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-            <AbilityBarChart data={damageAbilities} />
-          </div>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <AbilityBarChart data={damageAbilities} />
+            </div>
+          </ErrorBoundary>
           <div className="mt-3">
             <DataTable
               columns={abilityColumns}
@@ -241,9 +248,11 @@ export default function PlayerFightPage() {
             <Heart className="h-5 w-5 text-emerald-400" />
             Healing Breakdown
           </h2>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-            <AbilityBarChart data={healingAbilities} accentColor="#22c55e" />
-          </div>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <AbilityBarChart data={healingAbilities} accentColor="#22c55e" />
+            </div>
+          </ErrorBoundary>
           <div className="mt-3">
             <DataTable
               columns={abilityColumns}
@@ -262,9 +271,11 @@ export default function PlayerFightPage() {
             <Shield className="h-5 w-5 text-blue-400" />
             Buff Uptimes
           </h2>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-            <UptimeBarChart data={buffData} label="Buffs" />
-          </div>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <UptimeBarChart data={buffData} label="Buffs" />
+            </div>
+          </ErrorBoundary>
         </div>
       )}
 
@@ -275,14 +286,16 @@ export default function PlayerFightPage() {
             <Sparkles className="h-5 w-5 text-purple-400" />
             Debuff Uptimes
           </h2>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-            <UptimeBarChart data={debuffData} label="Debuffs" />
-          </div>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <UptimeBarChart data={debuffData} label="Debuffs" />
+            </div>
+          </ErrorBoundary>
         </div>
       )}
 
       {/* No buff data note */}
-      {!loadingBuffs && hasAbilityData && !hasBuffData && (
+      {!loadingBuffs && hasAbilityData && !hasBuffData && !buffsError && (
         <div className="mb-8 rounded-lg border border-zinc-800/50 bg-zinc-900/20 p-4 text-center text-xs text-zinc-500">
           No buff/debuff uptime data available for this fight.
         </div>

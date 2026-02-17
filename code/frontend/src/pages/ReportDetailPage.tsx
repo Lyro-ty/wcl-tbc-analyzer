@@ -1,21 +1,31 @@
 import { useCallback, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Database, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { getFightDetails, getReportExecution, getReportSpeed, getReportSummary } from '../lib/api'
+import {
+  fetchAbilitiesAvailable,
+  fetchTableData,
+  getFightDetails,
+  getReportExecution,
+  getReportSpeed,
+  getReportSummary,
+} from '../lib/api'
 import type { FightPlayer } from '../lib/types'
 import { useApiQuery } from '../hooks/useApiQuery'
 import BossCard from '../components/ui/BossCard'
 import DataTable, { type Column } from '../components/ui/DataTable'
 import QuickAction from '../components/ui/QuickAction'
+import ErrorBoundary from '../components/ui/ErrorBoundary'
 import SpeedComparisonChart from '../components/charts/SpeedComparisonChart'
-import { classColor, formatDuration, formatNumber } from '../lib/wow-classes'
+import { classColor, formatDuration, formatNumber, parseColor } from '../lib/wow-classes'
 
 export default function ReportDetailPage() {
   const { code } = useParams<{ code: string }>()
   const [expandedFight, setExpandedFight] = useState<number | null>(null)
   const [fightPlayers, setFightPlayers] = useState<FightPlayer[]>([])
   const [loadingFight, setLoadingFight] = useState(false)
+  const [fetchingTable, setFetchingTable] = useState(false)
+  const [fetchTableError, setFetchTableError] = useState<string | null>(null)
 
   const { data: summary, loading: loadSummary } = useApiQuery(
     () => getReportSummary(code!), [code],
@@ -26,6 +36,24 @@ export default function ReportDetailPage() {
   const { data: speed } = useApiQuery(
     () => getReportSpeed(code!), [code],
   )
+  const { data: abilitiesAvail, refetch: refetchAbilities } = useApiQuery(
+    () => fetchAbilitiesAvailable(code!), [code],
+  )
+
+  const handleFetchTableData = useCallback(async () => {
+    setFetchingTable(true)
+    setFetchTableError(null)
+    try {
+      await fetchTableData(code!)
+      refetchAbilities()
+    } catch (err) {
+      setFetchTableError(err instanceof Error ? err.message : 'Failed to fetch table data')
+    } finally {
+      setFetchingTable(false)
+    }
+  }, [code, refetchAbilities])
+
+  const [fightError, setFightError] = useState<string | null>(null)
 
   const toggleFight = useCallback(async (fightId: number) => {
     if (expandedFight === fightId) {
@@ -34,11 +62,13 @@ export default function ReportDetailPage() {
     }
     setExpandedFight(fightId)
     setLoadingFight(true)
+    setFightError(null)
     try {
       const players = await getFightDetails(code!, fightId)
       setFightPlayers(players)
-    } catch {
+    } catch (err) {
       setFightPlayers([])
+      setFightError(err instanceof Error ? err.message : 'Failed to load fight details')
     } finally {
       setLoadingFight(false)
     }
@@ -63,11 +93,9 @@ export default function ReportDetailPage() {
     )},
     { key: 'dps', label: 'DPS', sortValue: (r) => r.dps, render: (r) => formatNumber(r.dps) },
     { key: 'parse', label: 'Parse', sortValue: (r) => r.parse_percentile ?? 0, render: (r) => (
-      <span className={
-        (r.parse_percentile ?? 0) >= 95 ? 'text-orange-400' :
-        (r.parse_percentile ?? 0) >= 75 ? 'text-purple-400' :
-        (r.parse_percentile ?? 0) >= 50 ? 'text-blue-400' : 'text-zinc-400'
-      }>{r.parse_percentile != null ? `${r.parse_percentile}%` : '—'}</span>
+      <span className={parseColor(r.parse_percentile)}>
+        {r.parse_percentile != null ? `${r.parse_percentile}%` : '—'}
+      </span>
     )},
     { key: 'deaths', label: 'Deaths', sortValue: (r) => r.deaths, render: (r) => (
       <span className={r.deaths > 0 ? 'text-red-400' : ''}>{r.deaths}</span>
@@ -100,9 +128,41 @@ export default function ReportDetailPage() {
       {speed && speed.length > 0 && (
         <div className="mb-8">
           <h2 className="mb-4 text-lg font-semibold text-zinc-200">Kill Speed vs Top Rankings</h2>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-            <SpeedComparisonChart data={speed} />
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <SpeedComparisonChart data={speed} />
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* Table data callout */}
+      {abilitiesAvail && !abilitiesAvail.has_data && (
+        <div className="mb-6 flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/30 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-zinc-300">
+              Ability &amp; buff data not yet fetched for this report
+            </p>
+            <p className="text-xs text-zinc-500">
+              Fetch table data to see per-ability breakdowns and buff uptimes per player.
+            </p>
           </div>
+          <button
+            onClick={handleFetchTableData}
+            disabled={fetchingTable}
+            className="inline-flex items-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {fetchingTable ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Fetching...</>
+            ) : (
+              <><Database className="h-4 w-4" /> Fetch Ability &amp; Buff Data</>
+            )}
+          </button>
+        </div>
+      )}
+      {fetchTableError && (
+        <div className="mb-6 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400">
+          {fetchTableError}
         </div>
       )}
 
@@ -134,6 +194,10 @@ export default function ReportDetailPage() {
                   {loadingFight ? (
                     <div className="flex items-center gap-2 p-4 text-sm text-zinc-400">
                       <Loader2 className="h-4 w-4 animate-spin" /> Loading roster...
+                    </div>
+                  ) : fightError ? (
+                    <div className="rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400">
+                      {fightError}
                     </div>
                   ) : (
                     <DataTable

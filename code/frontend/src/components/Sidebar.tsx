@@ -1,20 +1,22 @@
 import {
   BarChart3,
   GitCompareArrows,
+  LayoutDashboard,
   MessageSquare,
   ScrollText,
   Swords,
   TrendingUp,
   Trophy,
-  UserCheck,
+  User,
   Users,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const links = [
-  { to: '/', label: 'Chat', icon: MessageSquare },
+  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/chat', label: 'Chat', icon: MessageSquare },
   { to: '/reports', label: 'Reports', icon: ScrollText },
-  { to: '/character-reports', label: 'My Reports', icon: UserCheck },
+  { to: '/characters', label: 'Characters', icon: User },
   { to: '/progression', label: 'Progression', icon: TrendingUp },
   { to: '/speed', label: 'Speed', icon: Swords },
   { to: '/leaderboard', label: 'Leaderboard', icon: Trophy },
@@ -40,6 +42,7 @@ export default function Sidebar({ collapsed }: { collapsed: boolean }) {
           <NavLink
             key={to}
             to={to}
+            end={to === '/'}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 isActive

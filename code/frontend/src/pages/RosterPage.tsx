@@ -6,7 +6,7 @@ import type { FightPlayer, RaidSummaryFight } from '../lib/types'
 import { useApiQuery } from '../hooks/useApiQuery'
 import DataTable, { type Column } from '../components/ui/DataTable'
 import QuickAction from '../components/ui/QuickAction'
-import { classColor, formatNumber } from '../lib/wow-classes'
+import { classColor, formatNumber, parseColor } from '../lib/wow-classes'
 
 export default function RosterPage() {
   const { data: reports } = useApiQuery(() => getReports(), [])
@@ -21,11 +21,13 @@ export default function RosterPage() {
     setSelectedReport(code)
     setSelectedFight(null)
     setPlayers([])
+    setError(null)
     if (!code) return
     try {
       const data = await getReportSummary(code)
       setFights(data)
-    } catch {
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load report')
       setFights([])
     }
   }, [])
@@ -76,11 +78,9 @@ export default function RosterPage() {
       </span>
     )},
     { key: 'parse', label: 'Parse', sortValue: (r) => r.parse_percentile ?? 0, render: (r) => (
-      <span className={
-        (r.parse_percentile ?? 0) >= 95 ? 'text-orange-400' :
-        (r.parse_percentile ?? 0) >= 75 ? 'text-purple-400' :
-        (r.parse_percentile ?? 0) >= 50 ? 'text-blue-400' : 'text-zinc-400'
-      }>{r.parse_percentile != null ? `${r.parse_percentile}%` : '—'}</span>
+      <span className={parseColor(r.parse_percentile)}>
+        {r.parse_percentile != null ? `${r.parse_percentile}%` : '—'}
+      </span>
     )},
     { key: 'deaths', label: 'Deaths', sortValue: (r) => r.deaths, render: (r) => (
       <span className={r.deaths === maxDeaths && maxDeaths > 0 ? 'font-bold text-red-400' : r.deaths > 0 ? 'text-red-400' : ''}>
@@ -101,10 +101,14 @@ export default function RosterPage() {
   // Accountability: death totals across all bosses
   const [accountability, setAccountability] = useState<Map<string, { deaths: number, className: string }>>(new Map())
 
+  const [accountabilityWarning, setAccountabilityWarning] = useState<string | null>(null)
+
   const loadAccountability = useCallback(async () => {
     if (!selectedReport || fights.length === 0) return
     setLoading(true)
+    setAccountabilityWarning(null)
     const totals = new Map<string, { deaths: number, className: string }>()
+    let failedCount = 0
     for (const fight of fights) {
       try {
         const data = await getFightDetails(selectedReport, fight.fight_id)
@@ -116,7 +120,14 @@ export default function RosterPage() {
             totals.set(p.player_name, { deaths: p.deaths, className: p.player_class })
           }
         }
-      } catch { /* skip */ }
+      } catch {
+        failedCount++
+      }
+    }
+    if (failedCount > 0) {
+      setAccountabilityWarning(
+        `Failed to load ${failedCount} of ${fights.length} fights — totals may be incomplete.`,
+      )
     }
     setAccountability(totals)
     setLoading(false)
@@ -192,6 +203,11 @@ export default function RosterPage() {
       {accountability.size > 0 && (
         <div className="mt-8">
           <h2 className="mb-4 text-lg font-semibold text-zinc-200">Death Accountability (Full Raid)</h2>
+          {accountabilityWarning && (
+            <div className="mb-3 rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 text-sm text-amber-400">
+              {accountabilityWarning}
+            </div>
+          )}
           <div className="overflow-x-auto rounded-lg border border-zinc-800">
             <table className="w-full text-sm">
               <thead>

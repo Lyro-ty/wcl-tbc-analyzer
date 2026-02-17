@@ -3,18 +3,8 @@ import { ArrowLeft, CheckCircle2, Shield, Skull, Swords, Zap } from 'lucide-reac
 import { Link } from 'react-router-dom'
 import { getCharacterReportDetail } from '../lib/api'
 import { useApiQuery } from '../hooks/useApiQuery'
-import { classColor, formatDuration, formatNumber } from '../lib/wow-classes'
+import { classColor, formatDuration, formatNumber, parseColor } from '../lib/wow-classes'
 import QuickAction from '../components/ui/QuickAction'
-
-function parseColor(parse: number | null): string {
-  if (parse == null) return 'text-zinc-500'
-  if (parse >= 99) return 'text-orange-300'
-  if (parse >= 95) return 'text-orange-400'
-  if (parse >= 75) return 'text-purple-400'
-  if (parse >= 50) return 'text-blue-400'
-  if (parse >= 25) return 'text-green-400'
-  return 'text-zinc-400'
-}
 
 function parseBorder(parse: number | null): string {
   if (parse == null) return 'border-zinc-800'

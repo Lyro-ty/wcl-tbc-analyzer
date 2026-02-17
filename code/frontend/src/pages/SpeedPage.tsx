@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
-import { Loader2 } from 'lucide-react'
-import { compareRaids, getReports, getReportSpeed } from '../lib/api'
+import { Loader2, RefreshCw } from 'lucide-react'
+import { compareRaids, getReports, getReportSpeed, refreshSpeedRankings, type RankingsRefreshResponse } from '../lib/api'
 import type { RaidComparison, SpeedComparison } from '../lib/types'
 import { useApiQuery } from '../hooks/useApiQuery'
 import SpeedComparisonChart from '../components/charts/SpeedComparisonChart'
@@ -15,6 +15,8 @@ export default function SpeedPage() {
   const [compareData, setCompareData] = useState<RaidComparison[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshResult, setRefreshResult] = useState<RankingsRefreshResponse | null>(null)
 
   const loadSpeed = useCallback(async () => {
     if (!reportA) return
@@ -36,6 +38,21 @@ export default function SpeedPage() {
       setLoading(false)
     }
   }, [reportA, reportB])
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    setRefreshResult(null)
+    setError(null)
+    try {
+      const result = await refreshSpeedRankings()
+      setRefreshResult(result)
+      if (reportA && !reportB) loadSpeed()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to refresh speed rankings')
+    } finally {
+      setRefreshing(false)
+    }
+  }, [reportA, reportB, loadSpeed])
 
   return (
     <div>
@@ -71,11 +88,32 @@ export default function SpeedPage() {
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Load'}
         </button>
+
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+        >
+          {refreshing ? (
+            <><Loader2 className="h-4 w-4 animate-spin" /> Refreshing...</>
+          ) : (
+            <><RefreshCw className="h-4 w-4" /> Refresh Speed Rankings</>
+          )}
+        </button>
       </div>
 
       {error && (
         <div className="mb-4 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400">
           {error}
+        </div>
+      )}
+
+      {refreshResult && (
+        <div className="mb-4 rounded-lg border border-emerald-900/50 bg-emerald-950/20 p-4 text-sm text-emerald-400">
+          Speed rankings refreshed: {refreshResult.fetched} fetched, {refreshResult.skipped} skipped
+          {refreshResult.errors.length > 0 && (
+            <span className="text-amber-400"> ({refreshResult.errors.length} errors)</span>
+          )}
         </div>
       )}
 
@@ -89,6 +127,20 @@ export default function SpeedPage() {
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
             <SpeedComparisonChart data={speedData} />
           </div>
+        </div>
+      )}
+
+      {/* Empty state with CTA */}
+      {!loading && !speedData && !compareData && reportA && (
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-zinc-800 p-8 text-center">
+          <p className="text-sm text-zinc-500">No speed data available. Click Load to fetch or refresh speed rankings first.</p>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 text-sm text-red-400 hover:text-red-300"
+          >
+            <RefreshCw className="h-4 w-4" /> Refresh speed rankings from WCL
+          </button>
         </div>
       )}
 

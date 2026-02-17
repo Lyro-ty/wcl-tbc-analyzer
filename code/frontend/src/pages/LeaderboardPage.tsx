@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react'
-import { Loader2 } from 'lucide-react'
-import { getEncounters, getLeaderboard } from '../lib/api'
+import { Loader2, RefreshCw } from 'lucide-react'
+import { getEncounters, getLeaderboard, refreshRankings, type RankingsRefreshResponse } from '../lib/api'
 import type { SpecLeaderboardEntry } from '../lib/types'
 import { useApiQuery } from '../hooks/useApiQuery'
 import DataTable, { type Column } from '../components/ui/DataTable'
+import ErrorBoundary from '../components/ui/ErrorBoundary'
 import DpsBarChart from '../components/charts/DpsBarChart'
 import QuickAction from '../components/ui/QuickAction'
 import { classColor, formatNumber } from '../lib/wow-classes'
@@ -14,6 +15,8 @@ export default function LeaderboardPage() {
   const [leaderboard, setLeaderboard] = useState<SpecLeaderboardEntry[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshResult, setRefreshResult] = useState<RankingsRefreshResponse | null>(null)
 
   const load = useCallback(async () => {
     if (!selectedEnc) return
@@ -28,6 +31,21 @@ export default function LeaderboardPage() {
       setLoading(false)
     }
   }, [selectedEnc])
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    setRefreshResult(null)
+    setError(null)
+    try {
+      const result = await refreshRankings()
+      setRefreshResult(result)
+      if (selectedEnc) load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to refresh rankings')
+    } finally {
+      setRefreshing(false)
+    }
+  }, [selectedEnc, load])
 
   const columns: Column<SpecLeaderboardEntry>[] = [
     { key: 'rank', label: '#', render: (_r, i) => (
@@ -74,6 +92,18 @@ export default function LeaderboardPage() {
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Load'}
         </button>
 
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+        >
+          {refreshing ? (
+            <><Loader2 className="h-4 w-4 animate-spin" /> Refreshing...</>
+          ) : (
+            <><RefreshCw className="h-4 w-4" /> Refresh Rankings</>
+          )}
+        </button>
+
         {selectedEnc && (
           <QuickAction question={`What spec should I play on ${selectedEnc}?`} />
         )}
@@ -85,11 +115,22 @@ export default function LeaderboardPage() {
         </div>
       )}
 
+      {refreshResult && (
+        <div className="mb-4 rounded-lg border border-emerald-900/50 bg-emerald-950/20 p-4 text-sm text-emerald-400">
+          Rankings refreshed: {refreshResult.fetched} fetched, {refreshResult.skipped} skipped
+          {refreshResult.errors.length > 0 && (
+            <span className="text-amber-400"> ({refreshResult.errors.length} errors)</span>
+          )}
+        </div>
+      )}
+
       {leaderboard && leaderboard.length > 0 && (
         <>
-          <div className="mb-6 rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-            <DpsBarChart data={leaderboard} />
-          </div>
+          <ErrorBoundary>
+            <div className="mb-6 rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <DpsBarChart data={leaderboard} />
+            </div>
+          </ErrorBoundary>
           <DataTable
             columns={columns}
             data={leaderboard}
@@ -99,8 +140,15 @@ export default function LeaderboardPage() {
       )}
 
       {leaderboard?.length === 0 && (
-        <div className="rounded-lg border border-zinc-800 p-8 text-center text-sm text-zinc-500">
-          No leaderboard data for this encounter.
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-zinc-800 p-8 text-center">
+          <p className="text-sm text-zinc-500">No leaderboard data for this encounter.</p>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 text-sm text-red-400 hover:text-red-300"
+          >
+            <RefreshCw className="h-4 w-4" /> Refresh rankings from WCL
+          </button>
         </div>
       )}
     </div>

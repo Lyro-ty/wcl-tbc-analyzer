@@ -145,6 +145,69 @@ class IngestResponse(BaseModel):
     table_rows: int = 0
 
 
+class TableDataResponse(BaseModel):
+    report_code: str
+    table_rows: int
+
+
+class RankingsRefreshResponse(BaseModel):
+    fetched: int
+    skipped: int
+    errors: list[str]
+
+
+class CharacterProfile(BaseModel):
+    id: int
+    name: str
+    server_slug: str
+    server_region: str
+    character_class: str
+    spec: str
+    total_fights: int
+    total_kills: int
+    total_deaths: int
+    avg_dps: float | None
+    best_dps: float | None
+    avg_parse: float | None
+    best_parse: float | None
+    avg_ilvl: float | None
+
+
+class CharacterRecentParse(BaseModel):
+    encounter_name: str
+    dps: float
+    hps: float
+    parse_percentile: float | None
+    deaths: int
+    item_level: float | None
+    player_class: str
+    player_spec: str
+    kill: bool
+    duration_ms: int
+    report_code: str
+    fight_id: int
+    report_date: int
+
+
+class DashboardStats(BaseModel):
+    total_reports: int
+    total_kills: int
+    total_wipes: int
+    total_characters: int
+    total_encounters: int
+
+
+class RecentReportSummary(BaseModel):
+    code: str
+    title: str
+    guild_name: str | None
+    start_time: int
+    fight_count: int
+    kill_count: int
+    wipe_count: int
+    avg_kill_dps: float | None
+
+
 class AbilityMetricResponse(BaseModel):
     player_name: str
     metric_type: str

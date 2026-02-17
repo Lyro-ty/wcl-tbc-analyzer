@@ -8,6 +8,7 @@ interface IngestFormProps {
 
 export default function IngestForm({ onIngested }: IngestFormProps) {
   const [code, setCode] = useState('')
+  const [withTables, setWithTables] = useState(false)
   const [ingesting, setIngesting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<IngestResponse | null>(null)
@@ -20,7 +21,7 @@ export default function IngestForm({ onIngested }: IngestFormProps) {
     setError(null)
     setResult(null)
     try {
-      const res = await ingestReport(trimmed)
+      const res = await ingestReport(trimmed, withTables)
       setResult(res)
       setCode('')
       onIngested?.()
@@ -29,7 +30,7 @@ export default function IngestForm({ onIngested }: IngestFormProps) {
     } finally {
       setIngesting(false)
     }
-  }, [code, onIngested])
+  }, [code, withTables, onIngested])
 
   return (
     <div>
@@ -59,6 +60,17 @@ export default function IngestForm({ onIngested }: IngestFormProps) {
         </button>
       </form>
 
+      <label className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
+        <input
+          type="checkbox"
+          checked={withTables}
+          onChange={(e) => setWithTables(e.target.checked)}
+          disabled={ingesting}
+          className="rounded border-zinc-600 bg-zinc-800 text-red-600 focus:ring-red-500/25"
+        />
+        Include ability &amp; buff data (slower, fetches per-ability breakdowns)
+      </label>
+
       {error && (
         <div className="mt-3 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400">
           {error}
@@ -69,6 +81,7 @@ export default function IngestForm({ onIngested }: IngestFormProps) {
         <div className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-900/50 bg-emerald-950/20 p-4 text-sm text-emerald-400">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           Ingested <span className="font-mono">{result.report_code}</span>: {result.fights} fights, {result.performances} player performances
+          {result.table_rows > 0 && <>, {result.table_rows} ability/buff rows</>}
         </div>
       )}
     </div>

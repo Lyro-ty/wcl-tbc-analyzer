@@ -186,3 +186,55 @@ export interface BuffUptime {
 export interface AbilitiesAvailable {
   has_data: boolean
 }
+
+export interface CharacterProfile {
+  id: number
+  name: string
+  server_slug: string
+  server_region: string
+  character_class: string
+  spec: string
+  total_fights: number
+  total_kills: number
+  total_deaths: number
+  avg_dps: number | null
+  best_dps: number | null
+  avg_parse: number | null
+  best_parse: number | null
+  avg_ilvl: number | null
+}
+
+export interface CharacterRecentParse {
+  encounter_name: string
+  dps: number
+  hps: number
+  parse_percentile: number | null
+  deaths: number
+  item_level: number | null
+  player_class: string
+  player_spec: string
+  kill: boolean
+  duration_ms: number
+  report_code: string
+  fight_id: number
+  report_date: number
+}
+
+export interface DashboardStats {
+  total_reports: number
+  total_kills: number
+  total_wipes: number
+  total_characters: number
+  total_encounters: number
+}
+
+export interface RecentReportSummary {
+  code: string
+  title: string
+  guild_name: string | null
+  start_time: number
+  fight_count: number
+  kill_count: number
+  wipe_count: number
+  avg_kill_dps: number | null
+}

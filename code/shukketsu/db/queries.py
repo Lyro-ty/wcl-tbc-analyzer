@@ -376,6 +376,64 @@ TABLE_DATA_EXISTS = text("""
     ) AS has_data
 """)
 
+CHARACTER_PROFILE = text("""
+    SELECT mc.id, mc.name, mc.server_slug, mc.server_region,
+           mc.character_class, mc.spec,
+           COUNT(fp.id) AS total_fights,
+           SUM(CASE WHEN f.kill THEN 1 ELSE 0 END) AS total_kills,
+           COALESCE(SUM(fp.deaths), 0) AS total_deaths,
+           ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
+           ROUND(MAX(fp.dps)::numeric, 1) AS best_dps,
+           ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse,
+           ROUND(MAX(fp.parse_percentile)::numeric, 1) AS best_parse,
+           ROUND(AVG(fp.item_level)::numeric, 1) AS avg_ilvl
+    FROM my_characters mc
+    LEFT JOIN fight_performances fp ON fp.player_name = mc.name
+    LEFT JOIN fights f ON fp.fight_id = f.id
+    WHERE mc.name = :character_name
+    GROUP BY mc.id, mc.name, mc.server_slug, mc.server_region,
+             mc.character_class, mc.spec
+""")
+
+CHARACTER_RECENT_PARSES = text("""
+    SELECT e.name AS encounter_name, fp.dps, fp.hps,
+           fp.parse_percentile, fp.deaths, fp.item_level,
+           fp.player_class, fp.player_spec,
+           f.kill, f.duration_ms, f.report_code, f.fight_id,
+           r.start_time AS report_date
+    FROM fight_performances fp
+    JOIN fights f ON fp.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    JOIN reports r ON f.report_code = r.code
+    JOIN my_characters mc ON mc.name = fp.player_name
+    WHERE mc.name = :character_name
+    ORDER BY r.start_time DESC
+    LIMIT 30
+""")
+
+DASHBOARD_STATS = text("""
+    SELECT
+        (SELECT COUNT(*) FROM reports) AS total_reports,
+        (SELECT COUNT(*) FROM fights WHERE kill = true) AS total_kills,
+        (SELECT COUNT(*) FROM fights WHERE kill = false) AS total_wipes,
+        (SELECT COUNT(*) FROM my_characters) AS total_characters,
+        (SELECT COUNT(DISTINCT encounter_id) FROM fights) AS total_encounters
+""")
+
+RECENT_REPORTS = text("""
+    SELECT r.code, r.title, r.guild_name, r.start_time,
+           COUNT(DISTINCT f.id) AS fight_count,
+           SUM(CASE WHEN f.kill THEN 1 ELSE 0 END) AS kill_count,
+           SUM(CASE WHEN NOT f.kill THEN 1 ELSE 0 END) AS wipe_count,
+           ROUND(AVG(fp.dps) FILTER (WHERE f.kill)::numeric, 1) AS avg_kill_dps
+    FROM reports r
+    LEFT JOIN fights f ON f.report_code = r.code
+    LEFT JOIN fight_performances fp ON fp.fight_id = f.id
+    GROUP BY r.code, r.title, r.guild_name, r.start_time
+    ORDER BY r.start_time DESC
+    LIMIT 5
+""")
+
 CHARACTER_REPORT_DETAIL = text("""
     SELECT f.fight_id, e.name AS encounter_name, f.kill, f.duration_ms,
            fp.dps, fp.hps, fp.parse_percentile, fp.deaths,

@@ -4,18 +4,8 @@ import { FileText, Skull, Swords, Target, UserCheck } from 'lucide-react'
 import { getCharacterReports, getCharacters } from '../lib/api'
 import type { CharacterReportSummary } from '../lib/types'
 import { useApiQuery } from '../hooks/useApiQuery'
-import { classColor, formatDate, formatNumber } from '../lib/wow-classes'
+import { classColor, formatDate, formatNumber, parseColor } from '../lib/wow-classes'
 import IngestForm from '../components/ui/IngestForm'
-
-function parseColor(parse: number | null): string {
-  if (parse == null) return 'text-zinc-500'
-  if (parse >= 99) return 'text-orange-300'
-  if (parse >= 95) return 'text-orange-400'
-  if (parse >= 75) return 'text-purple-400'
-  if (parse >= 50) return 'text-blue-400'
-  if (parse >= 25) return 'text-green-400'
-  return 'text-zinc-400'
-}
 
 export default function CharacterReportsPage() {
   const { data: characters, loading: loadingChars } = useApiQuery(() => getCharacters(), [])

@@ -194,3 +194,50 @@ export async function ingestReport(reportCode: string, withTables: boolean = fal
     body: JSON.stringify({ report_code: reportCode, with_tables: withTables }),
   })
 }
+
+export interface TableDataResponse {
+  report_code: string
+  table_rows: number
+}
+
+export async function fetchTableData(code: string): Promise<TableDataResponse> {
+  return fetchJson(`/api/data/reports/${code}/table-data`, { method: 'POST' })
+}
+
+export interface RankingsRefreshResponse {
+  fetched: number
+  skipped: number
+  errors: string[]
+}
+
+export async function refreshRankings(zoneId?: number, force?: boolean): Promise<RankingsRefreshResponse> {
+  const params = new URLSearchParams()
+  if (zoneId != null) params.set('zone_id', String(zoneId))
+  if (force) params.set('force', 'true')
+  const qs = params.toString()
+  return fetchJson(`/api/data/rankings/refresh${qs ? `?${qs}` : ''}`, { method: 'POST' })
+}
+
+export async function refreshSpeedRankings(zoneId?: number, force?: boolean): Promise<RankingsRefreshResponse> {
+  const params = new URLSearchParams()
+  if (zoneId != null) params.set('zone_id', String(zoneId))
+  if (force) params.set('force', 'true')
+  const qs = params.toString()
+  return fetchJson(`/api/data/speed-rankings/refresh${qs ? `?${qs}` : ''}`, { method: 'POST' })
+}
+
+export async function getCharacterProfile(name: string): Promise<import('./types').CharacterProfile> {
+  return fetchJson(`/api/data/characters/${encodeURIComponent(name)}/profile`)
+}
+
+export async function getCharacterRecentParses(name: string): Promise<import('./types').CharacterRecentParse[]> {
+  return fetchJson(`/api/data/characters/${encodeURIComponent(name)}/recent-parses`)
+}
+
+export async function getDashboardStats(): Promise<import('./types').DashboardStats> {
+  return fetchJson('/api/data/dashboard/stats')
+}
+
+export async function getDashboardRecent(): Promise<import('./types').RecentReportSummary[]> {
+  return fetchJson('/api/data/dashboard/recent')
+}
