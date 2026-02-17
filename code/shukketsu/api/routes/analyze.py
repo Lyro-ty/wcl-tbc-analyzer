@@ -1,9 +1,11 @@
+import json
 import logging
 import re
 
 from fastapi import APIRouter, HTTPException
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
 logger = logging.getLogger(__name__)
 
@@ -63,3 +65,63 @@ async def analyze(request: AnalyzeRequest):
         answer=answer,
         query_type=result.get("query_type"),
     )
+
+
+@router.post("/analyze/stream")
+async def analyze_stream(request: AnalyzeRequest):
+    graph = _get_graph()
+    if graph is None:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    async def event_generator():
+        buffer = ""
+        think_done = False
+        query_type = None
+
+        try:
+            async for chunk, metadata in graph.astream(
+                {"messages": [HumanMessage(content=request.question)]},
+                stream_mode="messages",
+            ):
+                # Track query_type from state updates
+                if isinstance(metadata, dict):
+                    qt = metadata.get("query_type")
+                    if qt:
+                        query_type = qt
+
+                # Only stream tokens from the analyze node
+                if not isinstance(metadata, dict):
+                    continue
+                if metadata.get("langgraph_node") != "analyze":
+                    continue
+
+                if not hasattr(chunk, "content") or not chunk.content:
+                    continue
+
+                token = chunk.content
+
+                if not think_done:
+                    buffer += token
+                    if "</think>" in buffer:
+                        after = _THINK_PATTERN.sub("", buffer)
+                        think_done = True
+                        buffer = ""
+                        if after.strip():
+                            yield {"data": json.dumps({"token": after})}
+                    continue
+
+                yield {"data": json.dumps({"token": token})}
+
+            # If we buffered but never saw </think>, flush as content
+            if buffer and not think_done:
+                cleaned = _strip_think_tags(buffer)
+                if cleaned.strip():
+                    yield {"data": json.dumps({"token": cleaned})}
+
+            yield {"data": json.dumps({"done": True, "query_type": query_type})}
+
+        except Exception as exc:
+            logger.exception("Streaming analysis failed")
+            yield {"event": "error", "data": json.dumps({"detail": str(exc)})}
+
+    return EventSourceResponse(event_generator())
