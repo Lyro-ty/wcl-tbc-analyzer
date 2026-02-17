@@ -416,10 +416,11 @@ async def test_lifespan_creates_langfuse_handler_when_enabled(monkeypatch):
         patch("shukketsu.api.app.set_graph"),
         patch("shukketsu.api.app.set_health_deps"),
         patch("shukketsu.api.app.set_langfuse_handler") as mock_set_handler,
-        patch("shukketsu.api.app.CallbackHandler") as mock_cb_cls,
+        patch("shukketsu.api.app._init_langfuse") as mock_init_langfuse,
     ):
         mock_engine.return_value = AsyncMock()
         mock_sf.return_value = AsyncMock()
+        mock_cb_cls = mock_init_langfuse.return_value
 
         from shukketsu.api.app import create_app
         app = create_app()
@@ -427,11 +428,12 @@ async def test_lifespan_creates_langfuse_handler_when_enabled(monkeypatch):
         async with app.router.lifespan_context(app):
             pass
 
-    mock_cb_cls.assert_called_once_with(
+    mock_init_langfuse.assert_called_once_with(
         public_key="pk-lf-test",
         secret_key="sk-lf-test",
         host="http://localhost:3000",
     )
+    mock_cb_cls.assert_called_once_with()
     mock_set_handler.assert_called_once()
     get_settings.cache_clear()
 

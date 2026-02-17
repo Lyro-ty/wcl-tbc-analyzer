@@ -25,8 +25,15 @@ FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "di
 CallbackHandler = None
 
 
-def _init_callback_handler():
+def _init_langfuse(public_key, secret_key, host):
+    """Initialize Langfuse client + CallbackHandler lazily."""
     global CallbackHandler
+    from langfuse import Langfuse
+    Langfuse(
+        public_key=public_key,
+        secret_key=secret_key,
+        base_url=host,
+    )
     if CallbackHandler is None:
         import langfuse.langchain
         CallbackHandler = langfuse.langchain.CallbackHandler
@@ -59,12 +66,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Langfuse observability (optional)
     langfuse_handler = None
     if settings.langfuse.enabled:
-        cb_handler_cls = _init_callback_handler()
-        langfuse_handler = cb_handler_cls(
+        cb_handler_cls = _init_langfuse(
             public_key=settings.langfuse.public_key,
             secret_key=settings.langfuse.secret_key.get_secret_value(),
             host=settings.langfuse.host,
         )
+        langfuse_handler = cb_handler_cls()
         set_langfuse_handler(langfuse_handler)
         logger.info("Langfuse tracing enabled: %s", settings.langfuse.host)
 
@@ -72,7 +79,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # Shutdown
     if langfuse_handler is not None:
-        langfuse_handler.flush()
+        from langfuse import get_client
+        get_client().flush()
     await engine.dispose()
     logger.info("Database engine disposed")
 
