@@ -31,7 +31,7 @@ export default function DpsBarChart({ data }: Props) {
         <Tooltip
           contentStyle={{ backgroundColor: '#18181b', border: '1px solid #3f3f46', borderRadius: '8px' }}
           labelStyle={{ color: '#a1a1aa' }}
-          formatter={(val: number) => val.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+          formatter={(val: number | undefined) => val != null ? val.toLocaleString(undefined, { maximumFractionDigits: 1 }) : ''}
         />
         <Bar dataKey="avg_dps" name="Avg DPS" radius={[0, 4, 4, 0]}>
           {chartData.map((entry, i) => (

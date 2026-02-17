@@ -33,7 +33,7 @@ export default function SpeedComparisonChart({ data }: Props) {
         <Tooltip
           contentStyle={{ backgroundColor: '#18181b', border: '1px solid #3f3f46', borderRadius: '8px' }}
           labelStyle={{ color: '#a1a1aa' }}
-          formatter={(val: number) => `${Math.floor(val / 60)}m ${val % 60}s`}
+          formatter={(val: number | undefined) => val != null ? `${Math.floor(val / 60)}m ${val % 60}s` : ''}
         />
         <Legend />
         <Bar dataKey="yours" name="Your Time" fill="#ef4444" radius={[0, 4, 4, 0]} />

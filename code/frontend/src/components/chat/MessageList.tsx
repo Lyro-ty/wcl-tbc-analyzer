@@ -1,21 +1,20 @@
 import { useEffect, useRef } from 'react'
-import { Loader2 } from 'lucide-react'
 import type { ChatMessage } from '../../lib/types'
 import MessageBubble from './MessageBubble'
 
 interface Props {
   messages: ChatMessage[]
-  loading?: boolean
+  streaming?: boolean
 }
 
-export default function MessageList({ messages, loading }: Props) {
+export default function MessageList({ messages, streaming }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, loading])
+  }, [messages, streaming])
 
-  if (messages.length === 0 && !loading) {
+  if (messages.length === 0 && !streaming) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 text-zinc-500">
         <div className="text-6xl">&#9876;</div>
@@ -38,14 +37,6 @@ export default function MessageList({ messages, loading }: Props) {
       {messages.map((msg) => (
         <MessageBubble key={msg.id} message={msg} />
       ))}
-      {loading && (
-        <div className="flex justify-start">
-          <div className="flex items-center gap-2 rounded-lg bg-zinc-800/50 px-4 py-3 text-sm text-zinc-400">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Analyzing...
-          </div>
-        </div>
-      )}
       <div ref={bottomRef} />
     </div>
   )

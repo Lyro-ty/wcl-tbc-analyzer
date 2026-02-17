@@ -1,50 +1,71 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { postAnalyze } from '../lib/api'
+import { postAnalyzeStream } from '../lib/api'
 import type { ChatMessage } from '../lib/types'
 import ChatInput from '../components/chat/ChatInput'
 import MessageList from '../components/chat/MessageList'
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [loading, setLoading] = useState(false)
+  const [streaming, setStreaming] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
+  const abortRef = useRef<AbortController | null>(null)
 
   const sendMessage = useCallback(
-    async (question: string) => {
+    (question: string) => {
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'user',
         content: question,
         timestamp: Date.now(),
       }
-      setMessages((prev) => [...prev, userMsg])
-      setLoading(true)
-
-      try {
-        const res = await postAnalyze(question)
-        const assistantMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: res.answer,
-          queryType: res.query_type,
-          timestamp: Date.now(),
-        }
-        setMessages((prev) => [...prev, assistantMsg])
-      } catch (err) {
-        const errorMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: `Error: ${err instanceof Error ? err.message : 'Something went wrong'}`,
-          timestamp: Date.now(),
-        }
-        setMessages((prev) => [...prev, errorMsg])
-      } finally {
-        setLoading(false)
+      const assistantId = crypto.randomUUID()
+      const assistantMsg: ChatMessage = {
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        timestamp: Date.now(),
       }
+      setMessages((prev) => [...prev, userMsg, assistantMsg])
+      setStreaming(true)
+
+      abortRef.current = postAnalyzeStream(
+        question,
+        (token) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: m.content + token } : m,
+            ),
+          )
+        },
+        (queryType) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, queryType } : m,
+            ),
+          )
+          setStreaming(false)
+        },
+        (error) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? { ...m, content: m.content || `Error: ${error}` }
+                : m,
+            ),
+          )
+          setStreaming(false)
+        },
+      )
     },
     [],
   )
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
 
   useEffect(() => {
     const q = searchParams.get('q')
@@ -56,8 +77,8 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full flex-col -m-6">
-      <MessageList messages={messages} loading={loading} />
-      <ChatInput onSend={sendMessage} disabled={loading} />
+      <MessageList messages={messages} streaming={streaming} />
+      <ChatInput onSend={sendMessage} disabled={streaming} />
     </div>
   )
 }
