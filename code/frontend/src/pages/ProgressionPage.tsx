@@ -4,6 +4,7 @@ import { getCharacters, getEncounters, getProgression, registerCharacter } from 
 import type { ProgressionPoint } from '../lib/types'
 import { useApiQuery } from '../hooks/useApiQuery'
 import ProgressionLineChart from '../components/charts/ProgressionLineChart'
+import IngestForm from '../components/ui/IngestForm'
 import QuickAction from '../components/ui/QuickAction'
 
 const WOW_CLASSES = [
@@ -24,7 +25,7 @@ const SPECS: Record<string, string[]> = {
 }
 
 export default function ProgressionPage() {
-  const { data: encounters } = useApiQuery(() => getEncounters(), [])
+  const { data: encounters, refetch: refetchEnc } = useApiQuery(() => getEncounters(), [])
   const { data: characters, refetch: refetchChars } = useApiQuery(() => getCharacters(), [])
   const [selectedChar, setSelectedChar] = useState('')
   const [selectedEnc, setSelectedEnc] = useState('')
@@ -90,9 +91,20 @@ export default function ProgressionPage() {
     avgDeaths: progression[progression.length - 1]?.avg_deaths ?? 0,
   } : null
 
+  const hasCharacters = characters && characters.length > 0
+  const hasEncounters = encounters && encounters.length > 0
+
+  // Auto-show registration form when no characters exist
+  const showReg = showRegForm || (characters !== undefined && !hasCharacters)
+
   return (
     <div>
       <h1 className="mb-6 text-2xl font-bold">Personal Progression</h1>
+
+      {/* Ingest form — always available */}
+      <div className="mb-6">
+        <IngestForm onIngested={refetchEnc} />
+      </div>
 
       <div className="mb-6 flex flex-wrap items-center gap-4">
         <select
@@ -100,7 +112,7 @@ export default function ProgressionPage() {
           onChange={(e) => setSelectedChar(e.target.value)}
           className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-100"
         >
-          <option value="">Select character...</option>
+          <option value="">{hasCharacters ? 'Select character...' : 'No characters registered'}</option>
           {characters?.map((c) => (
             <option key={c.id} value={c.name}>{c.name} ({c.spec} {c.character_class})</option>
           ))}
@@ -111,7 +123,7 @@ export default function ProgressionPage() {
           className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-600 hover:bg-zinc-700"
         >
           {showRegForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-          {showRegForm ? 'Cancel' : 'Register'}
+          {showRegForm ? 'Cancel' : 'Register Character'}
         </button>
 
         <select
@@ -119,7 +131,7 @@ export default function ProgressionPage() {
           onChange={(e) => setSelectedEnc(e.target.value)}
           className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-100"
         >
-          <option value="">Select encounter...</option>
+          <option value="">{hasEncounters ? 'Select encounter...' : 'No encounters (ingest a report first)'}</option>
           {encounters?.map((e) => (
             <option key={e.id} value={e.name}>{e.name} ({e.zone_name})</option>
           ))}
@@ -135,7 +147,7 @@ export default function ProgressionPage() {
       </div>
 
       {/* Character registration form */}
-      {showRegForm && (
+      {showReg && (
         <form onSubmit={handleRegister} className="mb-6 rounded-lg border border-zinc-700 bg-zinc-900/50 p-4">
           <h3 className="mb-3 text-sm font-semibold text-zinc-200">Register Character</h3>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
