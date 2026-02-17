@@ -1537,6 +1537,85 @@ async def get_trinket_performance(
         await session.close()
 
 
+@tool
+async def get_enchant_gem_check(
+    report_code: str, fight_id: int, player_name: str,
+) -> str:
+    """Check a player's gear for missing enchants and gems in a fight.
+    Requires event data — report_code + fight_id + player_name.
+    Flags slots missing permanent enchants (head, shoulder, chest, wrist, hands,
+    legs, feet, cloak, weapon, offhand) and empty gem sockets.
+    """
+    session = await _get_session()
+    try:
+        rows = (await session.execute(
+            q.ENCHANT_GEM_CHECK,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": player_name},
+        )).fetchall()
+        if not rows:
+            return f"No gear data found for {player_name} in {report_code}#{fight_id}."
+
+        # Slots that should have permanent enchants
+        enchantable_slots = {0, 2, 4, 5, 7, 8, 9, 11, 14, 15}
+        slot_names = {
+            0: "Head", 1: "Neck", 2: "Shoulder", 3: "Shirt", 4: "Chest",
+            5: "Waist", 6: "Legs", 7: "Feet", 8: "Wrist", 9: "Hands",
+            10: "Ring 1", 11: "Ring 2", 12: "Trinket 1", 13: "Trinket 2",
+            14: "Cloak", 15: "Main Hand", 16: "Off Hand", 17: "Ranged",
+        }
+        issues = []
+        total_slots = 0
+        enchanted = 0
+        total_gems = 0
+        empty_gems = 0
+
+        for r in rows:
+            total_slots += 1
+            sname = slot_names.get(r.slot, f"Slot {r.slot}")
+
+            # Check enchant
+            if r.slot in enchantable_slots:
+                if r.permanent_enchant:
+                    enchanted += 1
+                else:
+                    issues.append(f"  {sname}: Missing enchant (item {r.item_id})")
+
+            # Check gems
+            if r.gems_json:
+                import json
+                gems = json.loads(r.gems_json)
+                for gem in gems:
+                    total_gems += 1
+                    gem_id = gem.get("id", 0) if isinstance(gem, dict) else gem
+                    if not gem_id:
+                        empty_gems += 1
+                        issues.append(
+                            f"  {sname}: Empty gem socket"
+                        )
+
+        lines = [
+            f"Enchant/gem check for {player_name} in {report_code}#{fight_id}:",
+            f"Total gear slots: {total_slots}",
+            f"Enchanted: {enchanted}/{len(enchantable_slots & {r.slot for r in rows})}",
+        ]
+        if total_gems > 0:
+            lines.append(
+                f"Gems: {total_gems - empty_gems}/{total_gems} filled"
+            )
+        if issues:
+            lines.append(f"\nIssues ({len(issues)}):")
+            lines.extend(issues)
+        else:
+            lines.append("\nAll enchants and gems look good!")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
 ALL_TOOLS = [
     get_my_performance,
     get_top_rankings,
@@ -1567,4 +1646,5 @@ ALL_TOOLS = [
     get_dot_management,
     get_rotation_score,
     get_trinket_performance,
+    get_enchant_gem_check,
 ]

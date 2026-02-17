@@ -99,6 +99,9 @@ Checks GCD uptime, CPM, and cooldown efficiency. Returns letter grade A-F \
 - **get_trinket_performance**: Trinket proc uptime analysis for a player in a fight. \
 Compares actual uptime against expected for known trinkets \
 (report_code + fight_id + player_name).
+- **get_enchant_gem_check**: Check a player's gear for missing enchants and gem sockets. \
+Flags enchantable slots without permanent enchants and empty gem sockets \
+(requires event data — report_code + fight_id + player_name).
 
 ## Context Resolution
 

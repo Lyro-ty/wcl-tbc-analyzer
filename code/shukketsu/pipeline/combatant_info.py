@@ -1,5 +1,6 @@
 """Parse WCL CombatantInfo events into consumables and gear snapshots."""
 
+import json
 import logging
 
 from sqlalchemy import delete, select
@@ -46,12 +47,17 @@ def parse_gear(
         item_id = item.get("id", 0)
         if item_id == 0:
             continue
+        gems = item.get("gems")
+        gems_json = json.dumps(gems) if gems else None
         result.append(GearSnapshot(
             fight_id=fight_id,
             player_name=player_name,
             slot=item.get("slot", 0),
             item_id=item_id,
             item_level=item.get("itemLevel", 0),
+            permanent_enchant=item.get("permanentEnchant") or None,
+            temporary_enchant=item.get("temporaryEnchant") or None,
+            gems_json=gems_json,
         ))
     return result
 

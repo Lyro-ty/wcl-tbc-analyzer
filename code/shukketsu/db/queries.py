@@ -985,3 +985,14 @@ CAST_EVENTS_FOR_PHASES = text("""
     ORDER BY ce.timestamp_ms ASC
 """)
 
+ENCHANT_GEM_CHECK = text("""
+    SELECT gs.player_name, gs.slot, gs.item_id, gs.item_level,
+           gs.permanent_enchant, gs.temporary_enchant, gs.gems_json
+    FROM gear_snapshots gs
+    JOIN fights f ON gs.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND gs.player_name = :player_name
+    ORDER BY gs.slot ASC
+""")
+

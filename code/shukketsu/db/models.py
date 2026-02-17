@@ -348,6 +348,9 @@ class GearSnapshot(Base):
     slot: Mapped[int] = mapped_column(Integer)
     item_id: Mapped[int] = mapped_column(Integer)
     item_level: Mapped[int] = mapped_column(Integer, default=0)
+    permanent_enchant: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    temporary_enchant: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gems_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     fight: Mapped["Fight"] = relationship(back_populates="gear_snapshots")
 
