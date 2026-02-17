@@ -6,6 +6,7 @@ import {
   Swords,
   TrendingUp,
   Trophy,
+  UserCheck,
   Users,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
@@ -13,6 +14,7 @@ import { NavLink } from 'react-router-dom'
 const links = [
   { to: '/', label: 'Chat', icon: MessageSquare },
   { to: '/reports', label: 'Reports', icon: ScrollText },
+  { to: '/character-reports', label: 'My Reports', icon: UserCheck },
   { to: '/progression', label: 'Progression', icon: TrendingUp },
   { to: '/speed', label: 'Speed', icon: Swords },
   { to: '/leaderboard', label: 'Leaderboard', icon: Trophy },

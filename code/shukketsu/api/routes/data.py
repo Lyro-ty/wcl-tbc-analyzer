@@ -6,10 +6,14 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shukketsu.api.models import (
+    CharacterFightSummary,
     CharacterInfo,
+    CharacterReportSummary,
     EncounterInfo,
     ExecutionBoss,
     FightPlayer,
+    IngestRequest,
+    IngestResponse,
     ProgressionPoint,
     RaidComparison,
     RaidSummaryFight,
@@ -271,6 +275,111 @@ async def create_character(req: RegisterCharacterRequest):
     except Exception as e:
         await session.rollback()
         logger.exception("Failed to register character")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/characters/{character_name}/reports",
+    response_model=list[CharacterReportSummary],
+)
+async def character_reports(character_name: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.CHARACTER_REPORTS, {"character_name": character_name}
+        )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No reports found for character {character_name}",
+            )
+        return [CharacterReportSummary(**dict(r._mapping)) for r in rows]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get character reports")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/characters/{character_name}/reports/{report_code}",
+    response_model=list[CharacterFightSummary],
+)
+async def character_report_detail(character_name: str, report_code: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.CHARACTER_REPORT_DETAIL,
+            {"character_name": character_name, "report_code": report_code},
+        )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No data for {character_name} in report {report_code}",
+            )
+        return [CharacterFightSummary(**dict(r._mapping)) for r in rows]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get character report detail")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.post("/ingest", response_model=IngestResponse)
+async def ingest_report_endpoint(req: IngestRequest):
+    from sqlalchemy import select
+
+    from shukketsu.config import get_settings
+    from shukketsu.db.models import MyCharacter
+    from shukketsu.pipeline.ingest import ingest_report
+    from shukketsu.wcl.auth import WCLAuth
+    from shukketsu.wcl.client import WCLClient
+    from shukketsu.wcl.rate_limiter import RateLimiter
+
+    settings = get_settings()
+    if not settings.wcl.client_id:
+        raise HTTPException(
+            status_code=503, detail="WCL credentials not configured"
+        )
+
+    session = await _get_session()
+    try:
+        # Get registered character names for is_my_character flagging
+        chars = await session.execute(select(MyCharacter.name))
+        my_names = {r[0] for r in chars}
+
+        auth = WCLAuth(
+            settings.wcl.client_id,
+            settings.wcl.client_secret.get_secret_value(),
+            settings.wcl.oauth_url,
+        )
+        async with WCLClient(auth, RateLimiter()) as wcl:
+            result = await ingest_report(
+                wcl, session, req.report_code, my_names,
+            )
+        await session.commit()
+        logger.info(
+            "Ingested report %s: %d fights, %d performances",
+            req.report_code, result.fights, result.performances,
+        )
+        return IngestResponse(
+            report_code=req.report_code,
+            fights=result.fights,
+            performances=result.performances,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        await session.rollback()
+        logger.exception("Failed to ingest report %s", req.report_code)
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

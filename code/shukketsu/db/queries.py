@@ -264,3 +264,31 @@ CHARACTERS_LIST = text("""
     FROM my_characters mc
     ORDER BY mc.name
 """)
+
+CHARACTER_REPORTS = text("""
+    SELECT r.code, r.title, r.guild_name, r.start_time, r.end_time,
+           COUNT(DISTINCT f.id) AS fight_count,
+           SUM(CASE WHEN f.kill THEN 1 ELSE 0 END) AS kill_count,
+           ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
+           ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse,
+           SUM(fp.deaths) AS total_deaths
+    FROM reports r
+    JOIN fights f ON r.code = f.report_code
+    JOIN fight_performances fp ON f.id = fp.fight_id
+    WHERE fp.player_name = :character_name
+    GROUP BY r.code, r.title, r.guild_name, r.start_time, r.end_time
+    ORDER BY r.start_time DESC
+""")
+
+CHARACTER_REPORT_DETAIL = text("""
+    SELECT f.fight_id, e.name AS encounter_name, f.kill, f.duration_ms,
+           fp.dps, fp.hps, fp.parse_percentile, fp.deaths,
+           fp.interrupts, fp.dispels, fp.item_level,
+           fp.player_class, fp.player_spec
+    FROM fights f
+    JOIN fight_performances fp ON f.id = fp.fight_id
+    LEFT JOIN encounters e ON f.encounter_id = e.id
+    WHERE f.report_code = :report_code
+      AND fp.player_name = :character_name
+    ORDER BY f.start_time
+""")

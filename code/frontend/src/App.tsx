@@ -8,6 +8,8 @@ import SpeedPage from './pages/SpeedPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 import RosterPage from './pages/RosterPage'
 import ComparePage from './pages/ComparePage'
+import CharacterReportsPage from './pages/CharacterReportsPage'
+import CharacterReportDetailPage from './pages/CharacterReportDetailPage'
 
 export default function App() {
   return (
@@ -17,6 +19,8 @@ export default function App() {
           <Route path="/" element={<ChatPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/reports/:code" element={<ReportDetailPage />} />
+          <Route path="/character-reports" element={<CharacterReportsPage />} />
+          <Route path="/character-reports/:name/:code" element={<CharacterReportDetailPage />} />
           <Route path="/progression" element={<ProgressionPage />} />
           <Route path="/speed" element={<SpeedPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />

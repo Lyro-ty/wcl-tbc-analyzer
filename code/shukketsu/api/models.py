@@ -131,3 +131,42 @@ class RegisterCharacterRequest(BaseModel):
     server_region: str
     character_class: str
     spec: str
+
+
+class IngestRequest(BaseModel):
+    report_code: str
+
+
+class IngestResponse(BaseModel):
+    report_code: str
+    fights: int
+    performances: int
+
+
+class CharacterReportSummary(BaseModel):
+    code: str
+    title: str
+    guild_name: str | None
+    start_time: int
+    end_time: int
+    fight_count: int
+    kill_count: int
+    avg_dps: float | None
+    avg_parse: float | None
+    total_deaths: int | None
+
+
+class CharacterFightSummary(BaseModel):
+    fight_id: int
+    encounter_name: str
+    kill: bool
+    duration_ms: int
+    dps: float
+    hps: float
+    parse_percentile: float | None
+    deaths: int
+    interrupts: int
+    dispels: int
+    item_level: float | None
+    player_class: str
+    player_spec: str
