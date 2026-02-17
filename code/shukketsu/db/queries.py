@@ -679,6 +679,47 @@ MY_RECENT_KILLS = text("""
     LIMIT :limit
 """)
 
+GEAR_SNAPSHOT = text("""
+    SELECT gs.slot, gs.item_id, gs.item_level, gs.player_name
+    FROM gear_snapshots gs
+    JOIN fights f ON gs.fight_id = f.id
+    WHERE f.report_code = :report_code AND f.fight_id = :fight_id
+      AND gs.player_name ILIKE :player_name
+    ORDER BY gs.slot
+""")
+
+GEAR_CHANGES = text("""
+    WITH old_gear AS (
+        SELECT gs.slot, gs.item_id, gs.item_level
+        FROM gear_snapshots gs
+        JOIN fights f ON gs.fight_id = f.id
+        WHERE f.report_code = :report_code_old
+          AND gs.player_name ILIKE :player_name
+          AND f.fight_id = (
+              SELECT MIN(f2.fight_id) FROM fights f2
+              WHERE f2.report_code = :report_code_old
+          )
+    ),
+    new_gear AS (
+        SELECT gs.slot, gs.item_id, gs.item_level
+        FROM gear_snapshots gs
+        JOIN fights f ON gs.fight_id = f.id
+        WHERE f.report_code = :report_code_new
+          AND gs.player_name ILIKE :player_name
+          AND f.fight_id = (
+              SELECT MIN(f2.fight_id) FROM fights f2
+              WHERE f2.report_code = :report_code_new
+          )
+    )
+    SELECT COALESCE(o.slot, n.slot) AS slot,
+           o.item_id AS old_item_id, o.item_level AS old_ilvl,
+           n.item_id AS new_item_id, n.item_level AS new_ilvl
+    FROM old_gear o
+    FULL OUTER JOIN new_gear n ON o.slot = n.slot
+    WHERE o.item_id IS DISTINCT FROM n.item_id
+    ORDER BY COALESCE(o.slot, n.slot)
+""")
+
 REGRESSION_CHECK_PLAYER = text("""
     WITH ranked_fights AS (
         SELECT fp.player_name, e.name AS encounter_name,

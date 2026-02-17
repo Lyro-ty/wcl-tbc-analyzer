@@ -27,6 +27,8 @@ from shukketsu.api.models import (
     EventsAvailableResponse,
     ExecutionBoss,
     FightPlayer,
+    GearChangeEntry,
+    GearSlotEntry,
     IngestRequest,
     IngestResponse,
     OverhealAbility,
@@ -1099,6 +1101,86 @@ async def dashboard_recent():
         return [RecentReportSummary(**dict(r._mapping)) for r in rows]
     except Exception as e:
         logger.exception("Failed to get recent reports")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/gear/{player_name}",
+    response_model=list[GearSlotEntry],
+)
+async def get_gear_snapshot(report_code: str, fight_id: int, player_name: str):
+    """Get gear snapshot for a player in a fight."""
+    from shukketsu.pipeline.constants import GEAR_SLOTS
+
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.GEAR_SNAPSHOT,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": f"%{player_name}%"},
+        )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"No gear data for {player_name} in fight {fight_id} "
+                    f"of report {report_code}"
+                ),
+            )
+        return [
+            GearSlotEntry(
+                slot=r.slot,
+                slot_name=GEAR_SLOTS.get(r.slot, f"Slot {r.slot}"),
+                item_id=r.item_id,
+                item_level=r.item_level,
+            )
+            for r in rows
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get gear snapshot")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get("/gear/compare", response_model=list[GearChangeEntry])
+async def get_gear_comparison(player: str, old: str, new: str):
+    """Compare gear between two reports."""
+    from shukketsu.pipeline.constants import GEAR_SLOTS
+
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.GEAR_CHANGES,
+            {"player_name": f"%{player}%",
+             "report_code_old": old,
+             "report_code_new": new},
+        )
+        rows = result.fetchall()
+        entries = []
+        for r in rows:
+            old_ilvl = r.old_ilvl
+            new_ilvl = r.new_ilvl
+            delta = None
+            if old_ilvl is not None and new_ilvl is not None:
+                delta = new_ilvl - old_ilvl
+            entries.append(GearChangeEntry(
+                slot=r.slot,
+                slot_name=GEAR_SLOTS.get(r.slot, f"Slot {r.slot}"),
+                old_item_id=r.old_item_id,
+                old_ilvl=old_ilvl,
+                new_item_id=r.new_item_id,
+                new_ilvl=new_ilvl,
+                ilvl_delta=delta,
+            ))
+        return entries
+    except Exception as e:
+        logger.exception("Failed to compare gear")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

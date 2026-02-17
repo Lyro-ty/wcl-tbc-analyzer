@@ -387,6 +387,23 @@ class RegressionEntry(BaseModel):
     dps_delta_pct: float | None
 
 
+class GearSlotEntry(BaseModel):
+    slot: int
+    slot_name: str
+    item_id: int
+    item_level: int
+
+
+class GearChangeEntry(BaseModel):
+    slot: int
+    slot_name: str
+    old_item_id: int | None
+    old_ilvl: int | None
+    new_item_id: int | None
+    new_ilvl: int | None
+    ilvl_delta: int | None
+
+
 class AutoIngestStatus(BaseModel):
     enabled: bool
     status: str

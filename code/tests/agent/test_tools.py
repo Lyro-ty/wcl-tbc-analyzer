@@ -10,6 +10,7 @@ from shukketsu.agent.tools import (
     get_buff_analysis,
     get_consumable_check,
     get_deaths_and_mechanics,
+    get_gear_changes,
     get_my_performance,
     get_personal_bests,
     get_raid_execution,
@@ -31,7 +32,7 @@ class TestToolDecorators:
             assert tool.description, f"{tool.name} has no description"
 
     def test_expected_tool_count(self):
-        assert len(ALL_TOOLS) == 24
+        assert len(ALL_TOOLS) == 25
 
     def test_tool_names(self):
         names = {t.name for t in ALL_TOOLS}
@@ -44,7 +45,7 @@ class TestToolDecorators:
             "get_death_analysis", "get_activity_report", "get_cooldown_efficiency",
             "get_consumable_check", "get_overheal_analysis", "get_cancelled_casts",
             "get_personal_bests", "get_wipe_progression", "get_regressions",
-            "resolve_my_fights",
+            "resolve_my_fights", "get_gear_changes",
         }
         assert names == expected
 
@@ -1075,6 +1076,95 @@ class TestGetConsumableCheck:
         with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
             result = await get_consumable_check.ainvoke(
                 {"report_code": "abc123", "fight_id": 4}
+            )
+
+        assert "Error" in result
+        assert "connection lost" in result
+
+
+class TestGetGearChanges:
+    async def test_returns_upgrades_and_downgrades(self):
+        """Tool should show slot names, old/new items, and ilvl deltas."""
+        mock_rows = [
+            MagicMock(
+                slot=0, old_item_id=30104, old_ilvl=141,
+                new_item_id=30120, new_ilvl=146,
+            ),
+            MagicMock(
+                slot=15, old_item_id=30311, old_ilvl=141,
+                new_item_id=28297, new_ilvl=128,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_gear_changes.ainvoke(
+                {"player_name": "Lyro", "report_code_old": "abc123",
+                 "report_code_new": "xyz789"}
+            )
+
+        assert "Lyro" in result
+        assert "abc123" in result
+        assert "xyz789" in result
+        assert "Head" in result
+        assert "Main Hand" in result
+        assert "+5 ilvl" in result
+        assert "-13 ilvl" in result
+
+    async def test_no_changes_returns_friendly_message(self):
+        """Tool should return friendly message when no gear changes found."""
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_gear_changes.ainvoke(
+                {"player_name": "Lyro", "report_code_old": "abc123",
+                 "report_code_new": "xyz789"}
+            )
+
+        assert "no gear changes" in result.lower()
+        assert "Lyro" in result
+
+    async def test_new_slot_shows_empty_old(self):
+        """Tool should handle slots where only the new gear exists."""
+        mock_rows = [
+            MagicMock(
+                slot=13, old_item_id=None, old_ilvl=None,
+                new_item_id=30627, new_ilvl=141,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_gear_changes.ainvoke(
+                {"player_name": "Lyro", "report_code_old": "abc123",
+                 "report_code_new": "xyz789"}
+            )
+
+        assert "Trinket 2" in result
+        assert "empty" in result
+        assert "30627" in result
+
+    async def test_error_handling(self):
+        """Tool should return error string on DB failure."""
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = Exception("connection lost")
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_gear_changes.ainvoke(
+                {"player_name": "Lyro", "report_code_old": "abc123",
+                 "report_code_new": "xyz789"}
             )
 
         assert "Error" in result

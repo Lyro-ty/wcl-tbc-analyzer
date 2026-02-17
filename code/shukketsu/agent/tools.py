@@ -1016,6 +1016,59 @@ async def get_regressions(player_name: str | None = None) -> str:
 
 
 @tool
+async def get_gear_changes(
+    player_name: str, report_code_old: str, report_code_new: str,
+) -> str:
+    """Compare a player's gear between two raids. Shows which slots changed
+    and the item level difference for each upgrade/downgrade.
+    Requires event data ingestion."""
+    from shukketsu.pipeline.constants import GEAR_SLOTS
+
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.GEAR_CHANGES,
+            {"player_name": f"%{player_name}%",
+             "report_code_old": report_code_old,
+             "report_code_new": report_code_new},
+        )
+        rows = result.fetchall()
+        if not rows:
+            return (
+                f"No gear changes found for '{player_name}' between "
+                f"reports {report_code_old} and {report_code_new}. "
+                f"Either gear was identical or gear snapshot data is not available "
+                f"(use pull-my-logs --with-events or pull-event-data to fetch it)."
+            )
+
+        lines = [
+            f"Gear changes for {player_name} "
+            f"({report_code_old} \u2192 {report_code_new}):"
+        ]
+        for r in rows:
+            slot_name = GEAR_SLOTS.get(r.slot, f"Slot {r.slot}")
+            old_str = (
+                f"item {r.old_item_id} (ilvl {r.old_ilvl})"
+                if r.old_item_id else "empty"
+            )
+            new_str = (
+                f"item {r.new_item_id} (ilvl {r.new_ilvl})"
+                if r.new_item_id else "empty"
+            )
+            delta_str = ""
+            if r.old_ilvl is not None and r.new_ilvl is not None:
+                delta = r.new_ilvl - r.old_ilvl
+                delta_str = f" [{delta:+d} ilvl]"
+            lines.append(f"  {slot_name}: {old_str} \u2192 {new_str}{delta_str}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
+@tool
 async def resolve_my_fights(
     encounter_name: str | None = None, count: int = 5,
 ) -> str:
@@ -1079,4 +1132,5 @@ ALL_TOOLS = [
     get_wipe_progression,
     get_regressions,
     resolve_my_fights,
+    get_gear_changes,
 ]

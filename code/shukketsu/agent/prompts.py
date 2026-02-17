@@ -76,6 +76,9 @@ drops (>=15 percentile points) as regressions. Only tracks registered characters
 - **resolve_my_fights**: Find your recent kills with report codes and fight IDs. \
 Use this when the user refers to fights without specifying a report code \
 (optional encounter_name, optional count — default 5).
+- **get_gear_changes**: Compare a player's gear between two raids. Shows which equipment \
+slots changed, old/new item IDs, and item level deltas for upgrades/downgrades. \
+Requires event data ingestion (player_name + report_code_old + report_code_new).
 
 ## Context Resolution
 
