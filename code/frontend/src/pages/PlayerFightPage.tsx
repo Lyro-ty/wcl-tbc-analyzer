@@ -1,15 +1,22 @@
 import { useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, Swords, Heart, HeartCrack, Shield, Sparkles, Skull, Activity, Timer, ClipboardCheck, Ban } from 'lucide-react'
+import { ArrowLeft, Loader2, Swords, Heart, HeartCrack, Shield, Sparkles, Skull, Activity, Timer, ClipboardCheck, Ban, ListOrdered, Gauge, Zap, Layers, RotateCcw, Target, Gem } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   fetchCancelledCasts,
   fetchCastMetrics,
+  fetchCastTimeline,
   fetchConsumableCheck,
   fetchCooldownUsage,
+  fetchCooldownWindows,
+  fetchDotRefreshes,
   fetchFightDeaths,
+  fetchRotationScore,
   fetchOverhealAnalysis,
+  fetchPhaseMetrics,
   fetchPlayerAbilities,
   fetchPlayerBuffs,
+  fetchResourceUsage,
+  fetchTrinketProcs,
   getFightDetails,
 } from '../lib/api'
 import type { AbilityMetric, FightPlayer } from '../lib/types'
@@ -18,10 +25,17 @@ import AbilityBarChart from '../components/charts/AbilityBarChart'
 import UptimeBarChart from '../components/charts/UptimeBarChart'
 import ActivityGauge from '../components/charts/ActivityGauge'
 import CooldownChart from '../components/charts/CooldownChart'
+import CooldownWindowChart from '../components/charts/CooldownWindowChart'
+import DotRefreshChart from '../components/charts/DotRefreshChart'
+import RotationScoreComponent from '../components/RotationScore'
+import PhaseBreakdown from '../components/charts/PhaseBreakdown'
+import ResourceChart from '../components/charts/ResourceChart'
 import CancelledCasts from '../components/CancelledCasts'
+import CastTimeline from '../components/charts/CastTimeline'
 import ConsumableCheck from '../components/ConsumableCheck'
 import DeathRecap from '../components/DeathRecap'
 import OverhealChart from '../components/charts/OverhealChart'
+import TrinketChart from '../components/charts/TrinketChart'
 import DataTable, { type Column } from '../components/ui/DataTable'
 import ErrorBoundary from '../components/ui/ErrorBoundary'
 import QuickAction from '../components/ui/QuickAction'
@@ -87,6 +101,48 @@ export default function PlayerFightPage() {
   // Load cancelled casts
   const { data: cancelledCasts } = useApiQuery(
     () => fetchCancelledCasts(code!, fightIdNum, player!),
+    [code, fightId, player],
+  )
+
+  // Load cast timeline (event data)
+  const { data: castTimeline } = useApiQuery(
+    () => fetchCastTimeline(code!, fightIdNum, player!),
+    [code, fightId, player],
+  )
+
+  // Load resource usage (event data)
+  const { data: resources } = useApiQuery(
+    () => fetchResourceUsage(code!, fightIdNum, player!),
+    [code, fightId, player],
+  )
+
+  // Load cooldown window throughput (event data)
+  const { data: cdWindows } = useApiQuery(
+    () => fetchCooldownWindows(code!, fightIdNum, player!),
+    [code, fightId, player],
+  )
+
+  // Load phase metrics (event data)
+  const { data: phases } = useApiQuery(
+    () => fetchPhaseMetrics(code!, fightIdNum, player!),
+    [code, fightId, player],
+  )
+
+  // Load DoT refresh data (event data)
+  const { data: dotRefreshes } = useApiQuery(
+    () => fetchDotRefreshes(code!, fightIdNum, player!),
+    [code, fightId, player],
+  )
+
+  // Load rotation score (event data)
+  const { data: rotationScore } = useApiQuery(
+    () => fetchRotationScore(code!, fightIdNum, player!).catch(() => null),
+    [code, fightId, player],
+  )
+
+  // Load trinket proc data
+  const { data: trinketProcs } = useApiQuery(
+    () => fetchTrinketProcs(code!, fightIdNum, player!).catch(() => []),
     [code, fightId, player],
   )
 
@@ -394,6 +450,36 @@ export default function PlayerFightPage() {
         </div>
       )}
 
+      {/* Rotation Score (event data) */}
+      {rotationScore && rotationScore.rules_checked > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <Target className="h-5 w-5 text-rose-400" />
+            Rotation Score
+          </h2>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <RotationScoreComponent data={rotationScore} />
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* Cast Timeline (event data) */}
+      {castTimeline && castTimeline.length > 0 && playerInfo && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <ListOrdered className="h-5 w-5 text-violet-400" />
+            Cast Timeline
+          </h2>
+          <ErrorBoundary>
+            <div className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <CastTimeline data={castTimeline} fightDurationMs={playerInfo.duration_ms} />
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
       {/* Cancelled Casts (event data) */}
       {cancelledCasts && cancelledCasts.cancel_count > 0 && (
         <div className="mb-8">
@@ -404,6 +490,21 @@ export default function PlayerFightPage() {
           <ErrorBoundary>
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
               <CancelledCasts data={cancelledCasts} />
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* DoT Refresh Analysis (event data) */}
+      {dotRefreshes && dotRefreshes.length > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <RotateCcw className="h-5 w-5 text-purple-400" />
+            DoT Refresh Analysis
+          </h2>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <DotRefreshChart data={dotRefreshes} />
             </div>
           </ErrorBoundary>
         </div>
@@ -424,6 +525,61 @@ export default function PlayerFightPage() {
         </div>
       )}
 
+      {/* Cooldown Window Throughput (event data) */}
+      {cdWindows && cdWindows.length > 0 && playerInfo && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <Zap className="h-5 w-5 text-yellow-400" />
+            Cooldown Window Throughput
+          </h2>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <CooldownWindowChart
+                data={cdWindows}
+                fightDurationMs={playerInfo.duration_ms}
+              />
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* Resource Usage (event data) */}
+      {resources && resources.length > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <Gauge className="h-5 w-5 text-blue-400" />
+            Resource Usage
+          </h2>
+          <ErrorBoundary>
+            <div className="space-y-4">
+              {resources.map((r) => (
+                <div
+                  key={r.resource_type}
+                  className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4"
+                >
+                  <ResourceChart data={r} />
+                </div>
+              ))}
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* Phase Breakdown (event data) */}
+      {phases && phases.length > 0 && playerInfo && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <Layers className="h-5 w-5 text-indigo-400" />
+            Boss Phase Breakdown
+          </h2>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <PhaseBreakdown data={phases} fightDurationMs={playerInfo.duration_ms} />
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
       {/* Consumable Check */}
       {consumables && (consumables.present.length > 0 || consumables.missing.length > 0) && (
         <div className="mb-8">
@@ -434,6 +590,21 @@ export default function PlayerFightPage() {
           <ErrorBoundary>
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
               <ConsumableCheck data={consumables} />
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* Trinket Procs */}
+      {trinketProcs && trinketProcs.length > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <Gem className="h-5 w-5 text-emerald-400" />
+            Trinket Performance
+          </h2>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <TrinketChart data={trinketProcs} />
             </div>
           </ErrorBoundary>
         </div>

@@ -588,3 +588,52 @@ class TestDashboardRecent:
         data = resp.json()
         assert len(data) == 1
         assert data[0]["code"] == "abc123"
+
+
+class TestTrinketProcs:
+    async def test_200_with_trinket_data(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = [
+            MagicMock(
+                player_name="TestWarr",
+                ability_name="Dragonspine Trophy",
+                spell_id=34775,
+                uptime_pct=32.5,
+                stack_count=0,
+            ),
+        ]
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.get(
+                    "/api/data/reports/abc123/fights/1/trinkets/TestWarr"
+                )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["trinket_name"] == "Dragonspine Trophy"
+        assert data[0]["grade"] == "GOOD"
+
+    async def test_200_empty(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.get(
+                    "/api/data/reports/abc123/fights/1/trinkets/TestWarr"
+                )
+
+        assert resp.status_code == 200
+        assert resp.json() == []

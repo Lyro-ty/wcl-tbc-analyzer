@@ -355,6 +355,78 @@ class CancelledCastResponse(BaseModel):
     top_cancelled_json: str | None
 
 
+class CastEventResponse(BaseModel):
+    player_name: str
+    timestamp_ms: int
+    spell_id: int
+    ability_name: str
+    event_type: str
+    target_name: str | None
+
+
+class ResourceSnapshotResponse(BaseModel):
+    player_name: str
+    resource_type: str
+    min_value: int
+    max_value: int
+    avg_value: float
+    time_at_zero_ms: int
+    time_at_zero_pct: float
+    samples_json: str | None
+
+
+class CooldownWindowResponse(BaseModel):
+    player_name: str
+    ability_name: str
+    spell_id: int
+    window_start_ms: int
+    window_end_ms: int
+    window_damage: int
+    window_dps: float
+    baseline_dps: float
+    dps_gain_pct: float
+
+
+class PhaseMetricResponse(BaseModel):
+    player_name: str
+    phase_name: str
+    phase_start_ms: int
+    phase_end_ms: int
+    is_downtime: bool
+    phase_dps: float | None
+    phase_casts: int | None
+    phase_gcd_uptime_pct: float | None
+
+
+class DotRefreshResponse(BaseModel):
+    player_name: str
+    spell_id: int
+    ability_name: str
+    total_refreshes: int
+    early_refreshes: int
+    early_refresh_pct: float
+    avg_remaining_ms: float
+    clipped_ticks_est: int
+
+
+class RotationScoreResponse(BaseModel):
+    player_name: str
+    spec: str
+    score_pct: float
+    rules_checked: int
+    rules_passed: int
+    violations_json: str | None
+
+
+class TrinketProcResponse(BaseModel):
+    player_name: str
+    trinket_name: str
+    spell_id: int
+    uptime_pct: float
+    expected_uptime_pct: float
+    grade: str
+
+
 class EventDataResponse(BaseModel):
     report_code: str
     event_rows: int

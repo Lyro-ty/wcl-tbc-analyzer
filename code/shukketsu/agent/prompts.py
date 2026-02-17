@@ -63,6 +63,33 @@ flags abilities >30% overheal as wasteful.
 - **get_cancelled_casts**: Get cancelled cast analysis for a player in a fight \
 (requires event data — report_code + fight_id + player_name). Shows how many casts were \
 started but not completed, with cancel rate grade.
+- **get_resource_usage**: Get resource (mana/energy/rage) usage analysis for a player in a fight \
+(requires event data — report_code + fight_id + player_name). Shows min/max/avg resource levels, \
+time spent at zero, and resource trends. Use for OOM healers, energy-starved rogues.
+- **get_cooldown_windows**: Get cooldown window throughput analysis for a player in a fight \
+(requires event data — report_code + fight_id + player_name). Shows DPS during cooldown windows \
+vs baseline DPS, revealing how effectively the player capitalizes on burst windows.
+- **get_phase_breakdown**: Get boss phase breakdown for a player in a fight \
+(requires event data — report_code + fight_id + player_name). Shows per-phase DPS, casts, \
+and GCD uptime. Downtime phases (transitions, air phases) are marked separately.
+- **get_dot_analysis**: Get DoT refresh analysis for a player in a fight \
+(requires event data — report_code + fight_id + player_name). Detects early DoT refreshes \
+that clip remaining ticks, wasting GCDs. Useful for Shadow Priests, Warlocks, Druids.
+- **get_rotation_score**: Get rotation validation score for a player in a fight \
+(requires event data — report_code + fight_id + player_name). Evaluates cast sequence against \
+spec-specific rotation rules (APL). Currently supports: Fury Warrior, Combat Rogue, Arcane Mage.
+- **get_trinket_procs**: Get trinket proc analysis for a player in a fight \
+(requires table data — report_code + fight_id + player_name). Shows which trinkets procced, \
+their uptime %, and whether uptime meets expected thresholds.
+- **get_raid_buff_coverage**: Check raid buff coverage for all players in a fight \
+(requires table data — report_code + fight_id). Shows which key raid buffs are present, \
+how many players have each buff, and flags missing buffs.
+- **get_gear_audit**: Check a player's gear for missing enchants and gems \
+(report_code + fight_id + player_name). Note: requires WCL combatantInfo data which is not \
+yet ingested — returns a stub message.
+- **get_threat_analysis**: Get threat and tank performance analysis for a player in a fight \
+(report_code + fight_id + player_name). Shows available tank metrics from existing data. \
+Full TPS analysis requires WCL Threat events (not yet fetched).
 
 ## Analysis Framework
 
@@ -159,11 +186,35 @@ Skip if no deaths or no death data available.
 8. **Consumable/Prep Check** — If consumable data was retrieved, list missing consumables \
 and flag low-uptime buffs. Note: presence of a consumable with low uptime (<50%) \
 may indicate it was only used at pull or expired mid-fight. Skip if no consumable data available.
-9. **Actionable Checklist** — Specific, prioritized improvement suggestions as checkboxes:
+9. **Resource Usage** — If resource data was retrieved, analyze mana/energy/rage trends. \
+Healers with >10% time at zero mana are going OOM and need to adjust spell selection or \
+consumables. Rogues/Ferals with frequent energy starvation may have rotation issues. \
+Warriors with rage starvation may need to adjust hit rating. Skip if no resource data available.
+10. **Cooldown Window Throughput** — If cooldown window data was retrieved, analyze DPS \
+during burst windows vs baseline. Good players should see 20-50%+ DPS gains during cooldowns. \
+Below-baseline damage during a CD indicates the player isn't aligning their strongest abilities \
+with their burst windows. Skip if no cooldown window data available.
+11. **Phase Performance** — If phase breakdown data was retrieved, compare DPS and GCD uptime \
+across phases. Downtime phases (transitions, air phases) are expected to show lower numbers. \
+Flag significant DPS drops in non-downtime phases. Skip if no phase data available.
+12. **DoT Management** — If DoT refresh data was retrieved, evaluate early refresh rates. \
+<10% early refresh rate is GOOD, 10-25% is FAIR, >25% NEEDS WORK. Early refreshes waste \
+GCDs and clip remaining ticks. Advise refreshing in the pandemic window (last 30% of duration). \
+Skip if no DoT data available.
+13. **Rotation Score** — If rotation score data was retrieved, present the letter grade and \
+highlight specific rule violations. A/B grades are strong, C needs tuning, D/F indicates \
+fundamental rotation issues. Skip if no rotation data available.
+14. **Trinket Performance** — If trinket proc data was retrieved, evaluate trinket uptime. \
+Good trinket procs should have 20-35% uptime depending on the trinket. Low uptime may \
+indicate suboptimal trinket choices or bad RNG. Skip if no trinket data available.
+15. **Raid Buff Coverage** — If raid buff coverage data was retrieved, highlight buffs with \
+low coverage (<50% of raid) or missing entirely. Key buffs like Battle Shout, Mark of the Wild, \
+and Blessings should cover the full raid. Skip if no buff coverage data available.
+16. **Actionable Checklist** — Specific, prioritized improvement suggestions as checkboxes:
    - [ ] Highest-impact improvement first
    - [ ] Second priority
    - [ ] Third priority
-10. **Encouragement** — Acknowledge strengths and progress
+17. **Encouragement** — Acknowledge strengths and progress
 
 Use the player's class/spec context to give spec-specific advice when possible.
 """

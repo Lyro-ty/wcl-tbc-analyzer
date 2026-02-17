@@ -300,6 +300,78 @@ export interface CancelledCastSummary {
   top_cancelled_json: string | null
 }
 
+export interface CastEventEntry {
+  player_name: string
+  timestamp_ms: number
+  spell_id: number
+  ability_name: string
+  event_type: string
+  target_name: string | null
+}
+
+export interface ResourceSnapshot {
+  player_name: string
+  resource_type: string
+  min_value: number
+  max_value: number
+  avg_value: number
+  time_at_zero_ms: number
+  time_at_zero_pct: number
+  samples_json: string | null
+}
+
+export interface CooldownWindowEntry {
+  player_name: string
+  ability_name: string
+  spell_id: number
+  window_start_ms: number
+  window_end_ms: number
+  window_damage: number
+  window_dps: number
+  baseline_dps: number
+  dps_gain_pct: number
+}
+
+export interface PhaseMetricEntry {
+  player_name: string
+  phase_name: string
+  phase_start_ms: number
+  phase_end_ms: number
+  is_downtime: boolean
+  phase_dps: number | null
+  phase_casts: number | null
+  phase_gcd_uptime_pct: number | null
+}
+
+export interface DotRefreshEntry {
+  player_name: string
+  spell_id: number
+  ability_name: string
+  total_refreshes: number
+  early_refreshes: number
+  early_refresh_pct: number
+  avg_remaining_ms: number
+  clipped_ticks_est: number
+}
+
+export interface RotationScoreEntry {
+  player_name: string
+  spec: string
+  score_pct: number
+  rules_checked: number
+  rules_passed: number
+  violations_json: string | null
+}
+
+export interface TrinketProc {
+  player_name: string
+  trinket_name: string
+  spell_id: number
+  uptime_pct: number
+  expected_uptime_pct: number
+  grade: string
+}
+
 export interface DashboardStats {
   total_reports: number
   total_kills: number

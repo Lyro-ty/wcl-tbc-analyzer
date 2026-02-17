@@ -7,11 +7,17 @@ from sqlalchemy import delete, select
 
 from shukketsu.db.models import (
     CancelledCast,
+    CastEvent,
     CastMetric,
     CooldownUsage,
+    CooldownWindow,
     DeathDetail,
+    DotRefresh,
     Fight,
     FightPerformance,
+    PhaseMetric,
+    ResourceSnapshot,
+    RotationScore,
 )
 
 logger = logging.getLogger(__name__)
@@ -497,6 +503,782 @@ async def ingest_cancelled_casts_for_fight(
     return total_rows
 
 
+# ===== Cast event storage (for timeline) =====
+
+async def ingest_cast_events_for_fight(
+    session, fight: Fight, cast_events: list[dict],
+    actor_name_by_id: dict[int, str],
+) -> int:
+    """Store individual cast events for timeline visualization."""
+    await session.execute(
+        delete(CastEvent).where(CastEvent.fight_id == fight.id)
+    )
+
+    if not cast_events:
+        return 0
+
+    total_rows = 0
+    for event in cast_events:
+        sid = event.get("sourceID")
+        if sid is None:
+            continue
+        player_name = actor_name_by_id.get(sid)
+        if not player_name:
+            continue
+
+        event_type = event.get("type", "cast")
+        if event_type not in ("cast", "begincast"):
+            continue
+
+        spell_id = event.get("abilityGameID", 0)
+        ability_info = event.get("ability") or {}
+        ability_name = ability_info.get(
+            "name", f"Spell-{spell_id}"
+        )
+        timestamp_ms = event.get("timestamp", 0) - fight.start_time
+        target_id = event.get("targetID")
+        target_name = (
+            actor_name_by_id.get(target_id) if target_id else None
+        )
+
+        session.add(CastEvent(
+            fight_id=fight.id,
+            player_name=player_name,
+            timestamp_ms=timestamp_ms,
+            spell_id=spell_id,
+            ability_name=ability_name,
+            event_type=event_type,
+            target_name=target_name,
+        ))
+        total_rows += 1
+
+    logger.info(
+        "Ingested %d cast events for fight %d (%s)",
+        total_rows, fight.fight_id, fight.report_code,
+    )
+    return total_rows
+
+
+# ===== Resource tracking =====
+
+# WCL resource type IDs
+RESOURCE_TYPE_NAMES = {
+    0: "mana",
+    1: "rage",
+    2: "focus",
+    3: "energy",
+}
+
+
+def compute_resource_metrics(
+    resource_events: list[dict],
+    fight_duration_ms: int,
+    fight_start_time: int = 0,
+) -> dict[tuple[int, int], dict]:
+    """Compute resource metrics per player from WCL resource change events.
+
+    WCL resource events have:
+      sourceID, timestamp, resourceActor,
+      classResources: [{amount, max, type}]
+
+    Returns dict[(sourceID, resource_type_int) -> {resource_type, min_value,
+        max_value, avg_value, time_at_zero_ms, time_at_zero_pct, samples}]
+    """
+    # Group by (sourceID, resource_type)
+    player_resources: dict[
+        tuple[int, int], list[tuple[int, int, int]]
+    ] = {}
+
+    for event in resource_events:
+        sid = event.get("sourceID")
+        if sid is None:
+            continue
+        ts = event.get("timestamp", 0) - fight_start_time
+        class_resources = event.get("classResources", [])
+        for cr in class_resources:
+            rtype = cr.get("type", -1)
+            if rtype not in RESOURCE_TYPE_NAMES:
+                continue
+            amount = cr.get("amount", 0)
+            max_val = cr.get("max", 0)
+            player_resources.setdefault(
+                (sid, rtype), [],
+            ).append((ts, amount, max_val))
+
+    results: dict[tuple[int, int], dict] = {}
+    for (sid, rtype), entries in player_resources.items():
+        entries.sort(key=lambda x: x[0])
+        amounts = [e[1] for e in entries]
+        max_vals = [e[2] for e in entries]
+
+        min_val = min(amounts) if amounts else 0
+        max_val = max(max_vals) if max_vals else 0
+        avg_val = (
+            round(sum(amounts) / len(amounts), 1) if amounts else 0.0
+        )
+
+        # Time at zero: estimate from consecutive events
+        time_at_zero = 0
+        for i in range(len(entries) - 1):
+            if entries[i][1] == 0:
+                gap = entries[i + 1][0] - entries[i][0]
+                time_at_zero += gap
+
+        time_at_zero_pct = (
+            round(time_at_zero / fight_duration_ms * 100, 1)
+            if fight_duration_ms > 0 else 0.0
+        )
+
+        # Downsample to ~60 points max for chart
+        sample_interval = max(1, len(entries) // 60)
+        samples = []
+        for i in range(0, len(entries), sample_interval):
+            ts_offset = entries[i][0]
+            samples.append({
+                "t": ts_offset,
+                "v": entries[i][1],
+            })
+
+        results[(sid, rtype)] = {
+            "resource_type": RESOURCE_TYPE_NAMES[rtype],
+            "min_value": min_val,
+            "max_value": max_val,
+            "avg_value": avg_val,
+            "time_at_zero_ms": time_at_zero,
+            "time_at_zero_pct": time_at_zero_pct,
+            "samples": samples,
+        }
+
+    return results
+
+
+async def ingest_resources_for_fight(
+    wcl, session, report_code: str, fight: Fight,
+    actor_name_by_id: dict[int, str],
+) -> int:
+    """Fetch and ingest resource data for a fight."""
+    from shukketsu.wcl.events import fetch_all_events
+
+    await session.execute(
+        delete(ResourceSnapshot).where(
+            ResourceSnapshot.fight_id == fight.id,
+        )
+    )
+
+    fight_duration_ms = fight.end_time - fight.start_time
+
+    try:
+        events = await fetch_all_events(
+            wcl, report_code,
+            fight.start_time, fight.end_time, "Resources",
+        )
+    except Exception:
+        logger.exception(
+            "Failed to fetch Resources for fight %d in %s",
+            fight.fight_id, report_code,
+        )
+        return 0
+
+    if not events:
+        return 0
+
+    metrics = compute_resource_metrics(events, fight_duration_ms, fight.start_time)
+
+    total_rows = 0
+    for (sid, _rtype), data in metrics.items():
+        player_name = actor_name_by_id.get(sid)
+        if not player_name:
+            continue
+
+        session.add(ResourceSnapshot(
+            fight_id=fight.id,
+            player_name=player_name,
+            resource_type=data["resource_type"],
+            min_value=data["min_value"],
+            max_value=data["max_value"],
+            avg_value=data["avg_value"],
+            time_at_zero_ms=data["time_at_zero_ms"],
+            time_at_zero_pct=data["time_at_zero_pct"],
+            samples_json=json.dumps(data["samples"]),
+        ))
+        total_rows += 1
+
+    logger.info(
+        "Ingested %d resource snapshots for fight %d (%s)",
+        total_rows, fight.fight_id, report_code,
+    )
+    return total_rows
+
+
+# ===== Cooldown window throughput =====
+
+def compute_cooldown_windows(
+    cast_events: list[dict],
+    damage_events: list[dict],
+    player_class: str,
+    fight_duration_ms: int,
+    fight_start_time: int,
+) -> list[dict]:
+    """Compute DPS during cooldown windows vs baseline.
+
+    For each major cooldown activation, calculate damage done during
+    the window vs baseline DPS outside all windows.
+    """
+    from shukketsu.pipeline.constants import CLASSIC_COOLDOWNS
+
+    cooldown_defs = CLASSIC_COOLDOWNS.get(player_class, [])
+    if not cooldown_defs:
+        return []
+
+    cd_by_spell_id = {cd.spell_id: cd for cd in cooldown_defs}
+
+    # Find cooldown activation timestamps
+    activations: list[dict] = []
+    for event in cast_events:
+        spell_id = event.get("abilityGameID", 0)
+        if spell_id in cd_by_spell_id:
+            cd = cd_by_spell_id[spell_id]
+            ts = event.get("timestamp", 0) - fight_start_time
+            # Use actual buff duration if known, fall back to cooldown
+            buff_dur = cd.duration_sec if cd.duration_sec > 0 else cd.cooldown_sec
+            activations.append({
+                "spell_id": spell_id,
+                "ability_name": cd.name,
+                "start_ms": ts,
+                "end_ms": ts + buff_dur * 1000,
+                "duration_sec": buff_dur,
+            })
+
+    if not activations:
+        return []
+
+    # Calculate total damage across the fight
+    total_fight_damage = 0
+    for dmg in damage_events:
+        total_fight_damage += dmg.get("amount", 0)
+
+    results = []
+    total_cd_time_ms = 0
+    total_cd_damage = 0
+
+    for act in activations:
+        window_damage = 0
+        for dmg in damage_events:
+            ts = dmg.get("timestamp", 0) - fight_start_time
+            if act["start_ms"] <= ts <= act["end_ms"]:
+                window_damage += dmg.get("amount", 0)
+
+        window_ms = act["end_ms"] - act["start_ms"]
+        if window_ms > fight_duration_ms:
+            window_ms = fight_duration_ms
+        window_dps = (
+            round(window_damage / (window_ms / 1000), 1)
+            if window_ms > 0 else 0.0
+        )
+
+        total_cd_time_ms += window_ms
+        total_cd_damage += window_damage
+
+        results.append({
+            "ability_name": act["ability_name"],
+            "spell_id": act["spell_id"],
+            "window_start_ms": act["start_ms"],
+            "window_end_ms": act["end_ms"],
+            "window_damage": window_damage,
+            "window_dps": window_dps,
+            "baseline_dps": 0.0,  # filled below
+            "dps_gain_pct": 0.0,
+        })
+
+    # Baseline = damage outside all CD windows / non-CD time
+    non_cd_time_ms = fight_duration_ms - total_cd_time_ms
+    non_cd_damage = total_fight_damage - total_cd_damage
+    baseline_dps = (
+        round(non_cd_damage / (non_cd_time_ms / 1000), 1)
+        if non_cd_time_ms > 0 else 0.0
+    )
+
+    for r in results:
+        r["baseline_dps"] = baseline_dps
+        if baseline_dps > 0:
+            r["dps_gain_pct"] = round(
+                (r["window_dps"] - baseline_dps) / baseline_dps * 100,
+                1,
+            )
+
+    return results
+
+
+async def ingest_cooldown_windows_for_fight(
+    session, fight: Fight,
+    cast_events: list[dict],
+    damage_events: list[dict],
+    actor_name_by_id: dict[int, str],
+) -> int:
+    """Compute and store cooldown window throughput for all players."""
+    await session.execute(
+        delete(CooldownWindow).where(
+            CooldownWindow.fight_id == fight.id,
+        )
+    )
+
+    fight_duration_ms = fight.end_time - fight.start_time
+
+    if not damage_events:
+        return 0
+
+    # Get player classes
+    result = await session.execute(
+        select(
+            FightPerformance.player_name,
+            FightPerformance.player_class,
+        ).where(FightPerformance.fight_id == fight.id)
+    )
+    player_classes = {r.player_name: r.player_class for r in result}
+
+    # Group events by sourceID
+    casts_by_source: dict[int, list[dict]] = {}
+    for event in cast_events:
+        sid = event.get("sourceID")
+        if sid is not None:
+            casts_by_source.setdefault(sid, []).append(event)
+
+    dmg_by_source: dict[int, list[dict]] = {}
+    for event in damage_events:
+        sid = event.get("sourceID")
+        if sid is not None:
+            dmg_by_source.setdefault(sid, []).append(event)
+
+    total_rows = 0
+    for source_id, player_casts in casts_by_source.items():
+        player_name = actor_name_by_id.get(source_id)
+        if not player_name:
+            continue
+        player_class = player_classes.get(player_name)
+        if not player_class:
+            continue
+
+        player_dmg = dmg_by_source.get(source_id, [])
+        windows = compute_cooldown_windows(
+            player_casts, player_dmg, player_class,
+            fight_duration_ms, fight.start_time,
+        )
+
+        for w in windows:
+            session.add(CooldownWindow(
+                fight_id=fight.id,
+                player_name=player_name,
+                **w,
+            ))
+            total_rows += 1
+
+    logger.info(
+        "Ingested %d cooldown windows for fight %d (%s)",
+        total_rows, fight.fight_id, fight.report_code,
+    )
+    return total_rows
+
+
+# ===== Boss phase detection =====
+
+def detect_phases(
+    encounter_name: str,
+    fight_duration_ms: int,
+) -> list[dict]:
+    """Detect boss phases for an encounter.
+
+    For encounters with defined phases, splits the fight duration evenly
+    among phases (since we don't have HP% data from events API).
+    For unknown encounters, returns a single "Full Fight" phase.
+    """
+    from shukketsu.pipeline.constants import ENCOUNTER_PHASES
+
+    phase_defs = ENCOUNTER_PHASES.get(encounter_name, [])
+    if not phase_defs:
+        return [{
+            "name": "Full Fight",
+            "start_ms": 0,
+            "end_ms": fight_duration_ms,
+            "is_downtime": False,
+        }]
+
+    # Split fight duration evenly among phases
+    phase_count = len(phase_defs)
+    phase_duration = fight_duration_ms // phase_count
+    phases = []
+    for i, p in enumerate(phase_defs):
+        start = i * phase_duration
+        end = (
+            (i + 1) * phase_duration
+            if i < phase_count - 1
+            else fight_duration_ms
+        )
+        phases.append({
+            "name": p.name,
+            "start_ms": start,
+            "end_ms": end,
+            "is_downtime": p.is_downtime,
+        })
+
+    return phases
+
+
+def compute_phase_metrics(
+    cast_events: list[dict],
+    damage_events: list[dict],
+    phases: list[dict],
+    fight_start_time: int,
+    fight_duration_ms: int,
+) -> list[dict]:
+    """Compute per-phase DPS and GCD uptime for a single player.
+
+    Args:
+        cast_events: Player's Casts events.
+        damage_events: Player's DamageDone events.
+        phases: List of phase dicts from detect_phases().
+        fight_start_time: Absolute fight start time.
+        fight_duration_ms: Total fight duration.
+
+    Returns:
+        List of dicts with phase_name, phase_dps, phase_casts,
+        phase_gcd_uptime_pct.
+    """
+    results = []
+    for phase in phases:
+        p_start = phase["start_ms"]
+        p_end = phase["end_ms"]
+        p_duration = p_end - p_start
+
+        # Count casts in this phase
+        phase_casts = 0
+        for event in cast_events:
+            ts = event.get("timestamp", 0) - fight_start_time
+            if p_start <= ts < p_end:
+                phase_casts += 1
+
+        # Sum damage in this phase
+        phase_damage = 0
+        for event in damage_events:
+            ts = event.get("timestamp", 0) - fight_start_time
+            if p_start <= ts < p_end:
+                phase_damage += event.get("amount", 0)
+
+        phase_dps = (
+            round(phase_damage / (p_duration / 1000), 1)
+            if p_duration > 0 else 0.0
+        )
+
+        # GCD uptime in phase
+        active_ms = phase_casts * GCD_MS
+        if active_ms > p_duration:
+            active_ms = p_duration
+        gcd_pct = (
+            round(active_ms / p_duration * 100, 1)
+            if p_duration > 0 else 0.0
+        )
+
+        results.append({
+            "phase_name": phase["name"],
+            "phase_start_ms": p_start,
+            "phase_end_ms": p_end,
+            "is_downtime": phase["is_downtime"],
+            "phase_dps": phase_dps,
+            "phase_casts": phase_casts,
+            "phase_gcd_uptime_pct": gcd_pct,
+        })
+
+    return results
+
+
+async def ingest_phases_for_fight(
+    session, fight: Fight,
+    cast_events: list[dict],
+    damage_events: list[dict],
+    actor_name_by_id: dict[int, str],
+    encounter_name: str,
+) -> int:
+    """Compute and store per-phase metrics for all players in a fight."""
+    await session.execute(
+        delete(PhaseMetric).where(PhaseMetric.fight_id == fight.id)
+    )
+
+    fight_duration_ms = fight.end_time - fight.start_time
+    phases = detect_phases(encounter_name, fight_duration_ms)
+
+    # Only one "Full Fight" phase for unknown encounters -- skip
+    if len(phases) == 1 and phases[0]["name"] == "Full Fight":
+        return 0
+
+    # Group events by sourceID
+    casts_by_source: dict[int, list[dict]] = {}
+    for event in cast_events:
+        sid = event.get("sourceID")
+        if sid is not None:
+            casts_by_source.setdefault(sid, []).append(event)
+
+    dmg_by_source: dict[int, list[dict]] = {}
+    for event in (damage_events or []):
+        sid = event.get("sourceID")
+        if sid is not None:
+            dmg_by_source.setdefault(sid, []).append(event)
+
+    total_rows = 0
+    for source_id, player_casts in casts_by_source.items():
+        player_name = actor_name_by_id.get(source_id)
+        if not player_name:
+            continue
+
+        player_dmg = dmg_by_source.get(source_id, [])
+        metrics = compute_phase_metrics(
+            player_casts, player_dmg, phases,
+            fight.start_time, fight_duration_ms,
+        )
+
+        for m in metrics:
+            session.add(PhaseMetric(
+                fight_id=fight.id,
+                player_name=player_name,
+                **m,
+            ))
+            total_rows += 1
+
+    logger.info(
+        "Ingested %d phase metrics for fight %d (%s)",
+        total_rows, fight.fight_id, fight.report_code,
+    )
+    return total_rows
+
+
+# ===== DoT refresh detection =====
+
+def compute_dot_refreshes(
+    cast_events: list[dict],
+    player_class: str,
+) -> list[dict]:
+    """Detect early DoT refreshes from cast events for a single player.
+
+    A refresh is "early" if the DoT was reapplied before the pandemic window
+    (last 30% of the DoT duration). Early refreshes clip remaining ticks.
+
+    Args:
+        cast_events: Sorted Casts events for one player.
+        player_class: WoW class name.
+
+    Returns:
+        List of dicts per DoT spell with refresh stats.
+    """
+    from shukketsu.pipeline.constants import CLASS_DOTS
+
+    dot_defs = CLASS_DOTS.get(player_class, [])
+    if not dot_defs:
+        return []
+
+    dot_by_spell = {d.spell_id: d for d in dot_defs}
+
+    # Track last application timestamp per spell
+    last_apply: dict[int, int] = {}
+    refresh_data: dict[int, dict] = {}
+
+    for event in cast_events:
+        spell_id = event.get("abilityGameID", 0)
+        if spell_id not in dot_by_spell:
+            continue
+
+        dot = dot_by_spell[spell_id]
+        ts = event.get("timestamp", 0)
+
+        if spell_id not in refresh_data:
+            refresh_data[spell_id] = {
+                "spell_id": spell_id,
+                "ability_name": dot.name,
+                "total_refreshes": 0,
+                "early_refreshes": 0,
+                "remaining_sum_ms": 0,
+                "clipped_ticks": 0,
+            }
+
+        if spell_id in last_apply:
+            # This is a refresh
+            elapsed = ts - last_apply[spell_id]
+            remaining = dot.duration_ms - elapsed
+            refresh_data[spell_id]["total_refreshes"] += 1
+
+            if remaining > 0:
+                # Safe refresh window starts at duration - pandemic_window
+                safe_start = dot.duration_ms - dot.pandemic_window_ms
+                if elapsed < safe_start:
+                    # Early refresh -- DoT refreshed before pandemic window
+                    refresh_data[spell_id]["early_refreshes"] += 1
+                    refresh_data[spell_id]["remaining_sum_ms"] += remaining
+                    clipped = int(remaining // dot.tick_interval_ms)
+                    refresh_data[spell_id]["clipped_ticks"] += clipped
+
+        last_apply[spell_id] = ts
+
+    results = []
+    for _spell_id, data in refresh_data.items():
+        total = data["total_refreshes"]
+        early = data["early_refreshes"]
+        early_pct = round(early / total * 100, 1) if total > 0 else 0.0
+        avg_remaining = (
+            round(data["remaining_sum_ms"] / early, 1) if early > 0 else 0.0
+        )
+
+        results.append({
+            "spell_id": data["spell_id"],
+            "ability_name": data["ability_name"],
+            "total_refreshes": total,
+            "early_refreshes": early,
+            "early_refresh_pct": early_pct,
+            "avg_remaining_ms": avg_remaining,
+            "clipped_ticks_est": data["clipped_ticks"],
+        })
+
+    return results
+
+
+async def ingest_dot_refreshes_for_fight(
+    session, fight: Fight, cast_events: list[dict],
+    actor_name_by_id: dict[int, str],
+) -> int:
+    """Compute and store DoT refresh metrics for all players in a fight."""
+    await session.execute(
+        delete(DotRefresh).where(DotRefresh.fight_id == fight.id)
+    )
+
+    if not cast_events:
+        return 0
+
+    # Get player classes
+    result = await session.execute(
+        select(FightPerformance.player_name, FightPerformance.player_class)
+        .where(FightPerformance.fight_id == fight.id)
+    )
+    player_classes = {r.player_name: r.player_class for r in result}
+
+    # Group by sourceID
+    events_by_source: dict[int, list[dict]] = {}
+    for event in cast_events:
+        sid = event.get("sourceID")
+        if sid is not None:
+            events_by_source.setdefault(sid, []).append(event)
+
+    total_rows = 0
+    for source_id, player_events in events_by_source.items():
+        player_name = actor_name_by_id.get(source_id)
+        if not player_name:
+            continue
+
+        player_class = player_classes.get(player_name)
+        if not player_class:
+            continue
+
+        refreshes = compute_dot_refreshes(player_events, player_class)
+        for r in refreshes:
+            session.add(DotRefresh(
+                fight_id=fight.id,
+                player_name=player_name,
+                **r,
+            ))
+            total_rows += 1
+
+    logger.info(
+        "Ingested %d DoT refresh rows for fight %d (%s)",
+        total_rows, fight.fight_id, fight.report_code,
+    )
+    return total_rows
+
+
+# ===== Rotation score evaluation =====
+
+async def ingest_rotation_scores_for_fight(
+    session, fight: Fight, cast_events: list[dict],
+    actor_name_by_id: dict[int, str],
+) -> int:
+    """Evaluate and store rotation scores for players with defined rules."""
+    from shukketsu.db.models import BuffUptime
+    from shukketsu.pipeline.rotation_rules import (
+        SPEC_ROTATIONS,
+        evaluate_rotation,
+    )
+
+    await session.execute(
+        delete(RotationScore).where(RotationScore.fight_id == fight.id)
+    )
+
+    if not cast_events:
+        return 0
+
+    # Get player specs
+    result = await session.execute(
+        select(
+            FightPerformance.player_name,
+            FightPerformance.player_spec,
+        ).where(FightPerformance.fight_id == fight.id)
+    )
+    player_specs = {r.player_name: r.player_spec for r in result}
+
+    # Get buff uptimes for all players in this fight
+    buff_result = await session.execute(
+        select(
+            BuffUptime.player_name,
+            BuffUptime.spell_id,
+            BuffUptime.uptime_pct,
+        ).where(BuffUptime.fight_id == fight.id)
+    )
+    player_buffs: dict[str, dict[int, float]] = {}
+    for r in buff_result:
+        player_buffs.setdefault(
+            r.player_name, {},
+        )[r.spell_id] = r.uptime_pct
+
+    # Group cast events by sourceID
+    events_by_source: dict[int, list[dict]] = {}
+    for event in cast_events:
+        sid = event.get("sourceID")
+        if sid is not None:
+            events_by_source.setdefault(sid, []).append(event)
+
+    fight_duration_ms = fight.end_time - fight.start_time
+    total_rows = 0
+
+    for source_id, player_events in events_by_source.items():
+        player_name = actor_name_by_id.get(source_id)
+        if not player_name:
+            continue
+
+        spec = player_specs.get(player_name)
+        if not spec or spec not in SPEC_ROTATIONS:
+            continue
+
+        buffs = player_buffs.get(player_name, {})
+        report = evaluate_rotation(
+            player_events, buffs, spec, fight_duration_ms,
+        )
+
+        violations_json = (
+            json.dumps(report.violations)
+            if report.violations else None
+        )
+
+        session.add(RotationScore(
+            fight_id=fight.id,
+            player_name=player_name,
+            spec=report.spec,
+            score_pct=report.score_pct,
+            rules_checked=report.rules_checked,
+            rules_passed=report.rules_passed,
+            violations_json=violations_json,
+        ))
+        total_rows += 1
+
+    logger.info(
+        "Ingested %d rotation scores for fight %d (%s)",
+        total_rows, fight.fight_id, fight.report_code,
+    )
+    return total_rows
+
+
 # ===== Report-level orchestration =====
 
 async def ingest_event_data_for_report(
@@ -571,6 +1353,68 @@ async def ingest_event_data_for_report(
             session, fight, cast_events, actor_name_by_id,
         )
         total_rows += cancel_rows
+
+        # 6. Cast events (for timeline)
+        timeline_rows = await ingest_cast_events_for_fight(
+            session, fight, cast_events, actor_name_by_id,
+        )
+        total_rows += timeline_rows
+
+        # 7. Resource snapshots (separate API call)
+        resource_rows = await ingest_resources_for_fight(
+            wcl, session, report_code, fight, actor_name_by_id,
+        )
+        total_rows += resource_rows
+
+        # 8. Fetch DamageDone events ONCE (reused by CD windows + phases)
+        try:
+            damage_events = await fetch_all_events(
+                wcl, report_code,
+                fight.start_time, fight.end_time, "DamageDone",
+            )
+        except Exception:
+            logger.exception(
+                "Failed to fetch DamageDone for fight %d in %s",
+                fight.fight_id, report_code,
+            )
+            damage_events = []
+
+        # 9. Cooldown window throughput
+        window_rows = await ingest_cooldown_windows_for_fight(
+            session, fight,
+            cast_events, damage_events, actor_name_by_id,
+        )
+        total_rows += window_rows
+
+        # 10. Phase metrics
+        encounter_result = await session.execute(
+            select(Fight.encounter_id).where(Fight.id == fight.id)
+        )
+        enc_row = encounter_result.fetchone()
+        encounter_name = ""
+        if enc_row:
+            from shukketsu.db.models import Encounter
+
+            enc = await session.get(Encounter, enc_row.encounter_id)
+            encounter_name = enc.name if enc else ""
+
+        phase_rows = await ingest_phases_for_fight(
+            session, fight,
+            cast_events, damage_events, actor_name_by_id, encounter_name,
+        )
+        total_rows += phase_rows
+
+        # 11. DoT refresh detection (reuses cast_events)
+        dot_rows = await ingest_dot_refreshes_for_fight(
+            session, fight, cast_events, actor_name_by_id,
+        )
+        total_rows += dot_rows
+
+        # 12. Rotation score evaluation (reuses cast_events)
+        rotation_rows = await ingest_rotation_scores_for_fight(
+            session, fight, cast_events, actor_name_by_id,
+        )
+        total_rows += rotation_rows
 
     logger.info(
         "Ingested event data for report %s: %d total rows across %d fights",

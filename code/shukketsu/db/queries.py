@@ -559,6 +559,17 @@ CANCELLED_CASTS = text("""
       AND cc.player_name = :player_name
 """)
 
+CAST_TIMELINE = text("""
+    SELECT ce.player_name, ce.timestamp_ms, ce.spell_id,
+           ce.ability_name, ce.event_type, ce.target_name
+    FROM cast_events ce
+    JOIN fights f ON ce.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND ce.player_name = :player_name
+    ORDER BY ce.timestamp_ms ASC
+""")
+
 CONSUMABLE_CHECK = text("""
     SELECT bu.ability_name, bu.spell_id, bu.uptime_pct
     FROM buff_uptimes bu
@@ -568,4 +579,94 @@ CONSUMABLE_CHECK = text("""
       AND bu.player_name = :player_name
       AND bu.metric_type = 'buff'
     ORDER BY bu.uptime_pct DESC
+""")
+
+RESOURCE_USAGE = text("""
+    SELECT rs.player_name, rs.resource_type,
+           rs.min_value, rs.max_value, rs.avg_value,
+           rs.time_at_zero_ms, rs.time_at_zero_pct,
+           rs.samples_json
+    FROM resource_snapshots rs
+    JOIN fights f ON rs.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND rs.player_name = :player_name
+""")
+
+COOLDOWN_WINDOWS = text("""
+    SELECT cw.player_name, cw.ability_name, cw.spell_id,
+           cw.window_start_ms, cw.window_end_ms,
+           cw.window_damage, cw.window_dps,
+           cw.baseline_dps, cw.dps_gain_pct
+    FROM cooldown_windows cw
+    JOIN fights f ON cw.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND cw.player_name = :player_name
+    ORDER BY cw.window_start_ms ASC
+""")
+
+PHASE_BREAKDOWN = text("""
+    SELECT pm.player_name, pm.phase_name, pm.phase_start_ms,
+           pm.phase_end_ms, pm.is_downtime, pm.phase_dps,
+           pm.phase_casts, pm.phase_gcd_uptime_pct
+    FROM phase_metrics pm
+    JOIN fights f ON pm.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND pm.player_name = :player_name
+    ORDER BY pm.phase_start_ms ASC
+""")
+
+DOT_REFRESH_ANALYSIS = text("""
+    SELECT dr.player_name, dr.spell_id, dr.ability_name,
+           dr.total_refreshes, dr.early_refreshes, dr.early_refresh_pct,
+           dr.avg_remaining_ms, dr.clipped_ticks_est
+    FROM dot_refreshes dr
+    JOIN fights f ON dr.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND dr.player_name = :player_name
+    ORDER BY dr.early_refreshes DESC
+""")
+
+ROTATION_SCORE = text("""
+    SELECT rs.player_name, rs.spec, rs.score_pct,
+           rs.rules_checked, rs.rules_passed, rs.violations_json
+    FROM rotation_scores rs
+    JOIN fights f ON rs.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND rs.player_name = :player_name
+""")
+
+TRINKET_PROCS = text("""
+    SELECT bu.player_name, bu.ability_name, bu.spell_id,
+           bu.uptime_pct, bu.stack_count
+    FROM buff_uptimes bu
+    JOIN fights f ON bu.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND bu.player_name = :player_name
+      AND bu.spell_id = ANY(:trinket_ids)
+    ORDER BY bu.uptime_pct DESC
+""")
+
+RAID_BUFF_COVERAGE = text("""
+    SELECT bu.ability_name, bu.spell_id,
+           COUNT(DISTINCT bu.player_name) AS players_with_buff,
+           ROUND(AVG(bu.uptime_pct)::numeric, 1) AS avg_uptime_pct,
+           (SELECT COUNT(DISTINCT fp.player_name)
+            FROM fight_performances fp
+            JOIN fights f2 ON fp.fight_id = f2.id
+            WHERE f2.report_code = :report_code
+              AND f2.fight_id = :fight_id) AS total_players
+    FROM buff_uptimes bu
+    JOIN fights f ON bu.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND bu.metric_type = 'buff'
+      AND bu.spell_id = ANY(:buff_ids)
+    GROUP BY bu.ability_name, bu.spell_id
+    ORDER BY players_with_buff DESC
 """)

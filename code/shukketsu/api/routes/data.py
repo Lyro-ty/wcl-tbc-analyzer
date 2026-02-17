@@ -10,6 +10,7 @@ from shukketsu.api.models import (
     AbilityMetricResponse,
     BuffUptimeResponse,
     CancelledCastResponse,
+    CastEventResponse,
     CastMetricResponse,
     CharacterFightSummary,
     CharacterInfo,
@@ -19,9 +20,11 @@ from shukketsu.api.models import (
     ConsumableCheckResponse,
     ConsumableEntry,
     CooldownUsageResponse,
+    CooldownWindowResponse,
     DashboardStats,
     DeathDetailResponse,
     DeathEntry,
+    DotRefreshResponse,
     EncounterInfo,
     EventDataResponse,
     EventsAvailableResponse,
@@ -31,6 +34,7 @@ from shukketsu.api.models import (
     IngestResponse,
     OverhealAbility,
     OverhealResponse,
+    PhaseMetricResponse,
     ProgressionPoint,
     RaidComparison,
     RaidSummaryFight,
@@ -38,9 +42,12 @@ from shukketsu.api.models import (
     RecentReportSummary,
     RegisterCharacterRequest,
     ReportSummary,
+    ResourceSnapshotResponse,
+    RotationScoreResponse,
     SpecLeaderboardEntry,
     SpeedComparison,
     TableDataResponse,
+    TrinketProcResponse,
 )
 from shukketsu.db import queries as q
 
@@ -808,6 +815,64 @@ async def fight_cooldowns(report_code: str, fight_id: int, player: str):
 
 
 @router.get(
+    "/reports/{report_code}/fights/{fight_id}/cooldown-windows/{player}",
+    response_model=list[CooldownWindowResponse],
+)
+async def fight_cooldown_windows(
+    report_code: str, fight_id: int, player: str,
+):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.COOLDOWN_WINDOWS,
+            {
+                "report_code": report_code,
+                "fight_id": fight_id,
+                "player_name": player,
+            },
+        )
+        rows = result.fetchall()
+        return [
+            CooldownWindowResponse(**dict(r._mapping))
+            for r in rows
+        ]
+    except Exception as e:
+        logger.exception("Failed to get cooldown windows")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/resources/{player}",
+    response_model=list[ResourceSnapshotResponse],
+)
+async def fight_resources(
+    report_code: str, fight_id: int, player: str,
+):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.RESOURCE_USAGE,
+            {
+                "report_code": report_code,
+                "fight_id": fight_id,
+                "player_name": player,
+            },
+        )
+        rows = result.fetchall()
+        return [
+            ResourceSnapshotResponse(**dict(r._mapping))
+            for r in rows
+        ]
+    except Exception as e:
+        logger.exception("Failed to get resource data")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
     "/reports/{report_code}/fights/{fight_id}/consumables/{player}",
     response_model=ConsumableCheckResponse,
 )
@@ -954,6 +1019,63 @@ async def fight_cancelled_casts(report_code: str, fight_id: int, player: str):
 
 
 @router.get(
+    "/reports/{report_code}/fights/{fight_id}/cast-timeline/{player}",
+    response_model=list[CastEventResponse],
+)
+async def fight_cast_timeline(
+    report_code: str, fight_id: int, player: str,
+):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.CAST_TIMELINE,
+            {
+                "report_code": report_code,
+                "fight_id": fight_id,
+                "player_name": player,
+            },
+        )
+        rows = result.fetchall()
+        return [
+            CastEventResponse(**dict(r._mapping)) for r in rows
+        ]
+    except Exception as e:
+        logger.exception("Failed to get cast timeline")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/phases/{player}",
+    response_model=list[PhaseMetricResponse],
+)
+async def fight_phases(
+    report_code: str, fight_id: int, player: str,
+):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.PHASE_BREAKDOWN,
+            {
+                "report_code": report_code,
+                "fight_id": fight_id,
+                "player_name": player,
+            },
+        )
+        rows = result.fetchall()
+        return [
+            PhaseMetricResponse(**dict(r._mapping))
+            for r in rows
+        ]
+    except Exception as e:
+        logger.exception("Failed to get phase metrics")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
     "/reports/{report_code}/events-available",
     response_model=EventsAvailableResponse,
 )
@@ -1039,6 +1161,114 @@ async def dashboard_recent():
         return [RecentReportSummary(**dict(r._mapping)) for r in rows]
     except Exception as e:
         logger.exception("Failed to get recent reports")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/dot-refreshes/{player}",
+    response_model=list[DotRefreshResponse],
+)
+async def fight_dot_refreshes(
+    report_code: str, fight_id: int, player: str,
+):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.DOT_REFRESH_ANALYSIS,
+            {
+                "report_code": report_code,
+                "fight_id": fight_id,
+                "player_name": player,
+            },
+        )
+        rows = result.fetchall()
+        return [
+            DotRefreshResponse(**dict(r._mapping))
+            for r in rows
+        ]
+    except Exception as e:
+        logger.exception("Failed to get DoT refresh data")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/rotation/{player}",
+    response_model=RotationScoreResponse | None,
+)
+async def fight_rotation_score(
+    report_code: str, fight_id: int, player: str,
+):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.ROTATION_SCORE,
+            {
+                "report_code": report_code,
+                "fight_id": fight_id,
+                "player_name": player,
+            },
+        )
+        row = result.fetchone()
+        if not row:
+            return None
+        return RotationScoreResponse(**dict(row._mapping))
+    except Exception as e:
+        logger.exception("Failed to get rotation score")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/trinkets/{player}",
+    response_model=list[TrinketProcResponse],
+)
+async def fight_trinket_procs(
+    report_code: str, fight_id: int, player: str,
+):
+    from shukketsu.pipeline.constants import CLASSIC_TRINKETS, TRINKET_SPELL_IDS
+
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.TRINKET_PROCS,
+            {
+                "report_code": report_code,
+                "fight_id": fight_id,
+                "player_name": player,
+                "trinket_ids": list(TRINKET_SPELL_IDS),
+            },
+        )
+        rows = result.fetchall()
+        expected = {t.spell_id: t for t in CLASSIC_TRINKETS}
+        responses = []
+        for row in rows:
+            trinket = expected.get(row.spell_id)
+            exp_uptime = trinket.expected_uptime_pct if trinket else 0
+            name = trinket.name if trinket else row.ability_name
+            if exp_uptime > 0 and row.uptime_pct >= exp_uptime:
+                grade = "GOOD"
+            elif exp_uptime > 0 and row.uptime_pct >= exp_uptime * 0.6:
+                grade = "OK"
+            elif exp_uptime > 0:
+                grade = "LOW"
+            else:
+                grade = "UNKNOWN"
+            responses.append(TrinketProcResponse(
+                player_name=row.player_name,
+                trinket_name=name,
+                spell_id=row.spell_id,
+                uptime_pct=row.uptime_pct,
+                expected_uptime_pct=exp_uptime,
+                grade=grade,
+            ))
+        return responses
+    except Exception as e:
+        logger.exception("Failed to get trinket proc data")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

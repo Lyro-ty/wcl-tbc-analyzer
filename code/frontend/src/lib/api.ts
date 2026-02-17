@@ -3,6 +3,7 @@ import type {
   AbilityMetric,
   AnalyzeResponse,
   BuffUptime,
+  CastEventEntry,
   CastMetricSummary,
   CharacterFightSummary,
   CharacterInfo,
@@ -196,8 +197,20 @@ export async function fetchCooldownUsage(code: string, fightId: number, player: 
   return fetchJson(`/api/data/reports/${code}/fights/${fightId}/cooldowns/${encodeURIComponent(player)}`)
 }
 
+export async function fetchResourceUsage(code: string, fightId: number, player: string): Promise<import('./types').ResourceSnapshot[]> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/resources/${encodeURIComponent(player)}`)
+}
+
+export async function fetchCooldownWindows(code: string, fightId: number, player: string): Promise<import('./types').CooldownWindowEntry[]> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/cooldown-windows/${encodeURIComponent(player)}`)
+}
+
 export async function fetchCancelledCasts(code: string, fightId: number, player: string): Promise<import('./types').CancelledCastSummary | null> {
   return fetchJson(`/api/data/reports/${code}/fights/${fightId}/cancelled-casts/${encodeURIComponent(player)}`)
+}
+
+export async function fetchCastTimeline(code: string, fightId: number, player: string): Promise<CastEventEntry[]> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/cast-timeline/${encodeURIComponent(player)}`)
 }
 
 export async function fetchOverhealAnalysis(code: string, fightId: number, player: string): Promise<import('./types').OverhealSummary> {
@@ -282,6 +295,30 @@ export async function getCharacterProfile(name: string): Promise<import('./types
 
 export async function getCharacterRecentParses(name: string): Promise<import('./types').CharacterRecentParse[]> {
   return fetchJson(`/api/data/characters/${encodeURIComponent(name)}/recent-parses`)
+}
+
+export async function fetchPhaseMetrics(code: string, fightId: number, player: string): Promise<import('./types').PhaseMetricEntry[]> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/phases/${encodeURIComponent(player)}`)
+}
+
+export async function fetchDotRefreshes(
+  code: string, fightId: number, player: string,
+): Promise<import('./types').DotRefreshEntry[]> {
+  return fetchJson(
+    `/api/data/reports/${code}/fights/${fightId}/dot-refreshes/${encodeURIComponent(player)}`,
+  )
+}
+
+export async function fetchRotationScore(
+  code: string, fightId: number, player: string,
+): Promise<import('./types').RotationScoreEntry | null> {
+  return fetchJson(
+    `/api/data/reports/${code}/fights/${fightId}/rotation/${encodeURIComponent(player)}`,
+  )
+}
+
+export async function fetchTrinketProcs(code: string, fightId: number, player: string): Promise<import('./types').TrinketProc[]> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/trinkets/${encodeURIComponent(player)}`)
 }
 
 export async function getDashboardStats(): Promise<import('./types').DashboardStats> {
