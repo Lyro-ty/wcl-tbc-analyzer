@@ -22,6 +22,18 @@ router = APIRouter(prefix="/api", tags=["analysis"])
 # Graph instance, set during app startup
 _compiled_graph = None
 
+# Langfuse handler, set during app startup (optional)
+_langfuse_handler = None
+
+
+def set_langfuse_handler(handler) -> None:
+    global _langfuse_handler
+    _langfuse_handler = handler
+
+
+def _get_langfuse_handler():
+    return _langfuse_handler
+
 
 class AnalyzeRequest(BaseModel):
     question: str
@@ -48,8 +60,13 @@ async def analyze(request: AnalyzeRequest):
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
     try:
+        config = {}
+        handler = _get_langfuse_handler()
+        if handler:
+            config["callbacks"] = [handler]
         result = await graph.ainvoke(
-            {"messages": [HumanMessage(content=request.question)]}
+            {"messages": [HumanMessage(content=request.question)]},
+            config=config,
         )
     except Exception as exc:
         logger.exception("Agent invocation failed")
@@ -79,9 +96,14 @@ async def analyze_stream(request: AnalyzeRequest):
         query_type = None
 
         try:
+            config = {}
+            handler = _get_langfuse_handler()
+            if handler:
+                config["callbacks"] = [handler]
             async for chunk, metadata in graph.astream(
                 {"messages": [HumanMessage(content=request.question)]},
                 stream_mode="messages",
+                config=config,
             ):
                 # Track query_type from state updates
                 if isinstance(metadata, dict):
