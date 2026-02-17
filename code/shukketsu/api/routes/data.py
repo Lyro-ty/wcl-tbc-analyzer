@@ -34,6 +34,9 @@ from shukketsu.api.models import (
     OverhealAbility,
     OverhealResponse,
     PersonalBestEntry,
+    PhaseAnalysis,
+    PhaseInfo,
+    PhasePlayerPerformance,
     ProgressionPoint,
     RaidComparison,
     RaidNightSummary,
@@ -1208,9 +1211,86 @@ async def get_regressions_endpoint(player: str | None = None):
         await session.close()
 
 
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/phases",
+    response_model=PhaseAnalysis,
+)
+async def fight_phases(report_code: str, fight_id: int):
+    """Get phase breakdown for a specific fight."""
+    from shukketsu.pipeline.constants import ENCOUNTER_PHASES, PhaseDef
+
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.PHASE_BREAKDOWN,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": None},
+        )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No data for fight {fight_id} in report {report_code}",
+            )
+
+        first = rows[0]
+        encounter_name = first.encounter_name
+        duration_ms = first.duration_ms
+
+        # Look up phase definitions
+        phases = ENCOUNTER_PHASES.get(encounter_name, [
+            PhaseDef("Full Fight", 0.0, 1.0, "No phase data available"),
+        ])
+
+        phase_infos = []
+        for phase in phases:
+            est_start = int(duration_ms * phase.pct_start)
+            est_end = int(duration_ms * phase.pct_end)
+            phase_infos.append(PhaseInfo(
+                name=phase.name,
+                pct_start=phase.pct_start,
+                pct_end=phase.pct_end,
+                estimated_start_ms=est_start,
+                estimated_end_ms=est_end,
+                estimated_duration_ms=est_end - est_start,
+                description=phase.description,
+            ))
+
+        players = []
+        for r in rows:
+            players.append(PhasePlayerPerformance(
+                player_name=r.player_name,
+                player_class=r.player_class,
+                player_spec=r.player_spec,
+                dps=r.dps,
+                total_damage=r.total_damage,
+                hps=r.hps,
+                total_healing=r.total_healing,
+                deaths=r.deaths,
+                parse_percentile=r.parse_percentile,
+            ))
+
+        return PhaseAnalysis(
+            report_code=report_code,
+            fight_id=fight_id,
+            encounter_name=encounter_name,
+            duration_ms=duration_ms,
+            kill=first.kill,
+            phases=phase_infos,
+            players=players,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get phase breakdown")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
 @router.get("/reports/{report_code}/night-summary")
 async def night_summary(
-    report_code: str, format: str | None = None,
+    report_code: str, output_format: str | None = None,
 ):
     """Generate a post-raid night summary for a report.
 
@@ -1268,7 +1348,7 @@ async def night_summary(
             wow_data=wow_data, player_deltas=player_deltas,
         )
 
-        if format == "discord":
+        if output_format == "discord":
             from fastapi.responses import PlainTextResponse
 
             from shukketsu.pipeline.discord_format import (
