@@ -6,6 +6,7 @@ from sqlalchemy import (
     Computed,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -71,6 +72,8 @@ class Fight(Base):
     __tablename__ = "fights"
     __table_args__ = (
         UniqueConstraint("report_code", "fight_id"),
+        Index("ix_fights_report_code", "report_code"),
+        Index("ix_fights_encounter_id", "encounter_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -92,6 +95,11 @@ class Fight(Base):
 
 class FightPerformance(Base):
     __tablename__ = "fight_performances"
+    __table_args__ = (
+        Index("ix_fight_performances_fight_id", "fight_id"),
+        Index("ix_fight_performances_player_name", "player_name"),
+        Index("ix_fight_performances_class_spec", "player_class", "player_spec"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
@@ -117,6 +125,9 @@ class FightPerformance(Base):
 
 class TopRanking(Base):
     __tablename__ = "top_rankings"
+    __table_args__ = (
+        Index("ix_top_rankings_encounter_class_spec", "encounter_id", "class", "spec"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id"))
