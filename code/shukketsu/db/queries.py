@@ -896,3 +896,49 @@ RESOURCE_USAGE = text("""
       AND rs.player_name = :player_name
 """)
 
+EVENT_DATA_EXISTS = text("""
+    SELECT (
+        EXISTS(
+            SELECT 1 FROM death_details dd
+            JOIN fights f ON dd.fight_id = f.id
+            WHERE f.report_code = :report_code
+        ) OR EXISTS(
+            SELECT 1 FROM cast_metrics cm
+            JOIN fights f ON cm.fight_id = f.id
+            WHERE f.report_code = :report_code
+        ) OR EXISTS(
+            SELECT 1 FROM resource_snapshots rs
+            JOIN fights f ON rs.fight_id = f.id
+            WHERE f.report_code = :report_code
+        )
+    ) AS has_data
+""")
+
+CAST_TIMELINE = text("""
+    SELECT ce.player_name, ce.timestamp_ms, ce.spell_id,
+           ce.ability_name, ce.event_type, ce.target_name
+    FROM cast_events ce
+    JOIN fights f ON ce.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND ce.player_name = :player_name
+    ORDER BY ce.timestamp_ms ASC
+""")
+
+COOLDOWN_WINDOWS = text("""
+    SELECT cu.player_name, cu.ability_name, cu.spell_id,
+           cu.cooldown_sec, cu.times_used, cu.max_possible_uses,
+           cu.first_use_ms, cu.last_use_ms, cu.efficiency_pct,
+           fp.dps AS baseline_dps, fp.total_damage,
+           (f.end_time - f.start_time) AS fight_duration_ms
+    FROM cooldown_usage cu
+    JOIN fights f ON cu.fight_id = f.id
+    JOIN fight_performances fp
+        ON fp.fight_id = f.id AND fp.player_name = cu.player_name
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND cu.player_name = :player_name
+      AND cu.times_used > 0
+    ORDER BY cu.first_use_ms ASC NULLS LAST
+""")
+

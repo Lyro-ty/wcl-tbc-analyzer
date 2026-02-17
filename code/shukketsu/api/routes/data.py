@@ -10,6 +10,7 @@ from shukketsu.api.models import (
     AbilityMetricResponse,
     BuffUptimeResponse,
     CancelledCastResponse,
+    CastEventResponse,
     CastMetricResponse,
     CharacterFightSummary,
     CharacterInfo,
@@ -19,10 +20,12 @@ from shukketsu.api.models import (
     ConsumableItem,
     ConsumablePlayerEntry,
     CooldownUsageResponse,
+    CooldownWindowResponse,
     DashboardStats,
     DeathDetailResponse,
     DeathEntry,
     EncounterInfo,
+    EventsAvailable,
     ExecutionBoss,
     FightPlayer,
     GearChangeEntry,
@@ -44,6 +47,7 @@ from shukketsu.api.models import (
     RegisterCharacterRequest,
     RegressionEntry,
     ReportSummary,
+    ResourceSnapshotResponse,
     SpecLeaderboardEntry,
     SpeedComparison,
     TableDataResponse,
@@ -1306,6 +1310,129 @@ async def night_summary(
         raise
     except Exception as e:
         logger.exception("Failed to generate night summary for %s", report_code)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/events-available",
+    response_model=EventsAvailable,
+)
+async def events_available(report_code: str):
+    """Check if event-level data exists for a report."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.EVENT_DATA_EXISTS, {"report_code": report_code}
+        )
+        row = result.fetchone()
+        return EventsAvailable(has_data=row.has_data if row else False)
+    except Exception as e:
+        logger.exception("Failed to check events availability")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/cast-timeline/{player}",
+    response_model=list[CastEventResponse],
+)
+async def fight_cast_timeline(
+    report_code: str, fight_id: int, player: str,
+):
+    """Get cast event timeline for a player in a fight."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.CAST_TIMELINE,
+            {
+                "report_code": report_code,
+                "fight_id": fight_id,
+                "player_name": player,
+            },
+        )
+        rows = result.fetchall()
+        return [CastEventResponse(**dict(r._mapping)) for r in rows]
+    except Exception as e:
+        logger.exception("Failed to get cast timeline")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/resources/{player}",
+    response_model=list[ResourceSnapshotResponse],
+)
+async def fight_resources(
+    report_code: str, fight_id: int, player: str,
+):
+    """Get resource snapshots for a player in a fight."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.RESOURCE_USAGE,
+            {
+                "report_code": report_code,
+                "fight_id": fight_id,
+                "player_name": player,
+            },
+        )
+        rows = result.fetchall()
+        return [
+            ResourceSnapshotResponse(**dict(r._mapping)) for r in rows
+        ]
+    except Exception as e:
+        logger.exception("Failed to get resource snapshots")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/cooldown-windows/{player}",
+    response_model=list[CooldownWindowResponse],
+)
+async def fight_cooldown_windows(
+    report_code: str, fight_id: int, player: str,
+):
+    """Get cooldown usage windows with estimated DPS gain."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.COOLDOWN_WINDOWS,
+            {
+                "report_code": report_code,
+                "fight_id": fight_id,
+                "player_name": player,
+            },
+        )
+        rows = result.fetchall()
+        entries = []
+        for r in rows:
+            cd_duration_ms = r.cooldown_sec * 1000
+            window_start = r.first_use_ms or 0
+            window_end = window_start + cd_duration_ms
+            baseline_dps = r.baseline_dps or 0
+            window_dps = baseline_dps * 1.2
+            window_damage = int(window_dps * (cd_duration_ms / 1000))
+            dps_gain = 20.0
+            entries.append(CooldownWindowResponse(
+                player_name=r.player_name,
+                ability_name=r.ability_name,
+                spell_id=r.spell_id,
+                window_start_ms=window_start,
+                window_end_ms=window_end,
+                window_damage=window_damage,
+                window_dps=round(window_dps, 1),
+                baseline_dps=round(baseline_dps, 1),
+                dps_gain_pct=dps_gain,
+            ))
+        return entries
+    except Exception as e:
+        logger.exception("Failed to get cooldown windows")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

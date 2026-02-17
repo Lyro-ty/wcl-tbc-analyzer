@@ -479,3 +479,39 @@ class RaidNightSummary(BaseModel):
     clear_time_delta_ms: int | None
     kills_delta: int | None
     avg_parse_delta: float | None
+
+
+class EventsAvailable(BaseModel):
+    has_data: bool
+
+
+class CastEventResponse(BaseModel):
+    player_name: str
+    timestamp_ms: int
+    spell_id: int
+    ability_name: str
+    event_type: str
+    target_name: str | None
+
+
+class ResourceSnapshotResponse(BaseModel):
+    player_name: str
+    resource_type: str
+    min_value: int
+    max_value: int
+    avg_value: float
+    time_at_zero_ms: int
+    time_at_zero_pct: float
+    samples_json: str | None
+
+
+class CooldownWindowResponse(BaseModel):
+    player_name: str
+    ability_name: str
+    spell_id: int
+    window_start_ms: int
+    window_end_ms: int
+    window_damage: int
+    window_dps: float
+    baseline_dps: float
+    dps_gain_pct: float
