@@ -31,6 +31,70 @@ export async function postAnalyze(question: string): Promise<AnalyzeResponse> {
   })
 }
 
+export function postAnalyzeStream(
+  question: string,
+  onToken: (token: string) => void,
+  onDone: (queryType: string | null) => void,
+  onError: (message: string) => void,
+): AbortController {
+  const controller = new AbortController()
+
+  ;(async () => {
+    try {
+      const res = await fetch('/api/analyze/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+        signal: controller.signal,
+      })
+
+      if (!res.ok) {
+        const detail = await res.text().catch(() => res.statusText)
+        onError(`${res.status}: ${detail}`)
+        return
+      }
+
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let partial = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        partial += decoder.decode(value, { stream: true })
+        const lines = partial.split('\n')
+        partial = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue
+          const raw = line.slice(5).trim()
+          if (!raw) continue
+
+          try {
+            const event = JSON.parse(raw)
+            if (event.token) {
+              onToken(event.token)
+            } else if (event.done) {
+              onDone(event.query_type ?? null)
+            } else if (event.detail) {
+              onError(event.detail)
+            }
+          } catch {
+            // skip malformed SSE lines
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        onError(err instanceof Error ? err.message : 'Stream failed')
+      }
+    }
+  })()
+
+  return controller
+}
+
 export async function getReports(): Promise<ReportSummary[]> {
   return fetchJson('/api/data/reports')
 }
