@@ -17,22 +17,6 @@ query ZoneRankings($encounterID: Int!, $className: String, $specName: String,
 }
 """
 
-TOP_ENCOUNTER_RANKINGS = """
-query TopEncounterRankings($encounterID: Int!, $className: String, $specName: String,
-                           $metric: CharacterRankingMetricType) {
-    worldData {
-        encounter(id: $encounterID) {
-            characterRankings(
-                className: $className,
-                specName: $specName,
-                metric: $metric,
-                page: 1
-            )
-        }
-    }
-    RATE_LIMIT
-}
-"""
 
 REPORT_FIGHTS = """
 query ReportFights($code: String!) {

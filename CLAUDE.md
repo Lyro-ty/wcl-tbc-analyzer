@@ -53,21 +53,25 @@ code/
 │   │   └── client.py       # GraphQL HTTP client (tenacity retry on 429/5xx)
 │   ├── db/                 # Database layer
 │   │   ├── engine.py       # Async engine + session factory
-│   │   ├── models.py       # SQLAlchemy ORM models (8 tables)
-│   │   └── queries.py      # Analytical SQL queries for agent tools (12 queries)
+│   │   ├── models.py       # SQLAlchemy ORM models (18 tables)
+│   │   └── queries.py      # Analytical SQL queries for agent tools (~50 queries)
 │   ├── pipeline/           # Data transformation
-│   │   ├── ingest.py       # WCL response → DB rows (delete-then-insert, supports --with-tables)
+│   │   ├── ingest.py       # WCL response → DB rows (delete-then-insert, supports --with-tables/--with-events)
 │   │   ├── normalize.py    # Fight normalization (DPS/HPS calc, boss detection)
 │   │   ├── characters.py   # Character registration + retroactive fight_performances marking
-│   │   ├── constants.py    # Class/spec/zone data (TBC_SPECS, TBC_ZONES, FRESH_ZONES, ALL_BOSS_NAMES)
+│   │   ├── constants.py    # Class/spec/zone data, cooldowns, DoTs, trinkets, phase definitions
 │   │   ├── progression.py  # Snapshot computation (best/median parse/DPS via statistics.median)
 │   │   ├── rankings.py     # Top rankings ingestion (delete-then-insert, staleness checks)
 │   │   ├── seeds.py        # Encounter seed data (upsert from WCL API or manual list)
 │   │   ├── speed_rankings.py # Speed (kill time) rankings ingestion from fightRankings API
-│   │   └── table_data.py   # WCL table() API → ability_metrics + buff_uptimes (per-fight)
+│   │   ├── table_data.py   # WCL table() API → ability_metrics + buff_uptimes (per-fight)
+│   │   ├── combatant_info.py # WCL CombatantInfo events → fight_consumables + gear_snapshots
+│   │   ├── death_events.py  # WCL Death events → death_details (per-fight)
+│   │   ├── cast_events.py   # WCL Cast events → cast_events + cast_metrics + cooldown_usage + cancelled_casts
+│   │   └── resource_events.py # WCL Resource events → resource_snapshots (per-fight)
 │   ├── agent/              # LangGraph agent
 │   │   ├── llm.py          # LLM client (ChatOpenAI pointing at ollama)
-│   │   ├── tools.py        # 12 SQL query tools (@tool decorated)
+│   │   ├── tools.py        # 29 SQL query tools (@tool decorated)
 │   │   ├── state.py        # AnalyzerState (extends MessagesState)
 │   │   ├── prompts.py      # System prompts and templates
 │   │   └── graph.py        # CRAG state graph (6 nodes, MAX_RETRIES=2)
@@ -118,50 +122,80 @@ Tools use a **module-level global** pattern — no DI framework:
 4. All tools catch `Exception` and return `"Error retrieving data: {e}"` instead of propagating tracebacks
 5. The compiled graph and its tools are also injected into the analyze route via `set_graph()`
 
-## Agent tools (14 total)
+## Agent tools (29 total)
 
 ### Player/encounter-level tools
 | Tool | Purpose |
 |------|---------|
-| `get_my_performance` | Player's recent performance on an encounter |
+| `get_my_performance` | Player's recent performance on an encounter (set `bests_only=True` for personal records) |
 | `get_top_rankings` | Top N rankings for encounter+class+spec |
 | `compare_to_top` | Side-by-side: player vs top 10 average |
 | `get_fight_details` | All player performances in a specific fight |
 | `get_progression` | Time-series progression for a character |
 | `get_deaths_and_mechanics` | Death/interrupt/dispel analysis |
-| `get_raid_summary` | Overview of all fights in a report |
 | `search_fights` | Search fights by encounter name |
 | `get_spec_leaderboard` | Cross-spec DPS leaderboard for an encounter |
+| `resolve_my_fights` | Find recent fights for tracked characters (optional encounter filter) |
+| `get_wipe_progression` | Attempt-by-attempt wipe-to-kill progression |
+| `get_regressions` | Performance regression/improvement detection for farm bosses |
 
 ### Raid-level comparison tools
 | Tool | Purpose |
 |------|---------|
 | `compare_raid_to_top` | Compare full raid speed/execution to WCL global top kills |
 | `compare_two_raids` | Side-by-side comparison of two raid reports |
-| `get_raid_execution` | Detailed execution quality analysis for a raid |
+| `get_raid_execution` | Raid overview + execution quality analysis (deaths, interrupts, DPS, parse) |
 
-### Ability/buff analysis tools
+### Ability/buff analysis tools (require `--with-tables`)
 | Tool | Purpose |
 |------|---------|
 | `get_ability_breakdown` | Per-ability damage/healing breakdown for a player in a fight |
 | `get_buff_analysis` | Buff/debuff uptimes for a player in a fight |
+| `get_overheal_analysis` | Per-ability overhealing breakdown for healers |
+| `get_trinket_performance` | Trinket proc uptime vs expected for known trinkets |
 
-These tools require table data to be ingested (via `--with-tables` or `pull-table-data`).
+### Event-level analysis tools (require `--with-events`)
+| Tool | Purpose |
+|------|---------|
+| `get_death_analysis` | Detailed death recap with killing blow and damage sequence |
+| `get_activity_report` | GCD uptime / ABC analysis (casts/min, gaps, downtime) |
+| `get_cooldown_efficiency` | Major cooldown usage efficiency per ability |
+| `get_cooldown_windows` | DPS during burst cooldown windows vs baseline |
+| `get_cancelled_casts` | Cast cancel rate analysis (begincast vs cast) |
+| `get_consumable_check` | Consumable preparation audit (flasks, food, oils) |
+| `get_resource_usage` | Mana/rage/energy usage analysis (min/max/avg, time at zero) |
+| `get_dot_management` | DoT refresh timing analysis (early refreshes, clipped ticks) |
+| `get_rotation_score` | Rule-based rotation quality score (GCD uptime, CPM, CD efficiency) |
+| `get_gear_changes` | Gear comparison between two raids (slot-by-slot ilvl delta) |
+| `get_phase_analysis` | Per-phase fight breakdown with player performance |
 
 Tools are in `code/shukketsu/agent/tools.py`, SQL queries (raw `text()` with named params, PostgreSQL-specific) in `code/shukketsu/db/queries.py`.
 
-## Database schema (10 tables)
+## Database schema (18 tables)
 
+### Core tables
 - `encounters` — WCL encounter definitions (PK: WCL encounter ID, not auto-increment)
 - `my_characters` — tracked player characters (unique: name+server+region)
 - `reports` — WCL report metadata (PK: code)
 - `fights` — individual boss fights (computed `duration_ms` at DB level, FK to encounters+reports)
 - `fight_performances` — per-player fight metrics (DPS, HPS, parse%, deaths, interrupts, dispels; `is_my_character` flag)
 - `top_rankings` — top player rankings per encounter/class/spec
-- `speed_rankings` — top 100 fastest kills per encounter (from WCL `fightRankings` API, indexed on `encounter_id, rank_position`)
+- `speed_rankings` — top 100 fastest kills per encounter (from WCL `fightRankings` API)
 - `progression_snapshots` — time-series character progression data
-- `ability_metrics` — per-player per-fight ability breakdowns (damage/healing by spell, indexed on `fight_id, player_name` and `spell_id, metric_type`)
-- `buff_uptimes` — per-player per-fight buff/debuff uptimes (indexed on `fight_id, player_name`)
+
+### Table-data tables (populated via `--with-tables`)
+- `ability_metrics` — per-player per-fight ability breakdowns (damage/healing by spell)
+- `buff_uptimes` — per-player per-fight buff/debuff uptimes
+
+### Event-data tables (populated via `--with-events`)
+- `death_details` — detailed death recaps per player per fight (killing blow, damage sequence)
+- `cast_events` — individual cast events (timestamp, spell, target) for timeline analysis
+- `cast_metrics` — derived GCD uptime, CPM, gap analysis per player per fight
+- `cooldown_usage` — cooldown efficiency tracking (times used vs max possible)
+- `cancelled_casts` — cast cancel rate analysis per player per fight
+- `resource_snapshots` — mana/rage/energy tracking (min/max/avg, time at zero)
+- `fight_consumables` — consumable buffs active per player per fight
+- `gear_snapshots` — per-slot gear snapshots from CombatantInfo events
 
 **Key DB patterns:**
 - `session.merge()` used for idempotent upserts (encounters, reports, snapshots, characters)
@@ -255,6 +289,11 @@ curl -X POST http://localhost:8000/api/analyze \
 - **top_rankings table:** Only populated via `pull-rankings` script, not from report ingestion.
 - **speed_rankings table:** Only populated via `pull-speed-rankings` script, not from report ingestion.
 - **ability_metrics/buff_uptimes tables:** Only populated when `--with-tables` flag is used with `pull-my-logs` or via `pull-table-data` backfill.
+- **Event tables:** `death_details`, `cast_events`, `cast_metrics`, `cooldown_usage`, `cancelled_casts`, `resource_snapshots` only populated when `--with-events` flag is used.
+- **Rotation scoring:** Currently uses 3 universal rules (GCD uptime, CPM, CD efficiency). Spec-specific rules not yet implemented.
+- **DoT refresh analysis:** Only covers Warlock, Shadow Priest, and Balance Druid DoTs.
+- **Trinket tracking:** Limited to 10 known Classic/TBC trinkets. Expand `CLASSIC_TRINKETS` for more coverage.
+- **Cooldown windows:** DPS gain during burst windows is estimated (20% boost), not computed from actual damage events.
 
 ## Resolved issues
 
@@ -262,7 +301,7 @@ curl -X POST http://localhost:8000/api/analyze \
 - **429 rate limits:** `WCLClient.query()` has a `tenacity` retry decorator (exponential backoff, 5 attempts) for 429, 502/503/504, connection errors, and read timeouts.
 - **Grader blindness:** `_format_messages()` in `graph.py` now includes `ToolMessage` content so the grader can see DB query results.
 - **Ingest idempotency:** `ingest_report()` uses delete-then-insert for fights+performances, `session.merge()` for reports — safe to re-ingest the same report.
-- **Tool error handling:** All 12 agent tools catch exceptions and return friendly error strings instead of propagating tracebacks to the LLM.
+- **Tool error handling:** All 29 agent tools catch exceptions and return friendly error strings instead of propagating tracebacks to the LLM.
 - **Missing indexes:** Migration 003 adds indexes on `fight_performances(fight_id, player_name, class+spec)`, `fights(report_code, encounter_id)`, and `top_rankings(encounter_id, class, spec)`.
 - **Think tags in agent nodes:** `_strip_think_tags()` now applied in both `route_query` and `grade_results` graph nodes, not just the API response.
 - **Tool arg case normalization:** `_normalize_tool_args()` in `graph.py` converts Nemotron's PascalCase tool argument keys to snake_case.
@@ -276,6 +315,11 @@ curl -X POST http://localhost:8000/api/analyze \
 - **No event-level data:** WCL `table()` API now ingested into `ability_metrics` and `buff_uptimes` tables. Provides per-ability damage/healing breakdowns and buff/debuff uptimes. Agent tools `get_ability_breakdown` and `get_buff_analysis` expose this to Nemotron. Frontend `PlayerFightPage` renders interactive charts.
 - **Context window truncation:** ollama `num_ctx` now explicitly set to 32768 via `LLM__NUM_CTX` config. Previously defaulted to 2048, causing silent context truncation.
 - **No observability:** Langfuse `CallbackHandler` traces all LLM calls, tool executions, and CRAG loop iterations. Self-hosted via `docker-compose.langfuse.yml`. Toggleable via `LANGFUSE__ENABLED`.
+- **Missing event pipeline:** WCL `events()` API now ingested via `--with-events` flag. Death recaps, cast timelines, GCD metrics, cooldown tracking, cancel rates, and resource snapshots all populated. Three new pipeline modules: `death_events.py`, `cast_events.py`, `resource_events.py`.
+- **Phantom agent prompt sections:** Sections 9-14 in ANALYSIS_PROMPT (Resource Usage, Cooldown Windows, Phase Performance, DoT Management, Rotation Score, Trinket Performance) now have matching agent tools and DB data backing them.
+- **Missing frontend API routes:** All 8 previously-missing endpoints now implemented: `events-available`, `cast-timeline`, `cooldown-windows`, `resources`, `dot-refreshes`, `rotation`, `trinkets`, `phases/{player}`.
+- **Agent tool gaps:** Tools consolidated from 26 to 29 (removed 2 overlapping, added 5 new). All 17 ANALYSIS_PROMPT sections now have corresponding tools.
+- **Dead WCL query:** Removed unused `TOP_ENCOUNTER_RANKINGS` from `wcl/queries.py`.
 
 ## Conventions
 
