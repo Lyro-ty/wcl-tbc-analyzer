@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Architecture:** Three-layer monolith:
 1. **Data pipeline** — Python scripts + pipeline modules pull from WCL GraphQL API v2 into PostgreSQL
 2. **FastAPI server** — serves health, analysis endpoints; lifespan wires DB + LLM + agent
-3. **LangGraph agent** — CRAG pattern: route → query DB (via tools) → grade → analyze → respond
+3. **LangGraph agent** — CRAG pattern: route → query DB (via tools) → grade → analyze → END
 
 **Tech stack:** Python 3.12, FastAPI, LangGraph, langchain-openai (OpenAI-compatible ollama), PostgreSQL 16, SQLAlchemy 2.0 async, httpx, pydantic-settings v2, tenacity, structlog
 
@@ -69,7 +69,7 @@ code/
 │   │   ├── tools.py        # 12 SQL query tools (@tool decorated)
 │   │   ├── state.py        # AnalyzerState (extends MessagesState)
 │   │   ├── prompts.py      # System prompts and templates
-│   │   └── graph.py        # CRAG state graph (7 nodes, MAX_RETRIES=2)
+│   │   └── graph.py        # CRAG state graph (6 nodes, MAX_RETRIES=2)
 │   ├── api/                # FastAPI layer
 │   │   ├── app.py          # App factory + lifespan (wires DB, LLM, graph)
 │   │   ├── deps.py         # Dependency injection
@@ -96,7 +96,7 @@ route → query → [tool_executor if tool_calls] → grade
                                                    ↓
                                                 relevant
                                                    ↓
-                                              analyze → respond → END
+                                              analyze → END
 ```
 
 - **route**: Classifies query as `my_performance | comparison | trend | general`
@@ -242,6 +242,15 @@ curl -X POST http://localhost:8000/api/analyze \
 - **Grader blindness:** `_format_messages()` in `graph.py` now includes `ToolMessage` content so the grader can see DB query results.
 - **Ingest idempotency:** `ingest_report()` uses delete-then-insert for fights+performances, `session.merge()` for reports — safe to re-ingest the same report.
 - **Tool error handling:** All 12 agent tools catch exceptions and return friendly error strings instead of propagating tracebacks to the LLM.
+- **Missing indexes:** Migration 003 adds indexes on `fight_performances(fight_id, player_name, class+spec)`, `fights(report_code, encounter_id)`, and `top_rankings(encounter_id, class, spec)`.
+- **Think tags in agent nodes:** `_strip_think_tags()` now applied in both `route_query` and `grade_results` graph nodes, not just the API response.
+- **Tool arg case normalization:** `_normalize_tool_args()` in `graph.py` converts Nemotron's PascalCase tool argument keys to snake_case.
+- **Dead respond node:** Removed the near-noop `generate_insight` node; `analyze` now flows directly to END.
+- **Deaths query:** `DEATHS_AND_MECHANICS` now includes players with `deaths=0` who have interrupt/dispel contributions.
+- **Health check:** `/health` endpoint now pings the database (`SELECT 1`) and LLM (`/v1/models`) and returns 503 when either is unreachable.
+- **LLM guardrails:** `max_tokens` (4096) and `timeout` (300s) now configured on the ChatOpenAI client.
+- **Batch deaths endpoint:** `GET /api/data/reports/{code}/deaths` replaces N+1 per-fight queries on the roster page.
+- **Dead code removed:** `compute_dps`/`compute_hps` (unused), `CHARACTER_RANKINGS`/`REPORT_EVENTS`/`RATE_LIMIT_FRAGMENT` (unused WCL queries).
 
 ## Conventions
 
