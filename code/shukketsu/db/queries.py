@@ -376,6 +376,56 @@ TABLE_DATA_EXISTS = text("""
     ) AS has_data
 """)
 
+EVENT_DATA_EXISTS = text("""
+    SELECT EXISTS(
+        SELECT 1 FROM death_details dd
+        JOIN fights f ON dd.fight_id = f.id
+        WHERE f.report_code = :report_code
+    ) AS has_data
+""")
+
+DEATH_ANALYSIS = text("""
+    SELECT dd.player_name, dd.death_index, dd.timestamp_ms,
+           dd.killing_blow_ability, dd.killing_blow_source,
+           dd.damage_taken_total, dd.events_json,
+           e.name AS encounter_name, f.fight_id, f.duration_ms
+    FROM death_details dd
+    JOIN fights f ON dd.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND (:player_name IS NULL OR dd.player_name ILIKE :player_name)
+    ORDER BY dd.timestamp_ms ASC, dd.death_index ASC
+""")
+
+CAST_ACTIVITY = text("""
+    SELECT cm.player_name, cm.total_casts, cm.casts_per_minute,
+           cm.gcd_uptime_pct, cm.active_time_ms, cm.downtime_ms,
+           cm.longest_gap_ms, cm.longest_gap_at_ms, cm.avg_gap_ms, cm.gap_count,
+           e.name AS encounter_name, f.fight_id, f.duration_ms
+    FROM cast_metrics cm
+    JOIN fights f ON cm.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND (:player_name IS NULL OR cm.player_name ILIKE :player_name)
+    ORDER BY cm.gcd_uptime_pct DESC
+""")
+
+COOLDOWN_EFFICIENCY = text("""
+    SELECT cu.player_name, cu.ability_name, cu.spell_id, cu.cooldown_sec,
+           cu.times_used, cu.max_possible_uses, cu.first_use_ms, cu.last_use_ms,
+           cu.efficiency_pct,
+           e.name AS encounter_name, f.fight_id, f.duration_ms
+    FROM cooldown_usage cu
+    JOIN fights f ON cu.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND (:player_name IS NULL OR cu.player_name ILIKE :player_name)
+    ORDER BY cu.player_name, cu.efficiency_pct ASC
+""")
+
 CHARACTER_PROFILE = text("""
     SELECT mc.id, mc.name, mc.server_slug, mc.server_region,
            mc.character_class, mc.spec,
@@ -445,4 +495,38 @@ CHARACTER_REPORT_DETAIL = text("""
     WHERE f.report_code = :report_code
       AND fp.player_name = :character_name
     ORDER BY f.start_time
+""")
+
+FIGHT_DEATHS = text("""
+    SELECT dd.player_name, dd.death_index, dd.timestamp_ms,
+           dd.killing_blow_ability, dd.killing_blow_source,
+           dd.damage_taken_total, dd.events_json
+    FROM death_details dd
+    JOIN fights f ON dd.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+    ORDER BY dd.timestamp_ms ASC, dd.death_index ASC
+""")
+
+FIGHT_CAST_METRICS = text("""
+    SELECT cm.player_name, cm.total_casts, cm.casts_per_minute,
+           cm.gcd_uptime_pct, cm.active_time_ms, cm.downtime_ms,
+           cm.longest_gap_ms, cm.longest_gap_at_ms, cm.avg_gap_ms, cm.gap_count
+    FROM cast_metrics cm
+    JOIN fights f ON cm.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND cm.player_name = :player_name
+""")
+
+FIGHT_COOLDOWNS = text("""
+    SELECT cu.player_name, cu.ability_name, cu.spell_id, cu.cooldown_sec,
+           cu.times_used, cu.max_possible_uses, cu.first_use_ms, cu.last_use_ms,
+           cu.efficiency_pct
+    FROM cooldown_usage cu
+    JOIN fights f ON cu.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND cu.player_name = :player_name
+    ORDER BY cu.efficiency_pct ASC
 """)

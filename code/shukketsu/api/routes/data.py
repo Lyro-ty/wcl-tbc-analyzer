@@ -9,14 +9,19 @@ from shukketsu.api.models import (
     AbilitiesAvailable,
     AbilityMetricResponse,
     BuffUptimeResponse,
+    CastMetricResponse,
     CharacterFightSummary,
     CharacterInfo,
     CharacterProfile,
     CharacterRecentParse,
     CharacterReportSummary,
+    CooldownUsageResponse,
     DashboardStats,
+    DeathDetailResponse,
     DeathEntry,
     EncounterInfo,
+    EventDataResponse,
+    EventsAvailableResponse,
     ExecutionBoss,
     FightPlayer,
     IngestRequest,
@@ -514,17 +519,20 @@ async def ingest_report_endpoint(req: IngestRequest):
             result = await ingest_report(
                 wcl, session, req.report_code, my_names,
                 ingest_tables=req.with_tables,
+                ingest_events=req.with_events,
             )
         await session.commit()
         logger.info(
-            "Ingested report %s: %d fights, %d performances, %d table rows",
-            req.report_code, result.fights, result.performances, result.table_rows,
+            "Ingested report %s: %d fights, %d performances, %d table rows, %d event rows",
+            req.report_code, result.fights, result.performances,
+            result.table_rows, result.event_rows,
         )
         return IngestResponse(
             report_code=req.report_code,
             fights=result.fights,
             performances=result.performances,
             table_rows=result.table_rows,
+            event_rows=result.event_rows,
         )
     except HTTPException:
         raise
@@ -728,6 +736,125 @@ async def character_recent_parses(character_name: str):
         return [CharacterRecentParse(**dict(r._mapping)) for r in rows]
     except Exception as e:
         logger.exception("Failed to get recent parses")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/deaths",
+    response_model=list[DeathDetailResponse],
+)
+async def fight_deaths(report_code: str, fight_id: int):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.FIGHT_DEATHS, {"report_code": report_code, "fight_id": fight_id}
+        )
+        rows = result.fetchall()
+        return [DeathDetailResponse(**dict(r._mapping)) for r in rows]
+    except Exception as e:
+        logger.exception("Failed to get fight deaths")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/cast-metrics/{player}",
+    response_model=CastMetricResponse | None,
+)
+async def fight_cast_metrics(report_code: str, fight_id: int, player: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.FIGHT_CAST_METRICS,
+            {"report_code": report_code, "fight_id": fight_id, "player_name": player},
+        )
+        row = result.fetchone()
+        if not row:
+            return None
+        return CastMetricResponse(**dict(row._mapping))
+    except Exception as e:
+        logger.exception("Failed to get cast metrics")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/cooldowns/{player}",
+    response_model=list[CooldownUsageResponse],
+)
+async def fight_cooldowns(report_code: str, fight_id: int, player: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.FIGHT_COOLDOWNS,
+            {"report_code": report_code, "fight_id": fight_id, "player_name": player},
+        )
+        rows = result.fetchall()
+        return [CooldownUsageResponse(**dict(r._mapping)) for r in rows]
+    except Exception as e:
+        logger.exception("Failed to get cooldowns")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/events-available",
+    response_model=EventsAvailableResponse,
+)
+async def events_available(report_code: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.EVENT_DATA_EXISTS, {"report_code": report_code}
+        )
+        row = result.fetchone()
+        return EventsAvailableResponse(has_data=row.has_data if row else False)
+    except Exception as e:
+        logger.exception("Failed to check events availability")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.post(
+    "/reports/{report_code}/event-data",
+    response_model=EventDataResponse,
+)
+async def fetch_event_data(report_code: str):
+    from shukketsu.config import get_settings
+    from shukketsu.pipeline.event_data import ingest_event_data_for_report
+    from shukketsu.wcl.auth import WCLAuth
+    from shukketsu.wcl.client import WCLClient
+    from shukketsu.wcl.rate_limiter import RateLimiter
+
+    settings = get_settings()
+    if not settings.wcl.client_id:
+        raise HTTPException(
+            status_code=503, detail="WCL credentials not configured"
+        )
+
+    session = await _get_session()
+    try:
+        auth = WCLAuth(
+            settings.wcl.client_id,
+            settings.wcl.client_secret.get_secret_value(),
+            settings.wcl.oauth_url,
+        )
+        async with WCLClient(auth, RateLimiter()) as wcl:
+            rows = await ingest_event_data_for_report(wcl, session, report_code)
+        await session.commit()
+        logger.info("Fetched event data for %s: %d rows", report_code, rows)
+        return EventDataResponse(report_code=report_code, event_rows=rows)
+    except HTTPException:
+        raise
+    except Exception as e:
+        await session.rollback()
+        logger.exception("Failed to fetch event data for %s", report_code)
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

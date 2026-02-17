@@ -4,6 +4,8 @@ import { ArrowLeft, Database, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   fetchAbilitiesAvailable,
+  fetchEventData,
+  fetchEventsAvailable,
   fetchTableData,
   getFightDetails,
   getReportExecution,
@@ -26,6 +28,8 @@ export default function ReportDetailPage() {
   const [loadingFight, setLoadingFight] = useState(false)
   const [fetchingTable, setFetchingTable] = useState(false)
   const [fetchTableError, setFetchTableError] = useState<string | null>(null)
+  const [fetchingEvents, setFetchingEvents] = useState(false)
+  const [fetchEventsError, setFetchEventsError] = useState<string | null>(null)
 
   const { data: summary, loading: loadSummary } = useApiQuery(
     () => getReportSummary(code!), [code],
@@ -38,6 +42,9 @@ export default function ReportDetailPage() {
   )
   const { data: abilitiesAvail, refetch: refetchAbilities } = useApiQuery(
     () => fetchAbilitiesAvailable(code!), [code],
+  )
+  const { data: eventsAvail, refetch: refetchEvents } = useApiQuery(
+    () => fetchEventsAvailable(code!), [code],
   )
 
   const handleFetchTableData = useCallback(async () => {
@@ -52,6 +59,19 @@ export default function ReportDetailPage() {
       setFetchingTable(false)
     }
   }, [code, refetchAbilities])
+
+  const handleFetchEventData = useCallback(async () => {
+    setFetchingEvents(true)
+    setFetchEventsError(null)
+    try {
+      await fetchEventData(code!)
+      refetchEvents()
+    } catch (err) {
+      setFetchEventsError(err instanceof Error ? err.message : 'Failed to fetch event data')
+    } finally {
+      setFetchingEvents(false)
+    }
+  }, [code, refetchEvents])
 
   const [fightError, setFightError] = useState<string | null>(null)
 
@@ -163,6 +183,36 @@ export default function ReportDetailPage() {
       {fetchTableError && (
         <div className="mb-6 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400">
           {fetchTableError}
+        </div>
+      )}
+
+      {/* Event data callout */}
+      {eventsAvail && !eventsAvail.has_data && (
+        <div className="mb-6 flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/30 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-zinc-300">
+              Event data not yet fetched for this report
+            </p>
+            <p className="text-xs text-zinc-500">
+              Fetch event data to see death recaps, cast activity, and cooldown efficiency per player.
+            </p>
+          </div>
+          <button
+            onClick={handleFetchEventData}
+            disabled={fetchingEvents}
+            className="inline-flex items-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {fetchingEvents ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Fetching...</>
+            ) : (
+              <><Database className="h-4 w-4" /> Fetch Event Data</>
+            )}
+          </button>
+        </div>
+      )}
+      {fetchEventsError && (
+        <div className="mb-6 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400">
+          {fetchEventsError}
         </div>
       )}
 

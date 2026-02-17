@@ -52,6 +52,16 @@ class TestRouteQuery:
         result = await route_query(state, mock_llm)
         assert result["query_type"] == "comparison"
 
+    async def test_classifies_rotation(self):
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(content="rotation")
+
+        state = {
+            "messages": [HumanMessage(content="Am I using my cooldowns efficiently?")],
+        }
+        result = await route_query(state, mock_llm)
+        assert result["query_type"] == "rotation"
+
     async def test_defaults_to_general(self):
         mock_llm = AsyncMock()
         mock_llm.ainvoke.return_value = AIMessage(content="something_invalid")

@@ -3,10 +3,14 @@ import type {
   AbilityMetric,
   AnalyzeResponse,
   BuffUptime,
+  CastMetricSummary,
   CharacterFightSummary,
   CharacterInfo,
   CharacterReportSummary,
+  CooldownUsageEntry,
+  DeathDetail,
   EncounterInfo,
+  EventsAvailable,
   ExecutionBoss,
   FightPlayer,
   ProgressionPoint,
@@ -180,18 +184,52 @@ export async function fetchAbilitiesAvailable(code: string): Promise<AbilitiesAv
   return fetchJson(`/api/data/reports/${code}/abilities-available`)
 }
 
+export async function fetchFightDeaths(code: string, fightId: number): Promise<DeathDetail[]> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/deaths`)
+}
+
+export async function fetchCastMetrics(code: string, fightId: number, player: string): Promise<CastMetricSummary | null> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/cast-metrics/${encodeURIComponent(player)}`)
+}
+
+export async function fetchCooldownUsage(code: string, fightId: number, player: string): Promise<CooldownUsageEntry[]> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/cooldowns/${encodeURIComponent(player)}`)
+}
+
+export async function fetchEventsAvailable(code: string): Promise<EventsAvailable> {
+  return fetchJson(`/api/data/reports/${code}/events-available`)
+}
+
+export interface EventDataResponse {
+  report_code: string
+  event_rows: number
+}
+
+export async function fetchEventData(code: string): Promise<EventDataResponse> {
+  return fetchJson(`/api/data/reports/${code}/event-data`, { method: 'POST' })
+}
+
 export interface IngestResponse {
   report_code: string
   fights: number
   performances: number
   table_rows: number
+  event_rows: number
 }
 
-export async function ingestReport(reportCode: string, withTables: boolean = false): Promise<IngestResponse> {
+export async function ingestReport(
+  reportCode: string,
+  withTables: boolean = false,
+  withEvents: boolean = false,
+): Promise<IngestResponse> {
   return fetchJson('/api/data/ingest', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ report_code: reportCode, with_tables: withTables }),
+    body: JSON.stringify({
+      report_code: reportCode,
+      with_tables: withTables,
+      with_events: withEvents,
+    }),
   })
 }
 

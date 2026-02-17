@@ -135,3 +135,58 @@ FRESH_BOSS_NAMES: frozenset[str] = frozenset(
 )
 
 ALL_BOSS_NAMES: frozenset[str] = TBC_BOSS_NAMES | FRESH_BOSS_NAMES
+
+
+@dataclass(frozen=True)
+class CooldownDef:
+    spell_id: int
+    name: str
+    cooldown_sec: int
+
+
+# Classic Fresh / TBC major throughput cooldowns per class.
+# spell_id values are WCL abilityGameID (WoW spell IDs).
+CLASSIC_COOLDOWNS: dict[str, list[CooldownDef]] = {
+    "Warrior": [
+        CooldownDef(12292, "Death Wish", 180),
+        CooldownDef(1719, "Recklessness", 900),
+        CooldownDef(12328, "Sweeping Strikes", 30),
+    ],
+    "Paladin": [
+        CooldownDef(31884, "Avenging Wrath", 180),
+    ],
+    "Hunter": [
+        CooldownDef(3045, "Rapid Fire", 300),
+        CooldownDef(19574, "Bestial Wrath", 120),
+        CooldownDef(34692, "The Beast Within", 120),
+    ],
+    "Rogue": [
+        CooldownDef(13750, "Adrenaline Rush", 300),
+        CooldownDef(13877, "Blade Flurry", 120),
+        CooldownDef(14177, "Cold Blood", 180),
+    ],
+    "Priest": [
+        CooldownDef(10060, "Power Infusion", 180),
+        CooldownDef(33206, "Pain Suppression", 120),
+        CooldownDef(15487, "Silence", 45),
+    ],
+    "Shaman": [
+        CooldownDef(2825, "Bloodlust", 600),
+        CooldownDef(16166, "Elemental Mastery", 180),
+    ],
+    "Mage": [
+        CooldownDef(12042, "Arcane Power", 180),
+        CooldownDef(12051, "Evocation", 480),
+        CooldownDef(11129, "Combustion", 180),
+        CooldownDef(12472, "Icy Veins", 180),
+    ],
+    "Warlock": [
+        CooldownDef(18708, "Fel Domination", 900),
+        CooldownDef(18288, "Amplify Curse", 180),
+    ],
+    "Druid": [
+        CooldownDef(29166, "Innervate", 360),
+        CooldownDef(17116, "Nature's Swiftness", 180),
+        CooldownDef(33891, "Tree of Life", 0),  # Passive/stance — tracked for detection only
+    ],
+}

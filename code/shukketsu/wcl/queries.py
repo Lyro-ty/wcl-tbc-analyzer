@@ -100,6 +100,22 @@ query ReportTable($code: String!, $fightIDs: [Int]!, $dataType: TableDataType!) 
 }
 """
 
+REPORT_EVENTS = """
+query ReportEvents($code: String!, $startTime: Float!, $endTime: Float!,
+                   $dataType: EventDataType!, $sourceID: Int) {
+    reportData {
+        report(code: $code) {
+            events(startTime: $startTime, endTime: $endTime,
+                   dataType: $dataType, sourceID: $sourceID) {
+                data
+                nextPageTimestamp
+            }
+        }
+    }
+    RATE_LIMIT
+}
+"""
+
 ZONE_ENCOUNTERS = """
 query ZoneEncounters($zoneID: Int!) {
     worldData {

@@ -220,6 +220,45 @@ export interface CharacterRecentParse {
   report_date: number
 }
 
+export interface DeathDetail {
+  player_name: string
+  death_index: number
+  timestamp_ms: number
+  killing_blow_ability: string
+  killing_blow_source: string
+  damage_taken_total: number
+  events_json: string
+}
+
+export interface CastMetricSummary {
+  player_name: string
+  total_casts: number
+  casts_per_minute: number
+  gcd_uptime_pct: number
+  active_time_ms: number
+  downtime_ms: number
+  longest_gap_ms: number
+  longest_gap_at_ms: number
+  avg_gap_ms: number
+  gap_count: number
+}
+
+export interface CooldownUsageEntry {
+  player_name: string
+  ability_name: string
+  spell_id: number
+  cooldown_sec: number
+  times_used: number
+  max_possible_uses: number
+  first_use_ms: number | null
+  last_use_ms: number | null
+  efficiency_pct: number
+}
+
+export interface EventsAvailable {
+  has_data: boolean
+}
+
 export interface DashboardStats {
   total_reports: number
   total_kills: number

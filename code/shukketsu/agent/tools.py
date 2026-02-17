@@ -536,6 +536,167 @@ async def get_buff_analysis(report_code: str, fight_id: int, player_name: str) -
         await session.close()
 
 
+@tool
+async def get_death_analysis(
+    report_code: str, fight_id: int, player_name: str | None = None,
+) -> str:
+    """Get detailed death recaps for a specific fight. Shows killing blow,
+    source, damage taken, and last damage events before each death.
+    Use this to understand WHY players died and whether deaths were avoidable.
+    Requires event data to have been ingested with --with-events."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.DEATH_ANALYSIS,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": f"%{player_name}%" if player_name else None},
+        )
+        rows = result.fetchall()
+        if not rows:
+            return (
+                f"No death data found for fight {fight_id} in report {report_code}. "
+                f"Event data may not have been ingested yet "
+                f"(use pull-my-logs --with-events or pull-event-data to fetch it)."
+            )
+
+        import json
+        lines = [
+            f"Death analysis for {rows[0].encounter_name} "
+            f"({report_code}#{fight_id}):\n"
+        ]
+        for r in rows:
+            ts_sec = r.timestamp_ms / 1000
+            lines.append(
+                f"  {r.player_name} (death #{r.death_index}) at {ts_sec:.1f}s:"
+            )
+            lines.append(
+                f"    Killing blow: {r.killing_blow_ability} "
+                f"from {r.killing_blow_source}"
+            )
+            lines.append(f"    Total damage taken: {r.damage_taken_total:,}")
+
+            events = json.loads(r.events_json) if r.events_json else []
+            if events:
+                lines.append("    Last damage events:")
+                for e in events[-5:]:
+                    e_ts = e.get("ts", 0) / 1000
+                    lines.append(
+                        f"      {e_ts:.1f}s: {e.get('ability', '?')} "
+                        f"({e.get('amount', 0):,} from {e.get('source', '?')})"
+                    )
+            lines.append("")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
+@tool
+async def get_activity_report(
+    report_code: str, fight_id: int, player_name: str | None = None,
+) -> str:
+    """Get GCD uptime / 'Always Be Casting' analysis for players in a fight.
+    Shows casting efficiency, downtime gaps, and casts per minute.
+    Requires event data to have been ingested with --with-events."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.CAST_ACTIVITY,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": f"%{player_name}%" if player_name else None},
+        )
+        rows = result.fetchall()
+        if not rows:
+            return (
+                f"No cast activity data found for fight {fight_id} in report {report_code}. "
+                f"Event data may not have been ingested yet "
+                f"(use pull-my-logs --with-events or pull-event-data to fetch it)."
+            )
+
+        lines = [
+            f"Cast activity (ABC) analysis for {rows[0].encounter_name} "
+            f"({report_code}#{fight_id}):\n"
+        ]
+        for r in rows:
+            if r.gcd_uptime_pct >= 90:
+                grade = "EXCELLENT"
+            elif r.gcd_uptime_pct >= 85:
+                grade = "GOOD"
+            elif r.gcd_uptime_pct >= 75:
+                grade = "FAIR"
+            else:
+                grade = "NEEDS WORK"
+
+            gap_str = _format_duration(r.longest_gap_ms) if r.longest_gap_ms else "none"
+            lines.append(
+                f"  [{grade}] {r.player_name} | GCD uptime: {r.gcd_uptime_pct}% | "
+                f"Casts: {r.total_casts} ({r.casts_per_minute}/min) | "
+                f"Longest gap: {gap_str} | Gaps >2.5s: {r.gap_count}"
+            )
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
+@tool
+async def get_cooldown_efficiency(
+    report_code: str, fight_id: int, player_name: str | None = None,
+) -> str:
+    """Get cooldown usage efficiency for players in a fight.
+    Shows how many times each major cooldown was used vs max possible.
+    Requires event data to have been ingested with --with-events."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.COOLDOWN_EFFICIENCY,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": f"%{player_name}%" if player_name else None},
+        )
+        rows = result.fetchall()
+        if not rows:
+            return (
+                f"No cooldown data found for fight {fight_id} in report {report_code}. "
+                f"Event data may not have been ingested yet "
+                f"(use pull-my-logs --with-events or pull-event-data to fetch it)."
+            )
+
+        lines = [
+            f"Cooldown efficiency for {rows[0].encounter_name} "
+            f"({report_code}#{fight_id}):\n"
+        ]
+
+        current_player = None
+        for r in rows:
+            if r.player_name != current_player:
+                current_player = r.player_name
+                lines.append(f"  {r.player_name}:")
+
+            if r.efficiency_pct < 70:
+                flag = "[LOW]"
+            elif r.efficiency_pct >= 90:
+                flag = "[GOOD]"
+            else:
+                flag = "[OK]"
+
+            first_use = f"{r.first_use_ms / 1000:.1f}s" if r.first_use_ms else "never"
+            lines.append(
+                f"    {flag} {r.ability_name} ({r.cooldown_sec}s CD): "
+                f"{r.times_used}/{r.max_possible_uses} uses "
+                f"({r.efficiency_pct}%) | First use: {first_use}"
+            )
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
 ALL_TOOLS = [
     get_my_performance,
     get_top_rankings,
@@ -551,4 +712,7 @@ ALL_TOOLS = [
     get_raid_execution,
     get_ability_breakdown,
     get_buff_analysis,
+    get_death_analysis,
+    get_activity_report,
+    get_cooldown_efficiency,
 ]

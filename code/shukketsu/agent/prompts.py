@@ -45,6 +45,15 @@ You have access to the following tools to query raid performance data:
 in a fight (requires table data — report_code + fight_id + player_name)
 - **get_buff_analysis**: Buff/debuff uptimes for a player in a fight \
 (requires table data — report_code + fight_id + player_name)
+- **get_death_analysis**: Detailed death recap for players in a fight \
+(requires event data — report_code + fight_id, optional player_name). Shows killing blow, \
+source, and last damage events before death.
+- **get_activity_report**: GCD uptime / "Always Be Casting" analysis for a player in a fight \
+(requires event data — report_code + fight_id + player_name). Shows casts/min, downtime, \
+longest gap, and activity grade.
+- **get_cooldown_efficiency**: Major cooldown usage efficiency for a player in a fight \
+(requires event data — report_code + fight_id + player_name). Shows times used vs \
+max possible uses, efficiency %, and first/last use timing.
 
 ## Analysis Framework
 
@@ -63,6 +72,15 @@ and crit rates. Is the player using the right abilities? Are there missing high-
 11. **Buff/Uptime Analysis** — If buff data is available, check key buff uptimes. \
 Major buffs (Flasks, Battle Shout, Windfury) should be >90%. Low uptimes indicate \
 consumable/buff issues.
+12. **Cast Efficiency (ABC)** — If cast metrics are available, check GCD uptime. \
+90%+ is EXCELLENT, 85-90% GOOD, 75-85% FAIR, <75% NEEDS WORK. Identify longest gaps \
+and downtime patterns.
+13. **Cooldown Usage** — If cooldown data is available, check efficiency. Players should \
+use major throughput cooldowns (Death Wish, Recklessness, Arcane Power, etc.) as close to \
+on cooldown as possible. <70% efficiency means significant DPS is being left on the table.
+14. **Death Analysis** — If death data is available, analyze what killed the player. \
+Was it avoidable damage? Did they have defensive cooldowns available? What was the damage \
+sequence leading to death?
 
 Always provide:
 - Specific, actionable advice (not generic "do more DPS")
@@ -93,10 +111,13 @@ raids. Example: "How do I compare to top rogues on Patchwerk?" or \
 "How does my raid compare to the top guilds on Sapphiron?"
 - **trend**: Questions about progression over time, improvement trends, or historical data. \
 Example: "Am I improving on Sapphiron?"
+- **rotation**: Questions about rotation, cooldown usage, GCD uptime, ABC uptime, casting \
+efficiency, or "always be casting" analysis. Example: "Am I using my cooldowns efficiently?" \
+or "What's my GCD uptime on Patchwerk?"
 - **general**: General questions about encounters, raid summaries, or non-player-specific info. \
 Example: "Show me the latest raid summary" or "What's a good DPS for Mage on Thaddius?"
 
-Respond with exactly one word: my_performance, comparison, trend, or general.
+Respond with exactly one word: my_performance, comparison, trend, rotation, or general.
 """
 
 REWRITE_PROMPT = """\
@@ -116,11 +137,21 @@ ability priorities, crit rates, and missing abilities. Note: if no ability data 
 skip this section (table data may not have been ingested yet).
 4. **Buff/Uptime Issues** — If buff uptime data was retrieved, highlight any buffs with low \
 uptime (<50%) and consumable gaps. Skip if no buff data available.
-5. **Actionable Checklist** — Specific, prioritized improvement suggestions as checkboxes:
+5. **Cast Efficiency & ABC** — If cast metric data was retrieved, analyze GCD uptime, \
+downtime gaps, and casts per minute. Grade the player's "Always Be Casting" discipline. \
+Identify significant gaps (>2.5s) and when the longest gap occurred. Skip if no cast \
+metric data available.
+6. **Cooldown Usage** — If cooldown efficiency data was retrieved, analyze per-cooldown \
+usage. Flag any cooldowns with <70% efficiency as wasted DPS/HPS. Note first-use timing — \
+late first use on short cooldowns indicates rotation issues. Skip if no cooldown data available.
+7. **Death Analysis** — If death data was retrieved, explain what killed the player(s). \
+Was it avoidable? What was the damage sequence? Could defensive cooldowns have prevented it? \
+Skip if no deaths or no death data available.
+8. **Actionable Checklist** — Specific, prioritized improvement suggestions as checkboxes:
    - [ ] Highest-impact improvement first
    - [ ] Second priority
    - [ ] Third priority
-6. **Encouragement** — Acknowledge strengths and progress
+9. **Encouragement** — Acknowledge strengths and progress
 
 Use the player's class/spec context to give spec-specific advice when possible.
 """

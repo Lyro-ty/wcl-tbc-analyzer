@@ -1,7 +1,10 @@
 import { useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, Swords, Heart, Shield, Sparkles } from 'lucide-react'
+import { ArrowLeft, Loader2, Swords, Heart, Shield, Sparkles, Skull, Activity, Timer } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
+  fetchCastMetrics,
+  fetchCooldownUsage,
+  fetchFightDeaths,
   fetchPlayerAbilities,
   fetchPlayerBuffs,
   getFightDetails,
@@ -10,6 +13,9 @@ import type { AbilityMetric, FightPlayer } from '../lib/types'
 import { useApiQuery } from '../hooks/useApiQuery'
 import AbilityBarChart from '../components/charts/AbilityBarChart'
 import UptimeBarChart from '../components/charts/UptimeBarChart'
+import ActivityGauge from '../components/charts/ActivityGauge'
+import CooldownChart from '../components/charts/CooldownChart'
+import DeathRecap from '../components/DeathRecap'
 import DataTable, { type Column } from '../components/ui/DataTable'
 import ErrorBoundary from '../components/ui/ErrorBoundary'
 import QuickAction from '../components/ui/QuickAction'
@@ -41,6 +47,26 @@ export default function PlayerFightPage() {
     () => fetchPlayerBuffs(code!, fightIdNum, player!),
     [code, fightId, player],
   )
+
+  // Load death recap (event data)
+  const { data: deaths } = useApiQuery(
+    () => fetchFightDeaths(code!, fightIdNum),
+    [code, fightId],
+  )
+
+  // Load cast metrics (event data)
+  const { data: castMetrics } = useApiQuery(
+    () => fetchCastMetrics(code!, fightIdNum, player!),
+    [code, fightId, player],
+  )
+
+  // Load cooldown usage (event data)
+  const { data: cooldowns } = useApiQuery(
+    () => fetchCooldownUsage(code!, fightIdNum, player!),
+    [code, fightId, player],
+  )
+
+  const playerDeaths = deaths?.filter((d) => d.player_name === player) ?? []
 
   const playerInfo: FightPlayer | undefined = fightPlayers?.find(
     (p) => p.player_name === player,
@@ -298,6 +324,49 @@ export default function PlayerFightPage() {
       {!loadingBuffs && hasAbilityData && !hasBuffData && !buffsError && (
         <div className="mb-8 rounded-lg border border-zinc-800/50 bg-zinc-900/20 p-4 text-center text-xs text-zinc-500">
           No buff/debuff uptime data available for this fight.
+        </div>
+      )}
+
+      {/* Death Recap (event data) */}
+      {playerDeaths.length > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <Skull className="h-5 w-5 text-red-400" />
+            Death Recap
+          </h2>
+          <ErrorBoundary>
+            <DeathRecap deaths={playerDeaths} />
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* Cast Activity / GCD Uptime (event data) */}
+      {castMetrics && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <Activity className="h-5 w-5 text-cyan-400" />
+            Cast Activity
+          </h2>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-5">
+              <ActivityGauge data={castMetrics} />
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* Cooldown Efficiency (event data) */}
+      {cooldowns && cooldowns.length > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <Timer className="h-5 w-5 text-amber-400" />
+            Cooldown Efficiency
+          </h2>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <CooldownChart data={cooldowns} />
+            </div>
+          </ErrorBoundary>
         </div>
       )}
     </div>

@@ -19,10 +19,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--with-tables", action="store_true",
         help="Also fetch ability breakdowns and buff uptimes",
     )
+    parser.add_argument(
+        "--with-events", action="store_true",
+        help="Also fetch event data (deaths, cast metrics, cooldowns)",
+    )
     return parser.parse_args(argv)
 
 
-async def run(report_code: str, *, with_tables: bool = False) -> None:
+async def run(
+    report_code: str, *, with_tables: bool = False, with_events: bool = False,
+) -> None:
     settings = get_settings()
     engine = create_db_engine(settings)
     session_factory = create_session_factory(engine)
@@ -33,20 +39,24 @@ async def run(report_code: str, *, with_tables: bool = False) -> None:
     )
     async with WCLClient(auth, RateLimiter()) as wcl, session_factory() as session:
         result = await ingest_report(
-            wcl, session, report_code, ingest_tables=with_tables,
+            wcl, session, report_code,
+            ingest_tables=with_tables, ingest_events=with_events,
         )
         await session.commit()
     await engine.dispose()
     logger.info(
-        "Ingested report %s: %d fights, %d performances, %d table rows",
-        report_code, result.fights, result.performances, result.table_rows,
+        "Ingested report %s: %d fights, %d performances, %d table rows, %d event rows",
+        report_code, result.fights, result.performances,
+        result.table_rows, result.event_rows,
     )
 
 
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(run(args.report_code, with_tables=args.with_tables))
+    asyncio.run(run(
+        args.report_code, with_tables=args.with_tables, with_events=args.with_events,
+    ))
 
 
 if __name__ == "__main__":

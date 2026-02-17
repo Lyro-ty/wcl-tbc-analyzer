@@ -9,6 +9,7 @@ interface IngestFormProps {
 export default function IngestForm({ onIngested }: IngestFormProps) {
   const [code, setCode] = useState('')
   const [withTables, setWithTables] = useState(false)
+  const [withEvents, setWithEvents] = useState(false)
   const [ingesting, setIngesting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<IngestResponse | null>(null)
@@ -21,7 +22,7 @@ export default function IngestForm({ onIngested }: IngestFormProps) {
     setError(null)
     setResult(null)
     try {
-      const res = await ingestReport(trimmed, withTables)
+      const res = await ingestReport(trimmed, withTables, withEvents)
       setResult(res)
       setCode('')
       onIngested?.()
@@ -30,7 +31,7 @@ export default function IngestForm({ onIngested }: IngestFormProps) {
     } finally {
       setIngesting(false)
     }
-  }, [code, withTables, onIngested])
+  }, [code, withTables, withEvents, onIngested])
 
   return (
     <div>
@@ -60,16 +61,28 @@ export default function IngestForm({ onIngested }: IngestFormProps) {
         </button>
       </form>
 
-      <label className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
-        <input
-          type="checkbox"
-          checked={withTables}
-          onChange={(e) => setWithTables(e.target.checked)}
-          disabled={ingesting}
-          className="rounded border-zinc-600 bg-zinc-800 text-red-600 focus:ring-red-500/25"
-        />
-        Include ability &amp; buff data (slower, fetches per-ability breakdowns)
-      </label>
+      <div className="mt-2 space-y-1">
+        <label className="flex items-center gap-2 text-xs text-zinc-400">
+          <input
+            type="checkbox"
+            checked={withTables}
+            onChange={(e) => setWithTables(e.target.checked)}
+            disabled={ingesting}
+            className="rounded border-zinc-600 bg-zinc-800 text-red-600 focus:ring-red-500/25"
+          />
+          Include ability &amp; buff data (slower, fetches per-ability breakdowns)
+        </label>
+        <label className="flex items-center gap-2 text-xs text-zinc-400">
+          <input
+            type="checkbox"
+            checked={withEvents}
+            onChange={(e) => setWithEvents(e.target.checked)}
+            disabled={ingesting}
+            className="rounded border-zinc-600 bg-zinc-800 text-red-600 focus:ring-red-500/25"
+          />
+          Include event data (deaths, cast activity, cooldown tracking)
+        </label>
+      </div>
 
       {error && (
         <div className="mt-3 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400">
@@ -82,6 +95,7 @@ export default function IngestForm({ onIngested }: IngestFormProps) {
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           Ingested <span className="font-mono">{result.report_code}</span>: {result.fights} fights, {result.performances} player performances
           {result.table_rows > 0 && <>, {result.table_rows} ability/buff rows</>}
+          {result.event_rows > 0 && <>, {result.event_rows} event rows</>}
         </div>
       )}
     </div>

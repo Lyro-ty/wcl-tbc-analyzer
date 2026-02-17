@@ -377,6 +377,192 @@ class TestDashboardStats:
         assert data["total_kills"] == 80
 
 
+class TestFightDeaths:
+    async def test_returns_deaths(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = [
+            MagicMock(_mapping={
+                "player_name": "TestWarr", "death_index": 1,
+                "timestamp_ms": 45000, "killing_blow_ability": "Hateful Strike",
+                "killing_blow_source": "Patchwerk",
+                "damage_taken_total": 28000, "events_json": "[]",
+            }),
+        ]
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/data/reports/abc123/fights/1/deaths")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["killing_blow_ability"] == "Hateful Strike"
+
+    async def test_empty_when_no_deaths(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/data/reports/abc123/fights/1/deaths")
+
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+
+class TestFightCastMetrics:
+    async def test_returns_metrics(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = MagicMock(_mapping={
+            "player_name": "TestWarr", "total_casts": 150,
+            "casts_per_minute": 32.5, "gcd_uptime_pct": 88.3,
+            "active_time_ms": 240000, "downtime_ms": 32000,
+            "longest_gap_ms": 5000, "longest_gap_at_ms": 120000,
+            "avg_gap_ms": 3200.0, "gap_count": 4,
+        })
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get(
+                    "/api/data/reports/abc123/fights/1/cast-metrics/TestWarr"
+                )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["gcd_uptime_pct"] == 88.3
+        assert data["total_casts"] == 150
+
+    async def test_null_when_no_data(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = None
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get(
+                    "/api/data/reports/abc123/fights/1/cast-metrics/TestWarr"
+                )
+
+        assert resp.status_code == 200
+        assert resp.json() is None
+
+
+class TestFightCooldowns:
+    async def test_returns_cooldowns(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = [
+            MagicMock(_mapping={
+                "player_name": "TestWarr", "ability_name": "Death Wish",
+                "spell_id": 12292, "cooldown_sec": 180,
+                "times_used": 2, "max_possible_uses": 3,
+                "first_use_ms": 5000, "last_use_ms": 190000,
+                "efficiency_pct": 66.7,
+            }),
+        ]
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get(
+                    "/api/data/reports/abc123/fights/1/cooldowns/TestWarr"
+                )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["ability_name"] == "Death Wish"
+        assert data[0]["efficiency_pct"] == 66.7
+
+
+class TestEventsAvailable:
+    async def test_returns_true_when_data_exists(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = MagicMock(has_data=True)
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/data/reports/abc123/events-available")
+
+        assert resp.status_code == 200
+        assert resp.json()["has_data"] is True
+
+    async def test_returns_false_when_no_data(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = MagicMock(has_data=False)
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.api.routes.data._session_factory", factory):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/data/reports/abc123/events-available")
+
+        assert resp.status_code == 200
+        assert resp.json()["has_data"] is False
+
+
+class TestFetchEventData:
+    async def test_200_success(self, app, mock_session_factory):
+        factory, mock_session = mock_session_factory
+        mock_ingest = AsyncMock(return_value=25)
+
+        with (
+            patch("shukketsu.api.routes.data._session_factory", factory),
+            patch("shukketsu.config.get_settings", return_value=_mock_settings()),
+            patch(
+                "shukketsu.pipeline.event_data.ingest_event_data_for_report",
+                mock_ingest,
+            ),
+            patch("shukketsu.wcl.auth.WCLAuth"),
+            patch("shukketsu.wcl.client.WCLClient") as mock_wcl_cls,
+        ):
+            mock_wcl_cls.return_value.__aenter__ = AsyncMock()
+            mock_wcl_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.post("/api/data/reports/abc123/event-data")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["report_code"] == "abc123"
+        assert data["event_rows"] == 25
+
+    async def test_503_no_creds(self, app, mock_session_factory):
+        factory, _ = mock_session_factory
+        with (
+            patch("shukketsu.api.routes.data._session_factory", factory),
+            patch(
+                "shukketsu.config.get_settings",
+                return_value=_mock_settings(has_creds=False),
+            ),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.post("/api/data/reports/abc123/event-data")
+
+        assert resp.status_code == 503
+
+
 class TestDashboardRecent:
     async def test_200_success(self, app, mock_session_factory):
         factory, mock_session = mock_session_factory

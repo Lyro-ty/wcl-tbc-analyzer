@@ -136,6 +136,7 @@ class RegisterCharacterRequest(BaseModel):
 class IngestRequest(BaseModel):
     report_code: str
     with_tables: bool = False
+    with_events: bool = False
 
 
 class IngestResponse(BaseModel):
@@ -143,6 +144,7 @@ class IngestResponse(BaseModel):
     fights: int
     performances: int
     table_rows: int = 0
+    event_rows: int = 0
 
 
 class TableDataResponse(BaseModel):
@@ -271,3 +273,47 @@ class CharacterFightSummary(BaseModel):
     item_level: float | None
     player_class: str
     player_spec: str
+
+
+class DeathDetailResponse(BaseModel):
+    player_name: str
+    death_index: int
+    timestamp_ms: int
+    killing_blow_ability: str
+    killing_blow_source: str
+    damage_taken_total: int
+    events_json: str
+
+
+class CastMetricResponse(BaseModel):
+    player_name: str
+    total_casts: int
+    casts_per_minute: float
+    gcd_uptime_pct: float
+    active_time_ms: int
+    downtime_ms: int
+    longest_gap_ms: int
+    longest_gap_at_ms: int
+    avg_gap_ms: float
+    gap_count: int
+
+
+class CooldownUsageResponse(BaseModel):
+    player_name: str
+    ability_name: str
+    spell_id: int
+    cooldown_sec: int
+    times_used: int
+    max_possible_uses: int
+    first_use_ms: int | None
+    last_use_ms: int | None
+    efficiency_pct: float
+
+
+class EventsAvailableResponse(BaseModel):
+    has_data: bool
+
+
+class EventDataResponse(BaseModel):
+    report_code: str
+    event_rows: int

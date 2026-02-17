@@ -74,11 +74,12 @@ class IngestResult:
     fights: int
     performances: int
     table_rows: int = 0
+    event_rows: int = 0
 
 
 async def ingest_report(
     wcl, session, report_code: str, my_character_names: set[str] | None = None,
-    *, ingest_tables: bool = False,
+    *, ingest_tables: bool = False, ingest_events: bool = False,
 ) -> IngestResult:
     """Fetch a report from WCL and persist it to the database."""
     from shukketsu.wcl.queries import REPORT_FIGHTS, REPORT_RANKINGS
@@ -187,10 +188,18 @@ async def ingest_report(
             )
             table_rows += rows
 
+    # Optionally ingest event data (deaths, cast metrics, cooldowns)
+    event_rows = 0
+    if ingest_events and fights:
+        from shukketsu.pipeline.event_data import ingest_event_data_for_report
+
+        event_rows = await ingest_event_data_for_report(wcl, session, report_code)
+
     logger.info(
-        "Ingested report %s: %d fights, %d performances, %d table rows",
-        report_code, len(fights), total_performances, table_rows,
+        "Ingested report %s: %d fights, %d performances, %d table rows, %d event rows",
+        report_code, len(fights), total_performances, table_rows, event_rows,
     )
     return IngestResult(
-        fights=len(fights), performances=total_performances, table_rows=table_rows,
+        fights=len(fights), performances=total_performances,
+        table_rows=table_rows, event_rows=event_rows,
     )

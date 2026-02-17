@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 2
 
-VALID_QUERY_TYPES = {"my_performance", "comparison", "trend", "general"}
+VALID_QUERY_TYPES = {"my_performance", "comparison", "trend", "rotation", "general"}
 
 _THINK_PATTERN = re.compile(r"^.*?</think>\s*", flags=re.DOTALL)
 

@@ -9,6 +9,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -93,6 +94,9 @@ class Fight(Base):
     performances: Mapped[list["FightPerformance"]] = relationship(back_populates="fight")
     ability_metrics: Mapped[list["AbilityMetric"]] = relationship(back_populates="fight")
     buff_uptimes: Mapped[list["BuffUptime"]] = relationship(back_populates="fight")
+    death_details: Mapped[list["DeathDetail"]] = relationship(back_populates="fight")
+    cast_metrics: Mapped[list["CastMetric"]] = relationship(back_populates="fight")
+    cooldown_usage: Mapped[list["CooldownUsage"]] = relationship(back_populates="fight")
 
 
 class FightPerformance(Base):
@@ -224,3 +228,65 @@ class BuffUptime(Base):
     stack_count: Mapped[float] = mapped_column(Float, default=0.0)
 
     fight: Mapped["Fight"] = relationship(back_populates="buff_uptimes")
+
+
+class DeathDetail(Base):
+    __tablename__ = "death_details"
+    __table_args__ = (
+        Index("ix_death_details_fight_player", "fight_id", "player_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    player_name: Mapped[str] = mapped_column(String(100))
+    death_index: Mapped[int] = mapped_column(Integer)
+    timestamp_ms: Mapped[int] = mapped_column(BigInteger)
+    killing_blow_ability: Mapped[str] = mapped_column(String(200))
+    killing_blow_source: Mapped[str] = mapped_column(String(200))
+    damage_taken_total: Mapped[int] = mapped_column(BigInteger, default=0)
+    events_json: Mapped[str] = mapped_column(Text)
+
+    fight: Mapped["Fight"] = relationship(back_populates="death_details")
+
+
+class CastMetric(Base):
+    __tablename__ = "cast_metrics"
+    __table_args__ = (
+        Index("ix_cast_metrics_fight_player", "fight_id", "player_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    player_name: Mapped[str] = mapped_column(String(100))
+    total_casts: Mapped[int] = mapped_column(Integer, default=0)
+    casts_per_minute: Mapped[float] = mapped_column(Float, default=0.0)
+    gcd_uptime_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    active_time_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    downtime_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    longest_gap_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    longest_gap_at_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    avg_gap_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    gap_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    fight: Mapped["Fight"] = relationship(back_populates="cast_metrics")
+
+
+class CooldownUsage(Base):
+    __tablename__ = "cooldown_usage"
+    __table_args__ = (
+        Index("ix_cooldown_usage_fight_player", "fight_id", "player_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    player_name: Mapped[str] = mapped_column(String(100))
+    spell_id: Mapped[int] = mapped_column(Integer)
+    ability_name: Mapped[str] = mapped_column(String(200))
+    cooldown_sec: Mapped[int] = mapped_column(Integer)
+    times_used: Mapped[int] = mapped_column(Integer, default=0)
+    max_possible_uses: Mapped[int] = mapped_column(Integer, default=0)
+    first_use_ms: Mapped[int | None] = mapped_column(BigInteger)
+    last_use_ms: Mapped[int | None] = mapped_column(BigInteger)
+    efficiency_pct: Mapped[float] = mapped_column(Float, default=0.0)
+
+    fight: Mapped["Fight"] = relationship(back_populates="cooldown_usage")
