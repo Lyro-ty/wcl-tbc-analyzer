@@ -154,7 +154,7 @@ async def test_analyze_handles_no_data():
 async def test_stream_returns_sse_events():
     mock_graph = AsyncMock()
 
-    async def fake_astream(input, stream_mode=None):
+    async def fake_astream(input, stream_mode=None, config=None):
         yield (
             AIMessageChunk(content="Your DPS is 1500."),
             {"langgraph_node": "analyze"},
@@ -195,7 +195,7 @@ async def test_stream_returns_sse_events():
 async def test_stream_strips_think_tags():
     mock_graph = AsyncMock()
 
-    async def fake_astream(input, stream_mode=None):
+    async def fake_astream(input, stream_mode=None, config=None):
         yield (
             AIMessageChunk(content="<think>reasoning"),
             {"langgraph_node": "analyze"},
@@ -234,7 +234,7 @@ async def test_stream_strips_think_tags():
 async def test_stream_skips_non_analyze_nodes():
     mock_graph = AsyncMock()
 
-    async def fake_astream(input, stream_mode=None):
+    async def fake_astream(input, stream_mode=None, config=None):
         yield (
             AIMessageChunk(content="Routing to performance query"),
             {"langgraph_node": "route"},
@@ -273,7 +273,7 @@ async def test_stream_skips_non_analyze_nodes():
 async def test_stream_handles_error():
     mock_graph = AsyncMock()
 
-    async def fake_astream(input, stream_mode=None):
+    async def fake_astream(input, stream_mode=None, config=None):
         raise Exception("LLM connection refused")
         # Make this an async generator that raises
         yield  # pragma: no cover
@@ -293,3 +293,175 @@ async def test_stream_handles_error():
     assert resp.status_code == 200
     body = resp.text
     assert "LLM connection refused" in body
+
+
+# --- Langfuse callback wiring tests ---
+
+
+async def test_analyze_passes_langfuse_callbacks():
+    """When a langfuse handler is set, it's passed as callbacks config."""
+    mock_handler = object()  # Dummy handler
+    graph = AsyncMock()
+    graph.ainvoke.return_value = {
+        "messages": [AIMessage(content="Analysis result.")],
+        "query_type": "general",
+    }
+
+    with (
+        patch("shukketsu.api.routes.analyze._get_graph", return_value=graph),
+        patch(
+            "shukketsu.api.routes.analyze._get_langfuse_handler",
+            return_value=mock_handler,
+        ),
+    ):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.post(
+                "/api/analyze",
+                json={"question": "Test question"},
+            )
+
+    # Verify callbacks were passed in the config dict
+    call_kwargs = graph.ainvoke.call_args
+    config = call_kwargs.kwargs.get("config") or call_kwargs[1].get("config", {})
+    assert mock_handler in config.get("callbacks", [])
+
+
+async def test_analyze_no_callbacks_without_handler():
+    """When no langfuse handler is set, no callbacks config is passed."""
+    graph = AsyncMock()
+    graph.ainvoke.return_value = {
+        "messages": [AIMessage(content="Analysis result.")],
+        "query_type": "general",
+    }
+
+    with (
+        patch("shukketsu.api.routes.analyze._get_graph", return_value=graph),
+        patch(
+            "shukketsu.api.routes.analyze._get_langfuse_handler",
+            return_value=None,
+        ),
+    ):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.post(
+                "/api/analyze",
+                json={"question": "Test question"},
+            )
+
+    call_kwargs = graph.ainvoke.call_args
+    # Either no config, or config without callbacks
+    config = call_kwargs.kwargs.get("config") or call_kwargs[1].get("config", {})
+    assert "callbacks" not in config or config["callbacks"] == []
+
+
+async def test_stream_passes_langfuse_callbacks():
+    """When a langfuse handler is set, streaming also gets callbacks."""
+    mock_handler = object()
+    mock_graph = AsyncMock()
+    astream_config_capture = {}
+
+    async def fake_astream(input, stream_mode=None, config=None):
+        astream_config_capture["config"] = config or {}
+        yield (
+            AIMessageChunk(content="Streamed result."),
+            {"langgraph_node": "analyze"},
+        )
+
+    mock_graph.astream = fake_astream
+
+    with (
+        patch("shukketsu.api.routes.analyze._get_graph", return_value=mock_graph),
+        patch(
+            "shukketsu.api.routes.analyze._get_langfuse_handler",
+            return_value=mock_handler,
+        ),
+    ):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.post(
+                "/api/analyze/stream",
+                json={"question": "Test question"},
+            )
+
+    assert mock_handler in astream_config_capture["config"].get("callbacks", [])
+
+
+# --- Lifespan Langfuse wiring tests ---
+
+
+async def test_lifespan_creates_langfuse_handler_when_enabled(monkeypatch):
+    """When LANGFUSE__ENABLED=true, lifespan sets up the handler."""
+    monkeypatch.setenv("LANGFUSE__ENABLED", "true")
+    monkeypatch.setenv("LANGFUSE__PUBLIC_KEY", "pk-lf-test")
+    monkeypatch.setenv("LANGFUSE__SECRET_KEY", "sk-lf-test")
+    monkeypatch.setenv("LANGFUSE__HOST", "http://localhost:3000")
+
+    from shukketsu.config import get_settings
+    get_settings.cache_clear()
+
+    with (
+        patch("shukketsu.api.app.create_db_engine") as mock_engine,
+        patch("shukketsu.api.app.create_session_factory") as mock_sf,
+        patch("shukketsu.api.app.create_llm"),
+        patch("shukketsu.api.app.create_graph"),
+        patch("shukketsu.api.app.set_session_factory"),
+        patch("shukketsu.api.app.set_data_session_factory"),
+        patch("shukketsu.api.app.set_graph"),
+        patch("shukketsu.api.app.set_health_deps"),
+        patch("shukketsu.api.app.set_langfuse_handler") as mock_set_handler,
+        patch("shukketsu.api.app.CallbackHandler") as mock_cb_cls,
+    ):
+        mock_engine.return_value = AsyncMock()
+        mock_sf.return_value = AsyncMock()
+
+        from shukketsu.api.app import create_app
+        app = create_app()
+
+        async with app.router.lifespan_context(app):
+            pass
+
+    mock_cb_cls.assert_called_once_with(
+        public_key="pk-lf-test",
+        secret_key="sk-lf-test",
+        host="http://localhost:3000",
+    )
+    mock_set_handler.assert_called_once()
+    get_settings.cache_clear()
+
+
+async def test_lifespan_skips_langfuse_when_disabled(monkeypatch):
+    """When LANGFUSE__ENABLED=false (default), no handler is created."""
+    monkeypatch.setenv("LANGFUSE__ENABLED", "false")
+
+    from shukketsu.config import get_settings
+    get_settings.cache_clear()
+
+    with (
+        patch("shukketsu.api.app.create_db_engine") as mock_engine,
+        patch("shukketsu.api.app.create_session_factory") as mock_sf,
+        patch("shukketsu.api.app.create_llm"),
+        patch("shukketsu.api.app.create_graph"),
+        patch("shukketsu.api.app.set_session_factory"),
+        patch("shukketsu.api.app.set_data_session_factory"),
+        patch("shukketsu.api.app.set_graph"),
+        patch("shukketsu.api.app.set_health_deps"),
+        patch("shukketsu.api.app.set_langfuse_handler") as mock_set_handler,
+    ):
+        mock_engine.return_value = AsyncMock()
+        mock_sf.return_value = AsyncMock()
+
+        from shukketsu.api.app import create_app
+        app = create_app()
+
+        async with app.router.lifespan_context(app):
+            pass
+
+    mock_set_handler.assert_not_called()
+    get_settings.cache_clear()

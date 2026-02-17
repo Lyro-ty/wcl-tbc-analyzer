@@ -8,26 +8,33 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from shukketsu.api.routes.analyze import router as analyze_router
-from shukketsu.api.routes.data import router as data_router
-from shukketsu.api.routes.health import router as health_router
+from shukketsu.agent.graph import create_graph
+from shukketsu.agent.llm import create_llm
+from shukketsu.agent.tools import ALL_TOOLS, set_session_factory
+from shukketsu.api.routes.analyze import set_graph, set_langfuse_handler
+from shukketsu.api.routes.data import set_session_factory as set_data_session_factory
+from shukketsu.api.routes.health import set_health_deps
+from shukketsu.config import get_settings
+from shukketsu.db.engine import create_db_engine, create_session_factory
 
 logger = logging.getLogger(__name__)
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
+# Lazy import — only loaded when Langfuse is enabled
+CallbackHandler = None
+
+
+def _init_callback_handler():
+    global CallbackHandler
+    if CallbackHandler is None:
+        import langfuse.langchain
+        CallbackHandler = langfuse.langchain.CallbackHandler
+    return CallbackHandler
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    from shukketsu.agent.graph import create_graph
-    from shukketsu.agent.llm import create_llm
-    from shukketsu.agent.tools import ALL_TOOLS, set_session_factory
-    from shukketsu.api.routes.analyze import set_graph
-    from shukketsu.api.routes.data import set_session_factory as set_data_session_factory
-    from shukketsu.api.routes.health import set_health_deps
-    from shukketsu.config import get_settings
-    from shukketsu.db.engine import create_db_engine, create_session_factory
-
     settings = get_settings()
 
     # Database
@@ -41,14 +48,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     llm = create_llm(settings)
     graph = create_graph(llm, ALL_TOOLS)
     set_graph(graph)
-    logger.info("Agent graph compiled with %d tools, model=%s", len(ALL_TOOLS), settings.llm.model)
+    logger.info(
+        "Agent graph compiled with %d tools, model=%s",
+        len(ALL_TOOLS), settings.llm.model,
+    )
 
     # Health check dependencies
     set_health_deps(session_factory=session_factory, llm_base_url=settings.llm.base_url)
 
+    # Langfuse observability (optional)
+    langfuse_handler = None
+    if settings.langfuse.enabled:
+        cb_handler_cls = _init_callback_handler()
+        langfuse_handler = cb_handler_cls(
+            public_key=settings.langfuse.public_key,
+            secret_key=settings.langfuse.secret_key.get_secret_value(),
+            host=settings.langfuse.host,
+        )
+        set_langfuse_handler(langfuse_handler)
+        logger.info("Langfuse tracing enabled: %s", settings.langfuse.host)
+
     yield
 
     # Shutdown
+    if langfuse_handler is not None:
+        langfuse_handler.flush()
     await engine.dispose()
     logger.info("Database engine disposed")
 
@@ -67,6 +91,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    from shukketsu.api.routes.analyze import router as analyze_router
+    from shukketsu.api.routes.data import router as data_router
+    from shukketsu.api.routes.health import router as health_router
 
     app.include_router(health_router)
     app.include_router(analyze_router)
