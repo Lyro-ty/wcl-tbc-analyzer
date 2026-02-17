@@ -36,7 +36,7 @@ class AppConfig(BaseModel):
 class LangfuseConfig(BaseModel):
     enabled: bool = False
     public_key: str = ""
-    secret_key: str = ""
+    secret_key: SecretStr = SecretStr("")
     host: str = "http://localhost:3000"
 
 

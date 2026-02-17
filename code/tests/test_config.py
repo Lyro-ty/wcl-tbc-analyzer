@@ -72,5 +72,5 @@ def test_langfuse_env_override(monkeypatch):
     settings = Settings(_env_file=None)
     assert settings.langfuse.enabled is True
     assert settings.langfuse.public_key == "pk-lf-test"
-    assert settings.langfuse.secret_key == "sk-lf-test"
+    assert settings.langfuse.secret_key.get_secret_value() == "sk-lf-test"
     assert settings.langfuse.host == "http://langfuse:3000"

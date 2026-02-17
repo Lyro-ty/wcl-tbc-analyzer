@@ -1,6 +1,7 @@
 services:
   langfuse-postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: langfuse
       POSTGRES_USER: langfuse
@@ -17,6 +18,7 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server
+    restart: unless-stopped
     user: "101:101"
     environment:
       CLICKHOUSE_DB: default
@@ -36,6 +38,7 @@ services:
 
   minio:
     image: minio/minio
+    restart: unless-stopped
     entrypoint: >
       /bin/sh -c "
       minio server /data --console-address ':9001' &
@@ -59,6 +62,7 @@ services:
 
   redis:
     image: redis:7
+    restart: unless-stopped
     command: redis-server --requirepass myredissecret
     ports:
       - "127.0.0.1:6379:6379"
@@ -70,6 +74,7 @@ services:
 
   langfuse-worker:
     image: langfuse/langfuse-worker:3
+    restart: unless-stopped
     depends_on:
       langfuse-postgres:
         condition: service_healthy
@@ -113,6 +118,7 @@ services:
 
   langfuse-web:
     image: langfuse/langfuse:3
+    restart: unless-stopped
     depends_on:
       langfuse-postgres:
         condition: service_healthy
