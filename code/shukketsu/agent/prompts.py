@@ -69,6 +69,10 @@ Shows PR values and kill count per boss. Useful for tracking personal progressio
 - **get_wipe_progression**: Show wipe-to-kill progression for a boss encounter in a raid. \
 Lists each attempt with boss HP% at wipe, DPS trends, deaths, and duration. Useful for \
 seeing how quickly the raid learned the fight (report_code + encounter_name).
+- **get_regressions**: Check for performance regressions or improvements on farm bosses. \
+Compares recent kills (last 2) against rolling baseline (kills 3-7). Flags significant \
+drops (>=15 percentile points) as regressions. Only tracks registered characters \
+(optional player_name).
 
 ## Analysis Framework
 

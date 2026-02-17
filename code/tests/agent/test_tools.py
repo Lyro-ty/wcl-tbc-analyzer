@@ -13,6 +13,7 @@ from shukketsu.agent.tools import (
     get_personal_bests,
     get_raid_execution,
     get_raid_summary,
+    get_regressions,
     get_top_rankings,
     get_wipe_progression,
 )
@@ -28,7 +29,7 @@ class TestToolDecorators:
             assert tool.description, f"{tool.name} has no description"
 
     def test_expected_tool_count(self):
-        assert len(ALL_TOOLS) == 22
+        assert len(ALL_TOOLS) == 23
 
     def test_tool_names(self):
         names = {t.name for t in ALL_TOOLS}
@@ -40,7 +41,7 @@ class TestToolDecorators:
             "get_ability_breakdown", "get_buff_analysis",
             "get_death_analysis", "get_activity_report", "get_cooldown_efficiency",
             "get_consumable_check", "get_overheal_analysis", "get_cancelled_casts",
-            "get_personal_bests", "get_wipe_progression",
+            "get_personal_bests", "get_wipe_progression", "get_regressions",
         }
         assert names == expected
 
@@ -634,6 +635,131 @@ class TestGetWipeProgression:
 
         assert "73.5%" in result
         assert "WIPE" in result
+
+
+class TestGetRegressions:
+    async def test_returns_regression_and_improvement(self):
+        """Tool should show both regressions and improvements."""
+        mock_rows = [
+            MagicMock(
+                player_name="Lyro",
+                encounter_name="Patchwerk",
+                recent_parse=72.0,
+                baseline_parse=90.2,
+                recent_dps=1205.3,
+                baseline_dps=1890.0,
+                parse_delta=-18.2,
+                dps_delta_pct=-36.2,
+            ),
+            MagicMock(
+                player_name="Lyro",
+                encounter_name="Grobbulus",
+                recent_parse=88.5,
+                baseline_parse=70.1,
+                recent_dps=1650.0,
+                baseline_dps=1350.0,
+                parse_delta=18.4,
+                dps_delta_pct=22.2,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_regressions.ainvoke({})
+
+        assert "REGRESSION" in result
+        assert "IMPROVEMENT" in result
+        assert "Lyro" in result
+        assert "Patchwerk" in result
+        assert "Grobbulus" in result
+        assert "72.0%" in result
+        assert "90.2%" in result
+        assert "88.5%" in result
+        assert "70.1%" in result
+
+    async def test_with_player_filter(self):
+        """Tool should filter by player_name when provided."""
+        mock_rows = [
+            MagicMock(
+                player_name="Lyro",
+                encounter_name="Patchwerk",
+                recent_parse=72.0,
+                baseline_parse=90.2,
+                recent_dps=1205.3,
+                baseline_dps=1890.0,
+                parse_delta=-18.2,
+                dps_delta_pct=-36.2,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_regressions.ainvoke({"player_name": "Lyro"})
+
+        assert "Lyro" in result
+        assert "Patchwerk" in result
+        # Verify the player_name param was used
+        call_args = mock_session.execute.call_args
+        params = call_args[0][1]
+        assert "player_name" in params
+
+    async def test_no_regressions_returns_friendly_message(self):
+        """Tool should return a friendly message when no regressions found."""
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_regressions.ainvoke({})
+
+        assert "no significant" in result.lower() or "normal range" in result.lower()
+
+    async def test_error_handling(self):
+        """Tool should return error string on DB failure."""
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = Exception("connection lost")
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_regressions.ainvoke({})
+
+        assert "Error" in result
+        assert "connection lost" in result
+
+    async def test_null_dps_delta_pct(self):
+        """Tool should handle None dps_delta_pct (when baseline DPS is 0)."""
+        mock_rows = [
+            MagicMock(
+                player_name="Lyro",
+                encounter_name="Patchwerk",
+                recent_parse=72.0,
+                baseline_parse=90.2,
+                recent_dps=1205.3,
+                baseline_dps=0.0,
+                parse_delta=-18.2,
+                dps_delta_pct=None,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_regressions.ainvoke({})
+
+        assert "REGRESSION" in result
+        assert "N/A" in result
 
 
 class TestNoResults:

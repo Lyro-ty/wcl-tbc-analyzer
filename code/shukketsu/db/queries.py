@@ -621,3 +621,92 @@ CONSUMABLE_CHECK = text("""
       AND bu.metric_type = 'buff'
     ORDER BY bu.uptime_pct DESC
 """)
+
+REGRESSION_CHECK = text("""
+    WITH ranked_fights AS (
+        SELECT fp.player_name, e.name AS encounter_name,
+               fp.dps, fp.parse_percentile,
+               f.end_time,
+               ROW_NUMBER() OVER (
+                   PARTITION BY fp.player_name, e.id
+                   ORDER BY f.end_time DESC
+               ) AS rn
+        FROM fight_performances fp
+        JOIN fights f ON fp.fight_id = f.id
+        JOIN encounters e ON f.encounter_id = e.id
+        WHERE fp.is_my_character = true AND f.kill = true
+    ),
+    baseline AS (
+        SELECT player_name, encounter_name,
+               AVG(parse_percentile) AS baseline_parse,
+               AVG(dps) AS baseline_dps
+        FROM ranked_fights WHERE rn BETWEEN 3 AND 7
+        GROUP BY player_name, encounter_name
+        HAVING COUNT(*) >= 3
+    ),
+    recent AS (
+        SELECT player_name, encounter_name,
+               AVG(parse_percentile) AS recent_parse,
+               AVG(dps) AS recent_dps
+        FROM ranked_fights WHERE rn BETWEEN 1 AND 2
+        GROUP BY player_name, encounter_name
+    )
+    SELECT r.player_name, r.encounter_name,
+           ROUND(r.recent_parse::numeric, 1) AS recent_parse,
+           ROUND(b.baseline_parse::numeric, 1) AS baseline_parse,
+           ROUND(r.recent_dps::numeric, 1) AS recent_dps,
+           ROUND(b.baseline_dps::numeric, 1) AS baseline_dps,
+           ROUND((r.recent_parse - b.baseline_parse)::numeric, 1) AS parse_delta,
+           ROUND(((r.recent_dps - b.baseline_dps)
+               / NULLIF(b.baseline_dps, 0) * 100)::numeric, 1) AS dps_delta_pct
+    FROM recent r
+    JOIN baseline b ON r.player_name = b.player_name
+                   AND r.encounter_name = b.encounter_name
+    WHERE ABS(r.recent_parse - b.baseline_parse) >= 15
+    ORDER BY parse_delta ASC
+""")
+
+REGRESSION_CHECK_PLAYER = text("""
+    WITH ranked_fights AS (
+        SELECT fp.player_name, e.name AS encounter_name,
+               fp.dps, fp.parse_percentile,
+               f.end_time,
+               ROW_NUMBER() OVER (
+                   PARTITION BY fp.player_name, e.id
+                   ORDER BY f.end_time DESC
+               ) AS rn
+        FROM fight_performances fp
+        JOIN fights f ON fp.fight_id = f.id
+        JOIN encounters e ON f.encounter_id = e.id
+        WHERE fp.is_my_character = true AND f.kill = true
+          AND fp.player_name ILIKE :player_name
+    ),
+    baseline AS (
+        SELECT player_name, encounter_name,
+               AVG(parse_percentile) AS baseline_parse,
+               AVG(dps) AS baseline_dps
+        FROM ranked_fights WHERE rn BETWEEN 3 AND 7
+        GROUP BY player_name, encounter_name
+        HAVING COUNT(*) >= 3
+    ),
+    recent AS (
+        SELECT player_name, encounter_name,
+               AVG(parse_percentile) AS recent_parse,
+               AVG(dps) AS recent_dps
+        FROM ranked_fights WHERE rn BETWEEN 1 AND 2
+        GROUP BY player_name, encounter_name
+    )
+    SELECT r.player_name, r.encounter_name,
+           ROUND(r.recent_parse::numeric, 1) AS recent_parse,
+           ROUND(b.baseline_parse::numeric, 1) AS baseline_parse,
+           ROUND(r.recent_dps::numeric, 1) AS recent_dps,
+           ROUND(b.baseline_dps::numeric, 1) AS baseline_dps,
+           ROUND((r.recent_parse - b.baseline_parse)::numeric, 1) AS parse_delta,
+           ROUND(((r.recent_dps - b.baseline_dps)
+               / NULLIF(b.baseline_dps, 0) * 100)::numeric, 1) AS dps_delta_pct
+    FROM recent r
+    JOIN baseline b ON r.player_name = b.player_name
+                   AND r.encounter_name = b.encounter_name
+    WHERE ABS(r.recent_parse - b.baseline_parse) >= 15
+    ORDER BY parse_delta ASC
+""")

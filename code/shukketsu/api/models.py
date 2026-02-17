@@ -380,6 +380,17 @@ class WipeProgressionAttempt(BaseModel):
     avg_parse: float | None
 
 
+class RegressionEntry(BaseModel):
+    player_name: str
+    encounter_name: str
+    recent_parse: float
+    baseline_parse: float
+    recent_dps: float
+    baseline_dps: float
+    parse_delta: float
+    dps_delta_pct: float | None
+
+
 class AutoIngestStatus(BaseModel):
     enabled: bool
     status: str

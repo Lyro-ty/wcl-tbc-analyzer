@@ -38,6 +38,7 @@ from shukketsu.api.models import (
     RankingsRefreshResponse,
     RecentReportSummary,
     RegisterCharacterRequest,
+    RegressionEntry,
     ReportSummary,
     SpecLeaderboardEntry,
     SpeedComparison,
@@ -1106,6 +1107,27 @@ async def dashboard_recent():
         return [RecentReportSummary(**dict(r._mapping)) for r in rows]
     except Exception as e:
         logger.exception("Failed to get recent reports")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get("/regressions", response_model=list[RegressionEntry])
+async def get_regressions_endpoint(player: str | None = None):
+    """Get performance regressions/improvements for tracked characters."""
+    session = await _get_session()
+    try:
+        if player:
+            result = await session.execute(
+                q.REGRESSION_CHECK_PLAYER,
+                {"player_name": f"%{player}%"},
+            )
+        else:
+            result = await session.execute(q.REGRESSION_CHECK)
+        rows = result.fetchall()
+        return [RegressionEntry(**dict(r._mapping)) for r in rows]
+    except Exception as e:
+        logger.exception("Failed to get regressions")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

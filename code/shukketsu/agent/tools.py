@@ -973,6 +973,59 @@ async def get_wipe_progression(report_code: str, encounter_name: str) -> str:
         await session.close()
 
 
+@tool
+async def get_regressions(player_name: str | None = None) -> str:
+    """Check for performance regressions or improvements on farm bosses.
+    Compares recent kills (last 2) against rolling baseline (kills 3-7).
+    Flags significant drops (>=15 percentile points) as regressions.
+    Only tracks registered characters."""
+    session = await _get_session()
+    try:
+        if player_name:
+            result = await session.execute(
+                q.REGRESSION_CHECK_PLAYER,
+                {"player_name": f"%{player_name}%"},
+            )
+        else:
+            result = await session.execute(q.REGRESSION_CHECK)
+        rows = result.fetchall()
+        if not rows:
+            return (
+                "No significant performance changes detected. "
+                "All tracked characters are performing within normal range "
+                "on farm bosses (requires at least 7 kills per boss)."
+            )
+
+        lines = ["Performance Changes Detected:\n"]
+        for r in rows:
+            if r.parse_delta < 0:
+                direction = "REGRESSION"
+                delta_str = f"down {abs(r.parse_delta)} pts"
+            else:
+                direction = "IMPROVEMENT"
+                delta_str = f"up {r.parse_delta} pts"
+
+            dps_str = f"{r.recent_dps:,.1f}"
+            baseline_dps_str = f"{r.baseline_dps:,.1f}"
+            dps_delta = (
+                f"{r.dps_delta_pct:+.1f}%"
+                if r.dps_delta_pct is not None
+                else "N/A"
+            )
+
+            lines.append(
+                f"  [{direction}] {r.player_name} on {r.encounter_name}: "
+                f"Parse {r.recent_parse}% (was {r.baseline_parse}%) "
+                f"-- {delta_str} | "
+                f"DPS: {dps_str} (was {baseline_dps_str}, {dps_delta})"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
 ALL_TOOLS = [
     get_my_performance,
     get_top_rankings,
@@ -996,4 +1049,5 @@ ALL_TOOLS = [
     get_cancelled_casts,
     get_personal_bests,
     get_wipe_progression,
+    get_regressions,
 ]
