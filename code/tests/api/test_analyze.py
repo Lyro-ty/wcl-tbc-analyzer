@@ -1,8 +1,9 @@
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, AIMessageChunk
 
 from shukketsu.api.routes.analyze import _strip_think_tags
 
@@ -145,3 +146,150 @@ async def test_analyze_handles_no_data():
     assert resp.status_code == 200
     body = resp.json()
     assert "No performance data" in body["answer"]
+
+
+# --- Streaming endpoint tests ---
+
+
+async def test_stream_returns_sse_events():
+    mock_graph = AsyncMock()
+
+    async def fake_astream(input, stream_mode=None):
+        yield (
+            AIMessageChunk(content="Your DPS is 1500."),
+            {"langgraph_node": "analyze"},
+        )
+
+    mock_graph.astream = fake_astream
+
+    with patch("shukketsu.api.routes.analyze._get_graph", return_value=mock_graph):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/analyze/stream",
+                json={"question": "How is my DPS?"},
+            )
+
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+
+    body = resp.text
+    # Parse data lines from SSE body
+    data_lines = [
+        line.removeprefix("data: ")
+        for line in body.splitlines()
+        if line.startswith("data:")
+    ]
+
+    token_events = [json.loads(d) for d in data_lines if "token" in d]
+    done_events = [json.loads(d) for d in data_lines if "done" in d]
+
+    assert len(token_events) >= 1
+    assert any("1500" in evt["token"] for evt in token_events)
+    assert len(done_events) == 1
+    assert done_events[0]["done"] is True
+
+
+async def test_stream_strips_think_tags():
+    mock_graph = AsyncMock()
+
+    async def fake_astream(input, stream_mode=None):
+        yield (
+            AIMessageChunk(content="<think>reasoning"),
+            {"langgraph_node": "analyze"},
+        )
+        yield (
+            AIMessageChunk(content="</think>Clean answer."),
+            {"langgraph_node": "analyze"},
+        )
+
+    mock_graph.astream = fake_astream
+
+    with patch("shukketsu.api.routes.analyze._get_graph", return_value=mock_graph):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/analyze/stream",
+                json={"question": "Analyze my performance"},
+            )
+
+    body = resp.text
+    data_lines = [
+        line.removeprefix("data: ")
+        for line in body.splitlines()
+        if line.startswith("data:")
+    ]
+
+    token_events = [json.loads(d) for d in data_lines if "token" in d]
+    all_tokens = "".join(evt["token"] for evt in token_events)
+
+    assert "<think>" not in all_tokens
+    assert "Clean answer." in all_tokens
+
+
+async def test_stream_skips_non_analyze_nodes():
+    mock_graph = AsyncMock()
+
+    async def fake_astream(input, stream_mode=None):
+        yield (
+            AIMessageChunk(content="Routing to performance query"),
+            {"langgraph_node": "route"},
+        )
+        yield (
+            AIMessageChunk(content="Your parse is 95th percentile."),
+            {"langgraph_node": "analyze"},
+        )
+
+    mock_graph.astream = fake_astream
+
+    with patch("shukketsu.api.routes.analyze._get_graph", return_value=mock_graph):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/analyze/stream",
+                json={"question": "How are my parses?"},
+            )
+
+    body = resp.text
+    data_lines = [
+        line.removeprefix("data: ")
+        for line in body.splitlines()
+        if line.startswith("data:")
+    ]
+
+    token_events = [json.loads(d) for d in data_lines if "token" in d]
+    all_tokens = "".join(evt["token"] for evt in token_events)
+
+    assert "95th percentile" in all_tokens
+    assert "Routing" not in all_tokens
+
+
+async def test_stream_handles_error():
+    mock_graph = AsyncMock()
+
+    async def fake_astream(input, stream_mode=None):
+        raise Exception("LLM connection refused")
+        # Make this an async generator that raises
+        yield  # pragma: no cover
+
+    mock_graph.astream = fake_astream
+
+    with patch("shukketsu.api.routes.analyze._get_graph", return_value=mock_graph):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/analyze/stream",
+                json={"question": "What is my DPS?"},
+            )
+
+    assert resp.status_code == 200
+    body = resp.text
+    assert "LLM connection refused" in body
