@@ -63,3 +63,6 @@ data/scratch/*
 # Linting/typing cache
 .ruff_cache/
 .mypy_cache/
+
+# Git worktrees
+.worktrees/
