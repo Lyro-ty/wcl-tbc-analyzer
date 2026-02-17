@@ -88,6 +88,7 @@ class Fight(Base):
     )
     kill: Mapped[bool] = mapped_column(Boolean)
     difficulty: Mapped[int] = mapped_column(Integer, default=0)
+    fight_percentage: Mapped[float | None] = mapped_column(Float)
 
     report: Mapped["Report"] = relationship(back_populates="fights")
     encounter: Mapped["Encounter"] = relationship(back_populates="fights")

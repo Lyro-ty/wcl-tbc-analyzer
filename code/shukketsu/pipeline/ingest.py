@@ -36,6 +36,7 @@ def parse_fights(fights_data: list[dict[str, Any]], report_code: str) -> list[Fi
             end_time=f["endTime"],
             kill=f["kill"],
             difficulty=f.get("difficulty", 0),
+            fight_percentage=f.get("fightPercentage"),
         ))
     return result
 

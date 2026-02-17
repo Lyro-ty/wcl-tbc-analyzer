@@ -86,6 +86,30 @@ class TestParseFights:
         assert gruul.kill is False
         assert gruul.difficulty == 0
 
+    def test_fight_percentage_stored_for_wipe(self):
+        """Verify fightPercentage from WCL data appears in parsed Fight object."""
+        fights = parse_fights(self.FIGHTS_DATA, "abc123")
+        gruul = [f for f in fights if f.encounter_id == 650][0]
+        assert gruul.fight_percentage == 35
+
+    def test_fight_percentage_stored_for_kill(self):
+        """Verify fightPercentage=0 is stored for kills."""
+        fights = parse_fights(self.FIGHTS_DATA, "abc123")
+        maulgar = [f for f in fights if f.encounter_id == 649][0]
+        assert maulgar.fight_percentage == 0
+
+    def test_fight_percentage_none_when_missing(self):
+        """Verify fight_percentage defaults to None when not present in WCL data."""
+        fights_data = [
+            {
+                "id": 5, "name": "Patchwerk", "startTime": 0, "endTime": 180000,
+                "kill": True, "encounterID": 201115, "difficulty": 0,
+            },
+        ]
+        fights = parse_fights(fights_data, "abc123")
+        assert len(fights) == 1
+        assert fights[0].fight_percentage is None
+
 
 class TestParseRankingsToPerformances:
     RANKING_DATA = [
