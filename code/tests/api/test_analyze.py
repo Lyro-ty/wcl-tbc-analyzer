@@ -391,3 +391,77 @@ async def test_stream_passes_langfuse_callbacks():
             )
 
     assert mock_handler in astream_config_capture["config"].get("callbacks", [])
+
+
+# --- Lifespan Langfuse wiring tests ---
+
+
+async def test_lifespan_creates_langfuse_handler_when_enabled(monkeypatch):
+    """When LANGFUSE__ENABLED=true, lifespan sets up the handler."""
+    monkeypatch.setenv("LANGFUSE__ENABLED", "true")
+    monkeypatch.setenv("LANGFUSE__PUBLIC_KEY", "pk-lf-test")
+    monkeypatch.setenv("LANGFUSE__SECRET_KEY", "sk-lf-test")
+    monkeypatch.setenv("LANGFUSE__HOST", "http://localhost:3000")
+
+    from shukketsu.config import get_settings
+    get_settings.cache_clear()
+
+    with (
+        patch("shukketsu.api.app.create_db_engine") as mock_engine,
+        patch("shukketsu.api.app.create_session_factory") as mock_sf,
+        patch("shukketsu.api.app.create_llm"),
+        patch("shukketsu.api.app.create_graph"),
+        patch("shukketsu.api.app.set_session_factory"),
+        patch("shukketsu.api.app.set_data_session_factory"),
+        patch("shukketsu.api.app.set_graph"),
+        patch("shukketsu.api.app.set_health_deps"),
+        patch("shukketsu.api.app.set_langfuse_handler") as mock_set_handler,
+        patch("shukketsu.api.app.CallbackHandler") as mock_cb_cls,
+    ):
+        mock_engine.return_value = AsyncMock()
+        mock_sf.return_value = AsyncMock()
+
+        from shukketsu.api.app import create_app
+        app = create_app()
+
+        async with app.router.lifespan_context(app):
+            pass
+
+    mock_cb_cls.assert_called_once_with(
+        public_key="pk-lf-test",
+        secret_key="sk-lf-test",
+        host="http://localhost:3000",
+    )
+    mock_set_handler.assert_called_once()
+    get_settings.cache_clear()
+
+
+async def test_lifespan_skips_langfuse_when_disabled(monkeypatch):
+    """When LANGFUSE__ENABLED=false (default), no handler is created."""
+    monkeypatch.setenv("LANGFUSE__ENABLED", "false")
+
+    from shukketsu.config import get_settings
+    get_settings.cache_clear()
+
+    with (
+        patch("shukketsu.api.app.create_db_engine") as mock_engine,
+        patch("shukketsu.api.app.create_session_factory") as mock_sf,
+        patch("shukketsu.api.app.create_llm"),
+        patch("shukketsu.api.app.create_graph"),
+        patch("shukketsu.api.app.set_session_factory"),
+        patch("shukketsu.api.app.set_data_session_factory"),
+        patch("shukketsu.api.app.set_graph"),
+        patch("shukketsu.api.app.set_health_deps"),
+        patch("shukketsu.api.app.set_langfuse_handler") as mock_set_handler,
+    ):
+        mock_engine.return_value = AsyncMock()
+        mock_sf.return_value = AsyncMock()
+
+        from shukketsu.api.app import create_app
+        app = create_app()
+
+        async with app.router.lifespan_context(app):
+            pass
+
+    mock_set_handler.assert_not_called()
+    get_settings.cache_clear()
