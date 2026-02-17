@@ -116,6 +116,23 @@ query ReportEvents($code: String!, $startTime: Float!, $endTime: Float!,
 }
 """
 
+GUILD_REPORTS = """
+query GuildReports($guildID: Int!, $zoneID: Int, $limit: Int) {
+    reportData {
+        reports(guildID: $guildID, zoneID: $zoneID, limit: $limit) {
+            data {
+                code
+                title
+                startTime
+                endTime
+                zone { id name }
+            }
+        }
+    }
+    RATE_LIMIT
+}
+"""
+
 ZONE_ENCOUNTERS = """
 query ZoneEncounters($zoneID: Int!) {
     worldData {

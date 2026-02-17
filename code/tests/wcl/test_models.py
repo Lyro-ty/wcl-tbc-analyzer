@@ -4,6 +4,7 @@ from shukketsu.wcl.models import (
     CharacterRanking,
     EventPage,
     Fight,
+    GuildReportEntry,
     RateLimitData,
     ReportRanking,
 )
@@ -119,3 +120,68 @@ class TestReportRanking:
         assert ranking.spec == "Combat"
         assert ranking.amount == 1500.5
         assert ranking.bracket_percent == 95
+
+
+class TestGuildReportEntry:
+    def test_parse_with_zone(self):
+        entry = GuildReportEntry.model_validate(
+            {
+                "code": "abc123XYZ",
+                "title": "Naxxramas - 2025-01-15",
+                "startTime": 1705300000000,
+                "endTime": 1705310000000,
+                "zone": {"id": 2017, "name": "Naxxramas"},
+            }
+        )
+        assert entry.code == "abc123XYZ"
+        assert entry.title == "Naxxramas - 2025-01-15"
+        assert entry.start_time == 1705300000000
+        assert entry.end_time == 1705310000000
+        assert entry.zone == {"id": 2017, "name": "Naxxramas"}
+
+    def test_parse_without_zone(self):
+        entry = GuildReportEntry.model_validate(
+            {
+                "code": "def456ABC",
+                "title": "Weekly Raid",
+                "startTime": 1705300000000,
+                "endTime": 1705310000000,
+                "zone": None,
+            }
+        )
+        assert entry.code == "def456ABC"
+        assert entry.zone is None
+
+    def test_zone_defaults_to_none(self):
+        entry = GuildReportEntry.model_validate(
+            {
+                "code": "ghi789DEF",
+                "title": "Alt Run",
+                "startTime": 1705300000000,
+                "endTime": 1705310000000,
+            }
+        )
+        assert entry.zone is None
+
+    def test_parse_list_of_entries(self):
+        raw_data = [
+            {
+                "code": "report1",
+                "title": "Naxx Clear",
+                "startTime": 1705300000000,
+                "endTime": 1705310000000,
+                "zone": {"id": 2017, "name": "Naxxramas"},
+            },
+            {
+                "code": "report2",
+                "title": "AQ40 Prog",
+                "startTime": 1705200000000,
+                "endTime": 1705210000000,
+                "zone": {"id": 2015, "name": "Temple of Ahn'Qiraj"},
+            },
+        ]
+        entries = [GuildReportEntry.model_validate(r) for r in raw_data]
+        assert len(entries) == 2
+        assert entries[0].code == "report1"
+        assert entries[1].code == "report2"
+        assert entries[1].zone["name"] == "Temple of Ahn'Qiraj"

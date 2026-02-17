@@ -99,6 +99,16 @@ class TableSourceEntry(WCLBaseModel):
     entries: list[TableEntry] = []
 
 
+class GuildReportEntry(WCLBaseModel):
+    """Individual report entry from guild reports listing."""
+
+    code: str
+    title: str
+    start_time: int
+    end_time: int
+    zone: dict | None = None
+
+
 class ZoneRankingEntry(WCLBaseModel):
     """Individual ranking entry from characterRankings response."""
 
