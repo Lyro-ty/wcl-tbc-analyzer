@@ -141,6 +141,7 @@ class TestIngestCombatantInfoForReport:
     async def test_mocked_ingest(self):
         wcl = AsyncMock()
         session = AsyncMock()
+        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
         session.execute = AsyncMock()
 
         # Mock fight query result

@@ -1,5 +1,8 @@
 """LangGraph agent tools for querying raid performance data."""
 
+import json
+from collections import defaultdict
+
 from langchain_core.tools import tool
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -568,10 +571,9 @@ async def get_death_analysis(
             return (
                 f"No death data found for fight {fight_id} in report {report_code}. "
                 f"Event data may not have been ingested yet "
-                f"(use pull-my-logs --with-tables to fetch it)."
+                f"(use pull-my-logs --with-events to fetch it)."
             )
 
-        import json
         lines = [
             f"Death analysis for {rows[0].encounter_name} "
             f"({report_code}#{fight_id}):\n"
@@ -624,7 +626,7 @@ async def get_activity_report(
             return (
                 f"No cast activity data found for fight {fight_id} in report {report_code}. "
                 f"Event data may not have been ingested yet "
-                f"(use pull-my-logs --with-tables to fetch it)."
+                f"(use pull-my-logs --with-events to fetch it)."
             )
 
         lines = [
@@ -674,7 +676,7 @@ async def get_cooldown_efficiency(
             return (
                 f"No cooldown data found for fight {fight_id} in report {report_code}. "
                 f"Event data may not have been ingested yet "
-                f"(use pull-my-logs --with-tables to fetch it)."
+                f"(use pull-my-logs --with-events to fetch it)."
             )
 
         lines = [
@@ -736,7 +738,7 @@ async def get_consumable_check(
             return (
                 f"No consumable data found for fight {fight_id} in report "
                 f"{report_code}. Event data may not have been ingested yet "
-                f"(use pull-my-logs --with-tables to fetch it)."
+                f"(use pull-my-logs --with-events to fetch it)."
             )
 
         # Expected categories: flask OR elixir (mutually exclusive), food
@@ -744,7 +746,6 @@ async def get_consumable_check(
         nice_to_have = {"weapon_oil"}
 
         # Group by player
-        from collections import defaultdict
         players: dict[str, list] = defaultdict(list)
         for r in rows:
             players[r.player_name].append(r)
@@ -850,7 +851,7 @@ async def get_cancelled_casts(
         result = await session.execute(
             q.CANCELLED_CASTS,
             {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player_name},
+             "player_name": f"%{player_name}%"},
         )
         row = result.fetchone()
         if not row:
@@ -858,8 +859,6 @@ async def get_cancelled_casts(
                 f"No cancelled cast data found for '{player_name}' in fight {fight_id} "
                 f"of report {report_code}. Event data may not have been ingested yet."
             )
-
-        import json
 
         lines = [
             f"Cancelled cast analysis for {player_name} in {report_code}#{fight_id}:\n",
@@ -1164,7 +1163,7 @@ async def get_resource_usage(
         result = await session.execute(
             q.RESOURCE_USAGE,
             {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player_name},
+             "player_name": f"%{player_name}%"},
         )
         rows = result.fetchall()
         if not rows:
@@ -1172,7 +1171,7 @@ async def get_resource_usage(
                 f"No resource data found for '{player_name}' in fight "
                 f"{fight_id} of report {report_code}. Event data may not "
                 f"have been ingested yet "
-                f"(use pull-my-logs --with-tables to fetch it)."
+                f"(use pull-my-logs --with-events to fetch it)."
             )
 
         lines = [
@@ -1213,7 +1212,7 @@ async def get_cooldown_windows(
         result = await session.execute(
             q.COOLDOWN_WINDOWS,
             {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player_name},
+             "player_name": f"%{player_name}%"},
         )
         rows = result.fetchall()
         if not rows:
@@ -1221,7 +1220,7 @@ async def get_cooldown_windows(
                 f"No cooldown window data found for '{player_name}' in "
                 f"fight {fight_id} of report {report_code}. Event data "
                 f"may not have been ingested yet "
-                f"(use pull-my-logs --with-tables to fetch it)."
+                f"(use pull-my-logs --with-events to fetch it)."
             )
 
         lines = [
@@ -1261,17 +1260,16 @@ async def get_dot_management(
     Shows early refresh rates, clipped ticks, and refresh timing quality.
     Only applies to DoT-based specs (Warlock, Shadow Priest, Balance Druid).
     Requires event data ingestion."""
-    from collections import defaultdict
-
     from shukketsu.pipeline.constants import CLASSIC_DOTS, DOT_BY_SPELL_ID
 
     session = await _get_session()
     try:
         # Get player class
+        pn_like = f"%{player_name}%"
         info_result = await session.execute(
             q.PLAYER_FIGHT_INFO,
             {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player_name},
+             "player_name": pn_like},
         )
         info_row = info_result.fetchone()
         if not info_row:
@@ -1294,7 +1292,7 @@ async def get_dot_management(
         cast_result = await session.execute(
             q.CAST_EVENTS_FOR_DOT_ANALYSIS,
             {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player_name},
+             "player_name": pn_like},
         )
         cast_rows = cast_result.fetchall()
 
@@ -1376,10 +1374,11 @@ async def get_rotation_score(
     session = await _get_session()
     try:
         # Get player info
+        pn_like = f"%{player_name}%"
         info_result = await session.execute(
             q.PLAYER_FIGHT_INFO,
             {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player_name},
+             "player_name": pn_like},
         )
         info_row = info_result.fetchone()
         if not info_row:
@@ -1394,7 +1393,7 @@ async def get_rotation_score(
         cm_result = await session.execute(
             q.FIGHT_CAST_METRICS,
             {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player_name},
+             "player_name": pn_like},
         )
         cm_row = cm_result.fetchone()
 
@@ -1402,7 +1401,7 @@ async def get_rotation_score(
         cd_result = await session.execute(
             q.FIGHT_COOLDOWNS,
             {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player_name},
+             "player_name": pn_like},
         )
         cd_rows = cd_result.fetchall()
 
@@ -1492,7 +1491,7 @@ async def get_trinket_performance(
         result = await session.execute(
             q.PLAYER_BUFFS_FOR_TRINKETS,
             {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player_name},
+             "player_name": f"%{player_name}%"},
         )
         rows = result.fetchall()
 
@@ -1551,19 +1550,16 @@ async def get_enchant_gem_check(
         rows = (await session.execute(
             q.ENCHANT_GEM_CHECK,
             {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player_name},
+             "player_name": f"%{player_name}%"},
         )).fetchall()
         if not rows:
             return f"No gear data found for {player_name} in {report_code}#{fight_id}."
 
-        # Slots that should have permanent enchants
-        enchantable_slots = {0, 2, 4, 5, 7, 8, 9, 11, 14, 15}
-        slot_names = {
-            0: "Head", 1: "Neck", 2: "Shoulder", 3: "Shirt", 4: "Chest",
-            5: "Waist", 6: "Legs", 7: "Feet", 8: "Wrist", 9: "Hands",
-            10: "Ring 1", 11: "Ring 2", 12: "Trinket 1", 13: "Trinket 2",
-            14: "Cloak", 15: "Main Hand", 16: "Off Hand", 17: "Ranged",
-        }
+        from shukketsu.pipeline.constants import GEAR_SLOTS
+
+        # Slots that should have permanent enchants (Classic/TBC)
+        # Excludes waist (no enchant), rings (enchanter-only), trinkets, neck, shirt
+        enchantable_slots = {0, 2, 4, 6, 7, 8, 9, 14, 15}
         issues = []
         total_slots = 0
         enchanted = 0
@@ -1572,7 +1568,7 @@ async def get_enchant_gem_check(
 
         for r in rows:
             total_slots += 1
-            sname = slot_names.get(r.slot, f"Slot {r.slot}")
+            sname = GEAR_SLOTS.get(r.slot, f"Slot {r.slot}")
 
             # Check enchant
             if r.slot in enchantable_slots:
@@ -1583,7 +1579,6 @@ async def get_enchant_gem_check(
 
             # Check gems
             if r.gems_json:
-                import json
                 gems = json.loads(r.gems_json)
                 for gem in gems:
                     total_gems += 1

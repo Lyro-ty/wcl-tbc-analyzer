@@ -199,6 +199,7 @@ class TestReingestionIdempotency:
         mock_wcl.query.return_value = self.REPORT_DATA
 
         mock_session = AsyncMock()
+        mock_session.add = MagicMock()  # session.add() is sync in SQLAlchemy
         # select returns empty (no existing fights)
         mock_select_result = MagicMock()
         mock_select_result.__iter__ = MagicMock(return_value=iter([]))
@@ -216,6 +217,7 @@ class TestReingestionIdempotency:
         mock_wcl.query.return_value = self.REPORT_DATA
 
         mock_session = AsyncMock()
+        mock_session.add = MagicMock()  # session.add() is sync in SQLAlchemy
         # First execute returns existing fight IDs
         existing_result = MagicMock()
         existing_result.__iter__ = MagicMock(return_value=iter([(42,)]))
@@ -275,6 +277,7 @@ class TestAutoSnapshotAfterIngest:
         mock_wcl.query.return_value = self.REPORT_DATA
 
         mock_session = AsyncMock()
+        mock_session.add = MagicMock()  # session.add() is sync in SQLAlchemy
         mock_select_result = MagicMock()
         mock_select_result.__iter__ = MagicMock(return_value=iter([]))
         mock_session.execute.return_value = mock_select_result
@@ -294,6 +297,7 @@ class TestAutoSnapshotAfterIngest:
         mock_wcl.query.return_value = self.REPORT_DATA
 
         mock_session = AsyncMock()
+        mock_session.add = MagicMock()  # session.add() is sync in SQLAlchemy
         mock_select_result = MagicMock()
         mock_select_result.__iter__ = MagicMock(return_value=iter([]))
         mock_session.execute.return_value = mock_select_result
@@ -313,6 +317,7 @@ class TestAutoSnapshotAfterIngest:
         mock_wcl.query.return_value = self.REPORT_DATA
 
         mock_session = AsyncMock()
+        mock_session.add = MagicMock()  # session.add() is sync in SQLAlchemy
         mock_select_result = MagicMock()
         mock_select_result.__iter__ = MagicMock(return_value=iter([]))
         mock_session.execute.return_value = mock_select_result
@@ -364,6 +369,7 @@ class TestIngestEventsWiring:
         mock_wcl.query.return_value = self.REPORT_DATA
 
         mock_session = AsyncMock()
+        mock_session.add = MagicMock()  # session.add() is sync in SQLAlchemy
         mock_select_result = MagicMock()
         mock_select_result.__iter__ = MagicMock(return_value=iter([]))
         mock_session.execute.return_value = mock_select_result

@@ -121,6 +121,7 @@ class TestFetchSpeedRankingsForEncounter:
             }
         }
         session = AsyncMock()
+        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
         count = await fetch_speed_rankings_for_encounter(wcl, session, 201107)
 
@@ -140,6 +141,7 @@ class TestFetchSpeedRankingsForEncounter:
             }
         }
         session = AsyncMock()
+        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
         await fetch_speed_rankings_for_encounter(wcl, session, 201107)
 
@@ -156,6 +158,7 @@ class TestFetchSpeedRankingsForEncounter:
             }
         }
         session = AsyncMock()
+        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
         await fetch_speed_rankings_for_encounter(wcl, session, 201107)
 

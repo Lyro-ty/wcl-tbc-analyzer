@@ -22,6 +22,7 @@ def compute_resource_snapshots(
     fight_id: int,
     fight_duration_ms: int,
     actors: dict[int, str],
+    fight_start_time: int = 0,
 ) -> list[ResourceSnapshot]:
     """Parse WCL ResourceChange events into per-player per-resource-type snapshots.
 
@@ -93,14 +94,12 @@ def compute_resource_snapshots(
                     delta = timestamps[i + 1] - timestamps[i]
                 else:
                     # Last event: count from this timestamp to end of fight.
-                    # Use fight_duration_ms relative to fight start. Since WCL
-                    # timestamps are absolute, we approximate using the first
-                    # event's timestamp as the fight start reference.
-                    if timestamps:
-                        fight_end_approx = timestamps[0] + fight_duration_ms
-                        delta = fight_end_approx - timestamps[i]
-                    else:
-                        delta = 0
+                    fight_end = (
+                        fight_start_time + fight_duration_ms
+                        if fight_start_time
+                        else timestamps[0] + fight_duration_ms
+                    )
+                    delta = fight_end - timestamps[i]
                 time_at_zero_ms += max(0, delta)
 
         time_at_zero_pct = round(time_at_zero_ms / fight_duration_ms * 100, 1)
@@ -172,6 +171,7 @@ async def ingest_resource_data_for_fight(
         # Compute snapshots and insert
         snapshots = compute_resource_snapshots(
             events, fight.id, fight_duration_ms, actors,
+            fight_start_time=fight.start_time,
         )
         for snapshot in snapshots:
             session.add(snapshot)

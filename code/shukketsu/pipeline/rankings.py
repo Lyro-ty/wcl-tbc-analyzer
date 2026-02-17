@@ -163,20 +163,23 @@ async def ingest_all_rankings(
                             )
                         )
                         last_fetched = existing.scalar_one_or_none()
-                        if last_fetched and last_fetched.replace(
-                            tzinfo=UTC
-                        ) > cutoff:
-                            result.skipped += 1
-                            logger.debug(
-                                "[%d/%d] Skipping %s %s on %d (%s) — fresh",
-                                progress,
-                                total_combos,
-                                spec.class_name,
-                                spec.spec_name,
-                                enc_id,
-                                metric,
+                        if last_fetched:
+                            aware = (
+                                last_fetched if last_fetched.tzinfo
+                                else last_fetched.replace(tzinfo=UTC)
                             )
-                            continue
+                            if aware > cutoff:
+                                result.skipped += 1
+                                logger.debug(
+                                    "[%d/%d] Skipping %s %s on %d (%s) — fresh",
+                                    progress,
+                                    total_combos,
+                                    spec.class_name,
+                                    spec.spec_name,
+                                    enc_id,
+                                    metric,
+                                )
+                                continue
 
                     count = await fetch_rankings_for_spec(
                         wcl,

@@ -2,7 +2,13 @@ import logging
 import time
 
 import httpx
-from tenacity import retry, retry_if_result, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    retry_if_result,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +50,10 @@ class WCLAuth:
         return self._token
 
     @retry(
-        retry=retry_if_result(_is_server_error),
+        retry=(
+            retry_if_result(_is_server_error)
+            | retry_if_exception_type((httpx.ConnectError, httpx.ReadTimeout))
+        ),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
     )

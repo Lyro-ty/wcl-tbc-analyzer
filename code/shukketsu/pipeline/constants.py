@@ -286,16 +286,16 @@ CONSUMABLE_CATEGORIES: dict[int, tuple[str, str]] = {
     17627: ("flask", "Flask of Distilled Wisdom"),
     17629: ("flask", "Flask of Chromatic Resistance"),
     # Battle Elixirs
-    28490: ("elixir", "Elixir of Major Strength"),
+    28490: ("elixir", "Elixir of Major Agility"),
     28491: ("elixir", "Elixir of Healing Power"),
     28493: ("elixir", "Elixir of Major Frost Power"),
     28501: ("elixir", "Elixir of Major Firepower"),
     28503: ("elixir", "Elixir of Major Shadow Power"),
     11390: ("elixir", "Elixir of the Mongoose"),
     # Guardian Elixirs
-    28502: ("elixir", "Elixir of Major Armor"),
-    28509: ("elixir", "Elixir of Major Mageblood"),
-    28514: ("elixir", "Elixir of Empowerment"),
+    28502: ("elixir", "Elixir of Major Mageblood"),
+    28509: ("elixir", "Elixir of Major Defense"),
+    28514: ("elixir", "Elixir of Major Fortitude"),
     # Food
     33254: ("food", "Well Fed"),
     33257: ("food", "Well Fed"),

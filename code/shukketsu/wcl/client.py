@@ -58,7 +58,8 @@ class WCLClient:
         graphql_query: str,
         variables: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        assert self._http is not None, "Use WCLClient as an async context manager"
+        if self._http is None:
+            raise RuntimeError("Use WCLClient as an async context manager")
 
         await self._rate_limiter.wait_if_needed()
 

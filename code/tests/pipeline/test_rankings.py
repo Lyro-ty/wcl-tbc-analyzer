@@ -165,6 +165,7 @@ class TestFetchRankingsForSpec:
             }
         }
         session = AsyncMock()
+        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
         count = await fetch_rankings_for_spec(
             wcl, session, 650, "Rogue", "Combat", "dps"
@@ -189,6 +190,7 @@ class TestFetchRankingsForSpec:
             }
         }
         session = AsyncMock()
+        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
         await fetch_rankings_for_spec(
             wcl, session, 650, "Rogue", "Combat", "dps"
@@ -224,6 +226,7 @@ class TestFetchRankingsForSpec:
             }
         }
         session = AsyncMock()
+        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
         await fetch_rankings_for_spec(
             wcl, session, 650, "Rogue", "Combat", "dps"

@@ -275,7 +275,7 @@ CHARACTER_REPORTS = text("""
     FROM reports r
     JOIN fights f ON r.code = f.report_code
     JOIN fight_performances fp ON f.id = fp.fight_id
-    WHERE fp.player_name = :character_name
+    WHERE fp.player_name ILIKE :character_name
     GROUP BY r.code, r.title, r.guild_name, r.start_time, r.end_time
     ORDER BY r.start_time DESC
 """)
@@ -343,7 +343,7 @@ FIGHT_ABILITIES_PLAYER = text("""
     JOIN fights f ON am.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND am.player_name = :player_name
+      AND am.player_name ILIKE :player_name
     ORDER BY am.metric_type, am.pct_of_total DESC
 """)
 
@@ -364,7 +364,7 @@ FIGHT_BUFFS_PLAYER = text("""
     JOIN fights f ON bu.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND bu.player_name = :player_name
+      AND bu.player_name ILIKE :player_name
     ORDER BY bu.metric_type, bu.uptime_pct DESC
 """)
 
@@ -433,7 +433,7 @@ CHARACTER_PROFILE = text("""
     FROM my_characters mc
     LEFT JOIN fight_performances fp ON fp.player_name = mc.name
     LEFT JOIN fights f ON fp.fight_id = f.id
-    WHERE mc.name = :character_name
+    WHERE mc.name ILIKE :character_name
     GROUP BY mc.id, mc.name, mc.server_slug, mc.server_region,
              mc.character_class, mc.spec
 """)
@@ -449,7 +449,7 @@ CHARACTER_RECENT_PARSES = text("""
     JOIN encounters e ON f.encounter_id = e.id
     JOIN reports r ON f.report_code = r.code
     JOIN my_characters mc ON mc.name = fp.player_name
-    WHERE mc.name = :character_name
+    WHERE mc.name ILIKE :character_name
     ORDER BY r.start_time DESC
     LIMIT 30
 """)
@@ -486,7 +486,7 @@ CHARACTER_REPORT_DETAIL = text("""
     JOIN fight_performances fp ON f.id = fp.fight_id
     LEFT JOIN encounters e ON f.encounter_id = e.id
     WHERE f.report_code = :report_code
-      AND fp.player_name = :character_name
+      AND fp.player_name ILIKE :character_name
     ORDER BY f.start_time
 """)
 
@@ -509,7 +509,7 @@ FIGHT_CAST_METRICS = text("""
     JOIN fights f ON cm.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND cm.player_name = :player_name
+      AND cm.player_name ILIKE :player_name
 """)
 
 FIGHT_COOLDOWNS = text("""
@@ -520,7 +520,7 @@ FIGHT_COOLDOWNS = text("""
     JOIN fights f ON cu.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND cu.player_name = :player_name
+      AND cu.player_name ILIKE :player_name
     ORDER BY cu.efficiency_pct ASC
 """)
 
@@ -549,7 +549,7 @@ CANCELLED_CASTS = text("""
     JOIN fights f ON cc.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND cc.player_name = :player_name
+      AND cc.player_name ILIKE :player_name
 """)
 
 PERSONAL_BESTS = text("""
@@ -893,7 +893,7 @@ RESOURCE_USAGE = text("""
     JOIN fights f ON rs.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND rs.player_name = :player_name
+      AND rs.player_name ILIKE :player_name
 """)
 
 EVENT_DATA_EXISTS = text("""
@@ -921,7 +921,7 @@ CAST_TIMELINE = text("""
     JOIN fights f ON ce.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND ce.player_name = :player_name
+      AND ce.player_name ILIKE :player_name
     ORDER BY ce.timestamp_ms ASC
 """)
 
@@ -937,7 +937,7 @@ COOLDOWN_WINDOWS = text("""
         ON fp.fight_id = f.id AND fp.player_name = cu.player_name
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND cu.player_name = :player_name
+      AND cu.player_name ILIKE :player_name
       AND cu.times_used > 0
     ORDER BY cu.first_use_ms ASC NULLS LAST
 """)
@@ -948,7 +948,7 @@ CAST_EVENTS_FOR_DOT_ANALYSIS = text("""
     JOIN fights f ON ce.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND ce.player_name = :player_name
+      AND ce.player_name ILIKE :player_name
       AND ce.event_type = 'cast'
     ORDER BY ce.spell_id, ce.timestamp_ms ASC
 """)
@@ -961,7 +961,7 @@ PLAYER_FIGHT_INFO = text("""
     JOIN fights f ON fp.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND fp.player_name = :player_name
+      AND fp.player_name ILIKE :player_name
 """)
 
 PLAYER_BUFFS_FOR_TRINKETS = text("""
@@ -970,7 +970,7 @@ PLAYER_BUFFS_FOR_TRINKETS = text("""
     JOIN fights f ON bu.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND bu.player_name = :player_name
+      AND bu.player_name ILIKE :player_name
       AND bu.metric_type = 'buff'
 """)
 
@@ -980,7 +980,7 @@ CAST_EVENTS_FOR_PHASES = text("""
     JOIN fights f ON ce.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND ce.player_name = :player_name
+      AND ce.player_name ILIKE :player_name
       AND ce.event_type = 'cast'
     ORDER BY ce.timestamp_ms ASC
 """)
@@ -992,7 +992,7 @@ ENCHANT_GEM_CHECK = text("""
     JOIN fights f ON gs.fight_id = f.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND gs.player_name = :player_name
+      AND gs.player_name ILIKE :player_name
     ORDER BY gs.slot ASC
 """)
 

@@ -9,6 +9,7 @@ class TestRegisterCharacter:
         mock_result.scalar_one_or_none.return_value = None
 
         session = AsyncMock()
+        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
         session.execute.return_value = mock_result
 
         char = await register_character(
@@ -58,6 +59,7 @@ class TestRegisterCharacter:
         mock_result.scalar_one_or_none.return_value = None
 
         session = AsyncMock()
+        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
         session.execute.return_value = mock_result
 
         await register_character(

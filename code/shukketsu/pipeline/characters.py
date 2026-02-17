@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shukketsu.db.models import FightPerformance, MyCharacter
@@ -49,10 +49,10 @@ async def register_character(
 
     await session.flush()
 
-    # Retroactively mark fight_performances
+    # Retroactively mark fight_performances (case-insensitive)
     await session.execute(
         update(FightPerformance)
-        .where(FightPerformance.player_name == name)
+        .where(func.lower(FightPerformance.player_name) == name.lower())
         .where(FightPerformance.is_my_character == False)  # noqa: E712
         .values(is_my_character=True)
     )

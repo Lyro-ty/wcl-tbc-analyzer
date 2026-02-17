@@ -1,3 +1,4 @@
+import json
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -46,6 +47,7 @@ def parse_rankings_to_performances(
     fight_id: int,
     my_character_names: set[str],
 ) -> list[FightPerformance]:
+    my_names_lower = {n.lower() for n in my_character_names}
     result = []
     for r in rankings_data:
         server = r.get("server", {})
@@ -66,7 +68,7 @@ def parse_rankings_to_performances(
             interrupts=r.get("interrupts", 0),
             dispels=r.get("dispels", 0),
             item_level=r.get("itemLevel"),
-            is_my_character=r["name"] in my_character_names,
+            is_my_character=r["name"].lower() in my_names_lower,
         ))
     return result
 
@@ -152,6 +154,10 @@ async def ingest_report(
         )
         rankings = rankings_data["reportData"]["report"]["rankings"]
 
+        # WCL may return rankings as a JSON string (GraphQL JSON scalar)
+        if isinstance(rankings, str):
+            rankings = json.loads(rankings)
+
         # Rankings come back as {"data": [{"fightID": N, "roles": {...}}, ...]}
         rankings_list = []
         if isinstance(rankings, dict):
@@ -191,7 +197,7 @@ async def ingest_report(
 
         for fight in fights:
             rows = await ingest_table_data_for_fight(
-                wcl, session, report_code, fight, actor_name_by_id,
+                wcl, session, report_code, fight,
             )
             table_rows += rows
 

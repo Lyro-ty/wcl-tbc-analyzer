@@ -126,13 +126,18 @@ async def ingest_all_speed_rankings(
                     )
                 )
                 last_fetched = existing.scalar_one_or_none()
-                if last_fetched and last_fetched.replace(tzinfo=UTC) > cutoff:
-                    result.skipped += 1
-                    logger.debug(
-                        "[%d/%d] Skipping encounter %d — fresh",
-                        i, total, enc_id,
+                if last_fetched:
+                    aware = (
+                        last_fetched if last_fetched.tzinfo
+                        else last_fetched.replace(tzinfo=UTC)
                     )
-                    continue
+                    if aware > cutoff:
+                        result.skipped += 1
+                        logger.debug(
+                            "[%d/%d] Skipping encounter %d — fresh",
+                            i, total, enc_id,
+                        )
+                        continue
 
             count = await fetch_speed_rankings_for_encounter(wcl, session, enc_id)
             result.fetched += 1

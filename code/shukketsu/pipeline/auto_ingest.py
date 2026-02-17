@@ -21,6 +21,7 @@ class AutoIngestService:
         self._session_factory = session_factory
         self._wcl_factory = wcl_factory  # callable returning async context manager
         self._task: asyncio.Task | None = None
+        self._trigger_task: asyncio.Task | None = None
         self._last_poll: datetime | None = None
         self._status: str = "idle"  # idle, polling, ingesting, error
         self._last_error: str | None = None
@@ -60,9 +61,10 @@ class AutoIngestService:
                 await self._poll_once()
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as exc:
                 logger.exception("Error in auto-ingest poll loop")
                 self._status = "error"
+                self._last_error = str(exc)
                 self._stats["errors"] += 1
             await asyncio.sleep(interval)
 
@@ -154,15 +156,16 @@ class AutoIngestService:
                         "Auto-ingested report %s: %s",
                         code, report_data.get("title", ""),
                     )
-                except Exception:
+                except Exception as exc:
                     logger.exception("Failed to auto-ingest report %s", code)
+                    self._last_error = str(exc)
                     self._stats["errors"] += 1
 
         self._status = "idle"
 
     async def trigger_now(self) -> dict:
         """Manual trigger, runs poll in background."""
-        asyncio.create_task(self._poll_once())
+        self._trigger_task = asyncio.create_task(self._poll_once())
         return {"status": "triggered", "message": "Poll started in background"}
 
     def get_status(self) -> dict:

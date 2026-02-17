@@ -108,7 +108,7 @@ def parse_buff_uptimes(
 
 
 async def ingest_table_data_for_fight(
-    wcl, session, report_code: str, fight: Fight, actor_name_by_id: dict[int, str],
+    wcl, session, report_code: str, fight: Fight,
 ) -> int:
     """Fetch and ingest table data for a single fight. Returns count of rows inserted."""
     from shukketsu.wcl.queries import REPORT_TABLE
@@ -205,7 +205,7 @@ async def ingest_table_data_for_report(
     total_rows = 0
     for fight in fight_list:
         rows = await ingest_table_data_for_fight(
-            wcl, session, report_code, fight, {},
+            wcl, session, report_code, fight,
         )
         total_rows += rows
 
