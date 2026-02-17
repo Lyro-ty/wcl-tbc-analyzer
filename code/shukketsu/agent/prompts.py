@@ -54,9 +54,9 @@ longest gap, and activity grade.
 - **get_cooldown_efficiency**: Major cooldown usage efficiency for a player in a fight \
 (requires event data — report_code + fight_id + player_name). Shows times used vs \
 max possible uses, efficiency %, and first/last use timing.
-- **get_consumable_check**: Check a player's consumable and prep buff usage for a fight \
-(requires table data — report_code + fight_id + player_name). Shows present consumables \
-with uptimes and flags missing ones by role/spec.
+- **get_consumable_check**: Check consumable preparation (flasks, food, oils) for players in \
+a fight (requires event data — report_code + fight_id, optional player_name). Shows what \
+each player had active and flags missing consumable categories.
 - **get_overheal_analysis**: Get overhealing analysis for a healer in a fight \
 (requires table data — report_code + fight_id + player_name). Shows per-ability overheal %, \
 flags abilities >30% overheal as wasteful.

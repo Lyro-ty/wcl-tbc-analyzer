@@ -330,20 +330,16 @@ class OverhealResponse(BaseModel):
     abilities: list[OverhealAbility]
 
 
-class ConsumableEntry(BaseModel):
-    name: str
+class ConsumableItem(BaseModel):
     category: str
-    uptime_pct: float | None
-    present: bool
+    ability_name: str
+    spell_id: int
 
 
-class ConsumableCheckResponse(BaseModel):
+class ConsumablePlayerEntry(BaseModel):
     player_name: str
-    player_spec: str
-    role: str
-    present: list[ConsumableEntry]
-    missing: list[ConsumableEntry]
-    score_pct: float
+    consumables: list[ConsumableItem]
+    missing: list[str]
 
 
 class CancelledCastResponse(BaseModel):

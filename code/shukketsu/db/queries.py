@@ -612,14 +612,12 @@ WIPE_PROGRESSION = text("""
 """)
 
 CONSUMABLE_CHECK = text("""
-    SELECT bu.ability_name, bu.spell_id, bu.uptime_pct
-    FROM buff_uptimes bu
-    JOIN fights f ON bu.fight_id = f.id
-    WHERE f.report_code = :report_code
-      AND f.fight_id = :fight_id
-      AND bu.player_name = :player_name
-      AND bu.metric_type = 'buff'
-    ORDER BY bu.uptime_pct DESC
+    SELECT fc.player_name, fc.category, fc.ability_name, fc.spell_id, fc.active
+    FROM fight_consumables fc
+    JOIN fights f ON fc.fight_id = f.id
+    WHERE f.report_code = :report_code AND f.fight_id = :fight_id
+      AND (:player_name IS NULL OR fc.player_name ILIKE :player_name)
+    ORDER BY fc.player_name, fc.category
 """)
 
 REGRESSION_CHECK = text("""

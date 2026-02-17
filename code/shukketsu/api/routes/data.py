@@ -16,8 +16,8 @@ from shukketsu.api.models import (
     CharacterProfile,
     CharacterRecentParse,
     CharacterReportSummary,
-    ConsumableCheckResponse,
-    ConsumableEntry,
+    ConsumableItem,
+    ConsumablePlayerEntry,
     CooldownUsageResponse,
     DashboardStats,
     DeathDetailResponse,
@@ -848,71 +848,63 @@ async def fight_cooldowns(report_code: str, fight_id: int, player: str):
 
 
 @router.get(
-    "/reports/{report_code}/fights/{fight_id}/consumables/{player}",
-    response_model=ConsumableCheckResponse,
+    "/reports/{report_code}/fights/{fight_id}/consumables",
+    response_model=list[ConsumablePlayerEntry],
 )
-async def fight_consumable_check(report_code: str, fight_id: int, player: str):
-    from shukketsu.pipeline.constants import ROLE_BY_SPEC, get_expected_consumables
-
+async def get_fight_consumables(
+    report_code: str, fight_id: int, player: str | None = None,
+):
     session = await _get_session()
     try:
-        # Get player's spec
-        perf_result = await session.execute(
-            q.FIGHT_DETAILS, {"report_code": report_code, "fight_id": fight_id}
-        )
-        perf_rows = perf_result.fetchall()
-        player_row = None
-        for r in perf_rows:
-            if r.player_name.lower() == player.lower():
-                player_row = r
-                break
-        if not player_row:
-            raise HTTPException(
-                status_code=404, detail=f"Player {player} not found in fight {fight_id}"
-            )
-
-        spec = player_row.player_spec
-        role = ROLE_BY_SPEC.get(spec, "melee_dps")
-        expected = get_expected_consumables(spec)
-
-        # Get actual buffs
         result = await session.execute(
             q.CONSUMABLE_CHECK,
-            {"report_code": report_code, "fight_id": fight_id, "player_name": player},
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": f"%{player}%" if player else None},
         )
         rows = result.fetchall()
-        actual_by_id = {r.spell_id: (r.ability_name, r.uptime_pct) for r in rows}
 
-        present_list = []
-        missing_list = []
-        for c in expected:
-            if c.spell_id in actual_by_id:
-                _, uptime = actual_by_id[c.spell_id]
-                present_list.append(ConsumableEntry(
-                    name=c.name, category=c.category,
-                    uptime_pct=uptime, present=True,
+        # Expected categories: flask OR elixir (mutually exclusive), food
+        required_categories = {"flask", "food"}
+        nice_to_have = {"weapon_oil"}
+
+        # Group by player
+        from collections import defaultdict
+        players: dict[str, list] = defaultdict(list)
+        for r in rows:
+            players[r.player_name].append(r)
+
+        entries = []
+        for pname, consumables in sorted(players.items()):
+            items = []
+            found_categories = set()
+            for c in consumables:
+                items.append(ConsumableItem(
+                    category=c.category,
+                    ability_name=c.ability_name,
+                    spell_id=c.spell_id,
                 ))
-            else:
-                missing_list.append(ConsumableEntry(
-                    name=c.name, category=c.category,
-                    uptime_pct=None, present=False,
-                ))
+                found_categories.add(c.category)
 
-        total = len(present_list) + len(missing_list)
-        score = (len(present_list) / total * 100) if total > 0 else 0.0
+            has_flask_or_elixir = (
+                "flask" in found_categories or "elixir" in found_categories
+            )
+            missing = []
+            if not has_flask_or_elixir:
+                missing.append("flask/elixir")
+            for cat in sorted(required_categories - {"flask"}):
+                if cat not in found_categories:
+                    missing.append(cat)
+            for cat in sorted(nice_to_have - found_categories):
+                missing.append(cat)
 
-        return ConsumableCheckResponse(
-            player_name=player,
-            player_spec=spec,
-            role=role,
-            present=present_list,
-            missing=missing_list,
-            score_pct=round(score, 1),
-        )
-    except HTTPException:
-        raise
+            entries.append(ConsumablePlayerEntry(
+                player_name=pname,
+                consumables=items,
+                missing=missing,
+            ))
+        return entries
     except Exception as e:
-        logger.exception("Failed to check consumables")
+        logger.exception("Failed to get fight consumables")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

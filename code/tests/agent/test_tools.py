@@ -8,6 +8,7 @@ from shukketsu.agent.tools import (
     compare_two_raids,
     get_ability_breakdown,
     get_buff_analysis,
+    get_consumable_check,
     get_deaths_and_mechanics,
     get_my_performance,
     get_personal_bests,
@@ -904,6 +905,180 @@ class TestResolveMyFights:
         call_args = mock_session.execute.call_args
         params = call_args[0][1]
         assert params["limit"] == 3
+
+
+class TestGetConsumableCheck:
+    async def test_returns_consumables_per_player(self):
+        """Tool should show consumables grouped by player with categories."""
+        # First call returns fight details (for encounter name header)
+        fight_detail_rows = [
+            MagicMock(
+                player_name="Lyro", player_class="Warrior", player_spec="Arms",
+                dps=2000.0, hps=0.0, parse_percentile=90.0, deaths=0,
+                interrupts=0, dispels=0, item_level=141,
+                kill=True, duration_ms=180000,
+                encounter_name="Patchwerk", report_title="Naxx Run",
+            ),
+        ]
+        fight_detail_result = MagicMock()
+        fight_detail_result.fetchall.return_value = fight_detail_rows
+
+        # Second call returns consumable data for two players
+        consumable_rows = [
+            MagicMock(
+                player_name="Lyro", category="flask",
+                ability_name="Flask of Supreme Power", spell_id=17628, active=True,
+            ),
+            MagicMock(
+                player_name="Lyro", category="food",
+                ability_name="Well Fed", spell_id=33254, active=True,
+            ),
+            MagicMock(
+                player_name="Lyro", category="weapon_oil",
+                ability_name="Brilliant Wizard Oil", spell_id=28898, active=True,
+            ),
+            MagicMock(
+                player_name="Healbot", category="flask",
+                ability_name="Flask of Distilled Wisdom", spell_id=17627, active=True,
+            ),
+            MagicMock(
+                player_name="Healbot", category="food",
+                ability_name="Well Fed", spell_id=33254, active=True,
+            ),
+        ]
+        consumable_result = MagicMock()
+        consumable_result.fetchall.return_value = consumable_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = [fight_detail_result, consumable_result]
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_consumable_check.ainvoke(
+                {"report_code": "abc123", "fight_id": 4}
+            )
+
+        assert "Patchwerk" in result
+        assert "Lyro" in result
+        assert "Healbot" in result
+        assert "Flask of Supreme Power" in result
+        assert "Flask of Distilled Wisdom" in result
+        assert "Well Fed" in result
+        assert "Brilliant Wizard Oil" in result
+
+    async def test_flags_missing_categories(self):
+        """Tool should flag missing flask/elixir, food, and weapon_oil."""
+        fight_detail_rows = [
+            MagicMock(
+                player_name="Healbot", player_class="Priest", player_spec="Holy",
+                dps=0.0, hps=1500.0, parse_percentile=80.0, deaths=0,
+                interrupts=0, dispels=0, item_level=140,
+                kill=True, duration_ms=180000,
+                encounter_name="Patchwerk", report_title="Naxx Run",
+            ),
+        ]
+        fight_detail_result = MagicMock()
+        fight_detail_result.fetchall.return_value = fight_detail_rows
+
+        # Player only has food, missing flask/elixir and weapon_oil
+        consumable_rows = [
+            MagicMock(
+                player_name="Healbot", category="food",
+                ability_name="Well Fed", spell_id=33254, active=True,
+            ),
+        ]
+        consumable_result = MagicMock()
+        consumable_result.fetchall.return_value = consumable_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = [fight_detail_result, consumable_result]
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_consumable_check.ainvoke(
+                {"report_code": "abc123", "fight_id": 4, "player_name": "Healbot"}
+            )
+
+        assert "Healbot" in result
+        assert "MISSING" in result
+        assert "flask/elixir" in result
+        assert "weapon_oil" in result
+
+    async def test_elixir_satisfies_flask_requirement(self):
+        """Having an elixir should not flag missing flask/elixir."""
+        fight_detail_rows = [
+            MagicMock(
+                player_name="Rogue", player_class="Rogue", player_spec="Combat",
+                dps=1800.0, hps=0.0, parse_percentile=85.0, deaths=0,
+                interrupts=0, dispels=0, item_level=138,
+                kill=True, duration_ms=180000,
+                encounter_name="Patchwerk", report_title="Naxx Run",
+            ),
+        ]
+        fight_detail_result = MagicMock()
+        fight_detail_result.fetchall.return_value = fight_detail_rows
+
+        consumable_rows = [
+            MagicMock(
+                player_name="Rogue", category="elixir",
+                ability_name="Elixir of the Mongoose", spell_id=17538, active=True,
+            ),
+            MagicMock(
+                player_name="Rogue", category="food",
+                ability_name="Well Fed", spell_id=33254, active=True,
+            ),
+        ]
+        consumable_result = MagicMock()
+        consumable_result.fetchall.return_value = consumable_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = [fight_detail_result, consumable_result]
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_consumable_check.ainvoke(
+                {"report_code": "abc123", "fight_id": 4, "player_name": "Rogue"}
+            )
+
+        assert "flask/elixir" not in result
+        assert "Elixir of the Mongoose" in result
+
+    async def test_no_data_returns_helpful_message(self):
+        """Tool should return a message when no consumable data exists."""
+        fight_detail_rows = [
+            MagicMock(
+                player_name="Lyro", player_class="Warrior", player_spec="Arms",
+                dps=2000.0, hps=0.0, parse_percentile=90.0, deaths=0,
+                interrupts=0, dispels=0, item_level=141,
+                kill=True, duration_ms=180000,
+                encounter_name="Patchwerk", report_title="Naxx Run",
+            ),
+        ]
+        fight_detail_result = MagicMock()
+        fight_detail_result.fetchall.return_value = fight_detail_rows
+
+        consumable_result = MagicMock()
+        consumable_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = [fight_detail_result, consumable_result]
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_consumable_check.ainvoke(
+                {"report_code": "abc123", "fight_id": 4}
+            )
+
+        assert "no consumable data" in result.lower() or "not have been ingested" in result.lower()
+
+    async def test_error_handling(self):
+        """Tool should return error string on DB failure."""
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = Exception("connection lost")
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_consumable_check.ainvoke(
+                {"report_code": "abc123", "fight_id": 4}
+            )
+
+        assert "Error" in result
+        assert "connection lost" in result
 
 
 class TestNoResults:

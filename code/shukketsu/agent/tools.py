@@ -699,77 +699,66 @@ async def get_cooldown_efficiency(
 
 @tool
 async def get_consumable_check(
-    report_code: str, fight_id: int, player_name: str,
+    report_code: str, fight_id: int, player_name: str | None = None,
 ) -> str:
-    """Check a player's consumable and preparation buff usage for a fight.
-    Compares buff uptimes against expected consumables for the player's spec/role.
-    Shows present consumables with uptimes and flags missing ones.
-    Requires table data to have been ingested with --with-tables."""
-    from shukketsu.pipeline.constants import (
-        ROLE_BY_SPEC,
-        get_expected_consumables,
-    )
-
+    """Check consumable preparation (flasks, food, oils) for players in a fight.
+    Shows what each player had active and flags missing consumable categories.
+    Requires event data ingestion."""
     session = await _get_session()
     try:
-        # Get player's spec from fight_performances
-        perf_result = await session.execute(
+        # Resolve encounter name for header
+        raid_result = await session.execute(
             q.FIGHT_DETAILS,
             {"report_code": report_code, "fight_id": fight_id},
         )
-        perf_rows = perf_result.fetchall()
-        player_row = None
-        for r in perf_rows:
-            if r.player_name.lower() == player_name.lower():
-                player_row = r
-                break
-        if not player_row:
-            return f"No performance data found for '{player_name}' in fight {fight_id}."
+        raid_rows = raid_result.fetchall()
+        encounter_name = raid_rows[0].encounter_name if raid_rows else "Unknown"
 
-        spec = player_row.player_spec
-        role = ROLE_BY_SPEC.get(spec, "melee_dps")
-        expected = get_expected_consumables(spec)
-
-        # Get actual buff uptimes
         result = await session.execute(
             q.CONSUMABLE_CHECK,
             {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player_name},
+             "player_name": f"%{player_name}%" if player_name else None},
         )
         rows = result.fetchall()
+        if not rows:
+            return (
+                f"No consumable data found for fight {fight_id} in report "
+                f"{report_code}. Event data may not have been ingested yet "
+                f"(use pull-my-logs --with-events or pull-event-data to fetch it)."
+            )
 
-        actual_by_id: dict[int, tuple[str, float]] = {}
+        # Expected categories: flask OR elixir (mutually exclusive), food
+        required_categories = {"flask", "food"}
+        nice_to_have = {"weapon_oil"}
+
+        # Group by player
+        from collections import defaultdict
+        players: dict[str, list] = defaultdict(list)
         for r in rows:
-            actual_by_id[r.spell_id] = (r.ability_name, r.uptime_pct)
+            players[r.player_name].append(r)
 
-        # Match expected consumables against actual buffs
-        present = []
-        missing = []
-        for c in expected:
-            if c.spell_id in actual_by_id:
-                name, uptime = actual_by_id[c.spell_id]
-                present.append(f"  [OK] {c.name} ({c.category}) | Uptime: {uptime}%")
-            else:
-                missing.append(f"  [MISSING] {c.name} ({c.category})")
+        lines = [f"Consumable Check ({encounter_name}, fight #{fight_id}):\n"]
+        for pname, consumables in sorted(players.items()):
+            lines.append(f"  {pname}:")
+            found_categories = set()
+            for c in consumables:
+                lines.append(f"    {c.category}: {c.ability_name}")
+                found_categories.add(c.category)
 
-        lines = [
-            f"Consumable check for {player_name} ({spec}, role: {role}) "
-            f"in {report_code}#{fight_id}:\n"
-        ]
+            # Flask and elixir are mutually exclusive
+            has_flask_or_elixir = "flask" in found_categories or "elixir" in found_categories
+            missing = []
+            if not has_flask_or_elixir:
+                missing.append("flask/elixir")
+            for cat in sorted(required_categories - {"flask"}):
+                if cat not in found_categories:
+                    missing.append(cat)
+            for cat in sorted(nice_to_have - found_categories):
+                missing.append(cat)
 
-        if present:
-            lines.append("Present consumables:")
-            lines.extend(present)
-
-        if missing:
-            lines.append("\nMissing consumables:")
-            lines.extend(missing)
-
-        if not present and not missing:
-            lines.append("No consumable data available (table data may not be ingested).")
-
-        score = len(present) / max(len(present) + len(missing), 1) * 100
-        lines.append(f"\nPrep score: {score:.0f}% ({len(present)}/{len(present) + len(missing)})")
+            if missing:
+                lines.append(f"    [MISSING: {', '.join(missing)}]")
+            lines.append("")
 
         return "\n".join(lines)
     except Exception as e:
