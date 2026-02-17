@@ -273,3 +273,42 @@ def get_expected_consumables(spec: str) -> list[ConsumableDef]:
     """Return the combined list of expected consumables for a given spec."""
     role = ROLE_BY_SPEC.get(spec, "melee_dps")
     return REQUIRED_CONSUMABLES.get("all", []) + REQUIRED_CONSUMABLES.get(role, [])
+
+
+# --- CombatantInfo consumable category mapping ---
+# Maps known WCL CombatantInfo aura spell IDs to (category, display_name).
+# Used by combatant_info.py to classify auras from CombatantInfo events.
+CONSUMABLE_CATEGORIES: dict[int, tuple[str, str]] = {
+    # Flasks (Classic Fresh)
+    17628: ("flask", "Flask of Supreme Power"),
+    17626: ("flask", "Flask of the Titans"),
+    17627: ("flask", "Flask of Distilled Wisdom"),
+    17629: ("flask", "Flask of Chromatic Resistance"),
+    # Battle Elixirs
+    28490: ("elixir", "Elixir of Major Strength"),
+    28491: ("elixir", "Elixir of Healing Power"),
+    28493: ("elixir", "Elixir of Major Frost Power"),
+    28501: ("elixir", "Elixir of Major Firepower"),
+    28503: ("elixir", "Elixir of Major Shadow Power"),
+    11390: ("elixir", "Elixir of the Mongoose"),
+    # Guardian Elixirs
+    28502: ("elixir", "Elixir of Major Armor"),
+    28509: ("elixir", "Elixir of Major Mageblood"),
+    28514: ("elixir", "Elixir of Empowerment"),
+    # Food
+    33254: ("food", "Well Fed"),
+    33257: ("food", "Well Fed"),
+    # Weapon Oils / Stones
+    28898: ("weapon_oil", "Brilliant Wizard Oil"),
+    28891: ("weapon_oil", "Superior Wizard Oil"),
+    25123: ("weapon_oil", "Adamantite Sharpening Stone"),
+    25118: ("weapon_oil", "Adamantite Weightstone"),
+}
+
+GEAR_SLOTS: dict[int, str] = {
+    0: "Head", 1: "Neck", 2: "Shoulder", 3: "Shirt",
+    4: "Chest", 5: "Waist", 6: "Legs", 7: "Feet",
+    8: "Wrist", 9: "Hands", 10: "Ring 1", 11: "Ring 2",
+    12: "Trinket 1", 13: "Trinket 2", 14: "Back",
+    15: "Main Hand", 16: "Off Hand", 17: "Ranged",
+}

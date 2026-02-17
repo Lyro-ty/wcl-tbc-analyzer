@@ -198,6 +198,21 @@ async def ingest_report(
 
         event_rows = await ingest_event_data_for_report(wcl, session, report_code)
 
+    # Optionally ingest CombatantInfo (consumables + gear snapshots)
+    combatant_rows = 0
+    if ingest_events and fights:
+        from shukketsu.pipeline.combatant_info import ingest_combatant_info_for_report
+
+        try:
+            combatant_rows = await ingest_combatant_info_for_report(
+                wcl, session, report_code,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to ingest combatant info for %s", report_code,
+            )
+            combatant_rows = 0
+
     # Auto-snapshot progression for tracked characters
     try:
         snapshot_count = await snapshot_all_characters(session)
@@ -207,11 +222,13 @@ async def ingest_report(
 
     logger.info(
         "Ingested report %s: %d fights, %d performances, %d table rows, "
-        "%d event rows, %d snapshots",
+        "%d event rows, %d combatant rows, %d snapshots",
         report_code, len(fights), total_performances, table_rows, event_rows,
-        snapshot_count,
+        combatant_rows, snapshot_count,
     )
     return IngestResult(
         fights=len(fights), performances=total_performances,
-        table_rows=table_rows, event_rows=event_rows, snapshots=snapshot_count,
+        table_rows=table_rows,
+        event_rows=event_rows + combatant_rows,
+        snapshots=snapshot_count,
     )

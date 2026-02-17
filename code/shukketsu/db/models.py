@@ -99,6 +99,8 @@ class Fight(Base):
     cast_metrics: Mapped[list["CastMetric"]] = relationship(back_populates="fight")
     cooldown_usage: Mapped[list["CooldownUsage"]] = relationship(back_populates="fight")
     cancelled_casts: Mapped[list["CancelledCast"]] = relationship(back_populates="fight")
+    consumables: Mapped[list["FightConsumable"]] = relationship(back_populates="fight")
+    gear_snapshots: Mapped[list["GearSnapshot"]] = relationship(back_populates="fight")
 
 
 class FightPerformance(Base):
@@ -311,3 +313,36 @@ class CancelledCast(Base):
     top_cancelled_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     fight: Mapped["Fight"] = relationship(back_populates="cancelled_casts")
+
+
+class FightConsumable(Base):
+    __tablename__ = "fight_consumables"
+    __table_args__ = (
+        Index("ix_fight_consumables_fight_player", "fight_id", "player_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    player_name: Mapped[str] = mapped_column(String(100))
+    category: Mapped[str] = mapped_column(String(50))
+    spell_id: Mapped[int] = mapped_column(Integer)
+    ability_name: Mapped[str] = mapped_column(String(200))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    fight: Mapped["Fight"] = relationship(back_populates="consumables")
+
+
+class GearSnapshot(Base):
+    __tablename__ = "gear_snapshots"
+    __table_args__ = (
+        Index("ix_gear_snapshots_fight_player", "fight_id", "player_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    player_name: Mapped[str] = mapped_column(String(100))
+    slot: Mapped[int] = mapped_column(Integer)
+    item_id: Mapped[int] = mapped_column(Integer)
+    item_level: Mapped[int] = mapped_column(Integer, default=0)
+
+    fight: Mapped["Fight"] = relationship(back_populates="gear_snapshots")
