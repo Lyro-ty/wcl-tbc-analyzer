@@ -150,6 +150,49 @@ class TestFormatMessages:
         assert "Assistant: Analysis complete" in result
 
 
+class TestThinkTagHandling:
+    async def test_route_strips_think_tags(self):
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(
+            content="<think>Let me analyze this query type...</think>\nmy_performance"
+        )
+        state = {
+            "messages": [HumanMessage(content="Why is my DPS low?")],
+        }
+        result = await route_query(state, mock_llm)
+        assert result["query_type"] == "my_performance"
+
+    async def test_grade_strips_think_tags(self):
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(
+            content="<think>The data looks complete...</think>\nrelevant"
+        )
+        state = {
+            "messages": [
+                HumanMessage(content="Show my parses"),
+                AIMessage(content="DPS: 1500"),
+            ],
+            "retry_count": 0,
+        }
+        result = await grade_results(state, mock_llm)
+        assert result["grade"] == "relevant"
+
+    async def test_grade_strips_think_tags_insufficient(self):
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(
+            content="<think>Hmm not enough data</think>  insufficient"
+        )
+        state = {
+            "messages": [
+                HumanMessage(content="Show parses"),
+                AIMessage(content="No data"),
+            ],
+            "retry_count": 0,
+        }
+        result = await grade_results(state, mock_llm)
+        assert result["grade"] == "insufficient"
+
+
 class TestMaxRetries:
     def test_max_retries_is_two(self):
         assert MAX_RETRIES == 2

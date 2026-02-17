@@ -1,6 +1,7 @@
 """LangGraph CRAG state graph for raid analysis."""
 
 import logging
+import re
 from functools import partial
 from typing import Any, Literal
 
@@ -23,6 +24,13 @@ MAX_RETRIES = 2
 
 VALID_QUERY_TYPES = {"my_performance", "comparison", "trend", "general"}
 
+_THINK_PATTERN = re.compile(r"^.*?</think>\s*", flags=re.DOTALL)
+
+
+def _strip_think_tags(text: str) -> str:
+    """Strip Nemotron's leaked reasoning/think tags from output."""
+    return _THINK_PATTERN.sub("", text)
+
 
 async def route_query(state: dict[str, Any], llm: Any) -> dict[str, Any]:
     """Classify the user's question type."""
@@ -31,7 +39,7 @@ async def route_query(state: dict[str, Any], llm: Any) -> dict[str, Any]:
         state["messages"][-1],
     ]
     response = await llm.ainvoke(messages)
-    query_type = response.content.strip().lower()
+    query_type = _strip_think_tags(response.content).strip().lower()
 
     if query_type not in VALID_QUERY_TYPES:
         query_type = "general"
@@ -74,7 +82,7 @@ async def grade_results(state: dict[str, Any], llm: Any) -> dict[str, Any]:
         HumanMessage(content=f"User question and retrieved data:\n{_format_messages(recent)}"),
     ]
     response = await llm.ainvoke(messages)
-    grade = response.content.strip().lower()
+    grade = _strip_think_tags(response.content).strip().lower()
 
     if grade not in ("relevant", "insufficient"):
         grade = "relevant"
