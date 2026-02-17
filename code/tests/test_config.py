@@ -1,4 +1,4 @@
-from shukketsu.config import LLMConfig, Settings, get_settings
+from shukketsu.config import LangfuseConfig, LLMConfig, Settings, get_settings
 
 
 def test_default_settings_have_sane_defaults(monkeypatch):
@@ -46,3 +46,31 @@ def test_llm_max_tokens_default():
 def test_llm_timeout_default():
     cfg = LLMConfig()
     assert cfg.timeout == 300
+
+
+def test_langfuse_disabled_by_default():
+    cfg = LangfuseConfig()
+    assert cfg.enabled is False
+
+
+def test_langfuse_default_host():
+    cfg = LangfuseConfig()
+    assert cfg.host == "http://localhost:3000"
+
+
+def test_langfuse_config_on_settings():
+    settings = Settings(_env_file=None)
+    assert hasattr(settings, "langfuse")
+    assert settings.langfuse.enabled is False
+
+
+def test_langfuse_env_override(monkeypatch):
+    monkeypatch.setenv("LANGFUSE__ENABLED", "true")
+    monkeypatch.setenv("LANGFUSE__PUBLIC_KEY", "pk-lf-test")
+    monkeypatch.setenv("LANGFUSE__SECRET_KEY", "sk-lf-test")
+    monkeypatch.setenv("LANGFUSE__HOST", "http://langfuse:3000")
+    settings = Settings(_env_file=None)
+    assert settings.langfuse.enabled is True
+    assert settings.langfuse.public_key == "pk-lf-test"
+    assert settings.langfuse.secret_key == "sk-lf-test"
+    assert settings.langfuse.host == "http://langfuse:3000"
