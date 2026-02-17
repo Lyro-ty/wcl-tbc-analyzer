@@ -122,7 +122,7 @@ Tools use a **module-level global** pattern — no DI framework:
 4. All tools catch `Exception` and return `"Error retrieving data: {e}"` instead of propagating tracebacks
 5. The compiled graph and its tools are also injected into the analyze route via `set_graph()`
 
-## Agent tools (29 total)
+## Agent tools (30 total)
 
 ### Player/encounter-level tools
 | Tool | Purpose |
@@ -168,6 +168,7 @@ Tools use a **module-level global** pattern — no DI framework:
 | `get_rotation_score` | Rule-based rotation quality score (GCD uptime, CPM, CD efficiency) |
 | `get_gear_changes` | Gear comparison between two raids (slot-by-slot ilvl delta) |
 | `get_phase_analysis` | Per-phase fight breakdown with player performance |
+| `get_enchant_gem_check` | Enchant/gem validation (flags missing enchants, empty gem sockets) |
 
 Tools are in `code/shukketsu/agent/tools.py`, SQL queries (raw `text()` with named params, PostgreSQL-specific) in `code/shukketsu/db/queries.py`.
 
@@ -195,7 +196,7 @@ Tools are in `code/shukketsu/agent/tools.py`, SQL queries (raw `text()` with nam
 - `cancelled_casts` — cast cancel rate analysis per player per fight
 - `resource_snapshots` — mana/rage/energy tracking (min/max/avg, time at zero)
 - `fight_consumables` — consumable buffs active per player per fight
-- `gear_snapshots` — per-slot gear snapshots from CombatantInfo events
+- `gear_snapshots` — per-slot gear snapshots with enchant/gem data from CombatantInfo events
 
 **Key DB patterns:**
 - `session.merge()` used for idempotent upserts (encounters, reports, snapshots, characters)
