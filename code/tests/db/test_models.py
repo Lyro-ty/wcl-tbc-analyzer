@@ -6,12 +6,14 @@ from shukketsu.config import Settings
 from shukketsu.db.engine import create_db_engine
 from shukketsu.db.models import (
     Base,
+    CastEvent,
     Encounter,
     Fight,
     FightPerformance,
     MyCharacter,
     ProgressionSnapshot,
     Report,
+    ResourceSnapshot,
     TopRanking,
 )
 
@@ -20,6 +22,7 @@ class TestModelsInheritBase:
     @pytest.mark.parametrize("model", [
         Encounter, MyCharacter, Report, Fight,
         FightPerformance, TopRanking, ProgressionSnapshot,
+        ResourceSnapshot, CastEvent,
     ])
     def test_inherits_base(self, model):
         assert issubclass(model, Base)
@@ -46,6 +49,12 @@ class TestTableNames:
 
     def test_progression_snapshot_table(self):
         assert ProgressionSnapshot.__tablename__ == "progression_snapshots"
+
+    def test_resource_snapshot_table(self):
+        assert ResourceSnapshot.__tablename__ == "resource_snapshots"
+
+    def test_cast_event_table(self):
+        assert CastEvent.__tablename__ == "cast_events"
 
 
 class TestColumns:
@@ -97,6 +106,21 @@ class TestColumns:
         assert {"time", "character_id", "encounter_id", "best_parse",
                 "median_parse", "best_dps", "median_dps", "kill_count",
                 "avg_deaths"} <= col_names
+
+    def test_resource_snapshot_columns(self):
+        mapper = inspect(ResourceSnapshot)
+        col_names = {c.key for c in mapper.column_attrs}
+        assert {"id", "fight_id", "player_name", "resource_type",
+                "min_value", "max_value", "avg_value",
+                "time_at_zero_ms", "time_at_zero_pct",
+                "samples_json"} <= col_names
+
+    def test_cast_event_columns(self):
+        mapper = inspect(CastEvent)
+        col_names = {c.key for c in mapper.column_attrs}
+        assert {"id", "fight_id", "player_name", "timestamp_ms",
+                "spell_id", "ability_name", "event_type",
+                "target_name"} <= col_names
 
 
 class TestConstraints:

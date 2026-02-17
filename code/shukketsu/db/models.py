@@ -101,6 +101,10 @@ class Fight(Base):
     cancelled_casts: Mapped[list["CancelledCast"]] = relationship(back_populates="fight")
     consumables: Mapped[list["FightConsumable"]] = relationship(back_populates="fight")
     gear_snapshots: Mapped[list["GearSnapshot"]] = relationship(back_populates="fight")
+    resource_snapshots: Mapped[list["ResourceSnapshot"]] = relationship(
+        back_populates="fight"
+    )
+    cast_events: Mapped[list["CastEvent"]] = relationship(back_populates="fight")
 
 
 class FightPerformance(Base):
@@ -346,3 +350,44 @@ class GearSnapshot(Base):
     item_level: Mapped[int] = mapped_column(Integer, default=0)
 
     fight: Mapped["Fight"] = relationship(back_populates="gear_snapshots")
+
+
+class ResourceSnapshot(Base):
+    __tablename__ = "resource_snapshots"
+    __table_args__ = (
+        Index(
+            "ix_resource_snapshots_fight_player", "fight_id", "player_name"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    player_name: Mapped[str] = mapped_column(String(100))
+    resource_type: Mapped[str] = mapped_column(String(50))
+    min_value: Mapped[int] = mapped_column(Integer, default=0)
+    max_value: Mapped[int] = mapped_column(Integer, default=0)
+    avg_value: Mapped[float] = mapped_column(Float, default=0.0)
+    time_at_zero_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    time_at_zero_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    samples_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    fight: Mapped["Fight"] = relationship(back_populates="resource_snapshots")
+
+
+class CastEvent(Base):
+    __tablename__ = "cast_events"
+    __table_args__ = (
+        Index("ix_cast_events_fight_player", "fight_id", "player_name"),
+        Index("ix_cast_events_fight_spell", "fight_id", "spell_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    player_name: Mapped[str] = mapped_column(String(100))
+    timestamp_ms: Mapped[int] = mapped_column(BigInteger)
+    spell_id: Mapped[int] = mapped_column(Integer)
+    ability_name: Mapped[str] = mapped_column(String(200))
+    event_type: Mapped[str] = mapped_column(String(20))
+    target_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    fight: Mapped["Fight"] = relationship(back_populates="cast_events")
