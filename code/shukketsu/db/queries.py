@@ -88,8 +88,8 @@ DEATHS_AND_MECHANICS = text("""
     JOIN fights f ON fp.fight_id = f.id
     JOIN encounters e ON f.encounter_id = e.id
     WHERE e.name ILIKE :encounter_name
-      AND fp.deaths > 0
-    ORDER BY fp.deaths DESC, f.end_time DESC
+      AND (fp.deaths > 0 OR fp.interrupts > 0 OR fp.dispels > 0)
+    ORDER BY fp.deaths DESC, fp.interrupts DESC, fp.dispels DESC, f.end_time DESC
     LIMIT 20
 """)
 

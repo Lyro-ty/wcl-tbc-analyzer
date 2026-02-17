@@ -6,6 +6,7 @@ from shukketsu.agent.tools import (
     ALL_TOOLS,
     compare_raid_to_top,
     compare_two_raids,
+    get_deaths_and_mechanics,
     get_my_performance,
     get_raid_execution,
     get_raid_summary,
@@ -106,6 +107,31 @@ class TestGetRaidSummary:
             result = await get_raid_summary.ainvoke({"report_code": "abc123"})
 
         assert "Gruul" in result
+
+
+class TestGetDeathsAndMechanics:
+    async def test_returns_players_with_zero_deaths(self):
+        """Tool should return players with interrupts/dispels even if deaths=0."""
+        mock_rows = [
+            MagicMock(
+                player_name="Healer", player_class="Priest", player_spec="Holy",
+                deaths=0, interrupts=0, dispels=15,
+                encounter_name="Gothik", kill=True, duration_ms=180000,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_deaths_and_mechanics.ainvoke(
+                {"encounter_name": "Gothik"}
+            )
+
+        assert "Healer" in result
+        assert "Disp: 15" in result
 
 
 class TestCompareRaidToTop:
