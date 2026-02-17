@@ -58,9 +58,10 @@ def format_raid_summary_discord(summary: dict[str, Any]) -> str:
 
     biggest_regression = summary.get("biggest_regression")
     if biggest_regression:
+        drop_pct = abs(biggest_regression["parse_delta"])
         lines.append(
             f"\U0001f4c9 Biggest Drop: **{biggest_regression['player']}** "
-            f"({biggest_regression['parse_delta']:.0f}% on "
+            f"(-{drop_pct:.0f}% on "
             f"{biggest_regression['encounter']})"
         )
 
