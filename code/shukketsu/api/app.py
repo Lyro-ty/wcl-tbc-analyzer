@@ -75,9 +75,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         set_langfuse_handler(langfuse_handler)
         logger.info("Langfuse tracing enabled: %s", settings.langfuse.host)
 
+    # Auto-ingest background service (optional)
+    from shukketsu.api.routes.auto_ingest import set_service as set_auto_ingest_service
+    from shukketsu.pipeline.auto_ingest import AutoIngestService
+    from shukketsu.wcl.auth import WCLAuth
+    from shukketsu.wcl.client import WCLClient
+    from shukketsu.wcl.rate_limiter import RateLimiter
+
+    def _wcl_factory():
+        auth = WCLAuth(
+            settings.wcl.client_id,
+            settings.wcl.client_secret.get_secret_value(),
+            settings.wcl.oauth_url,
+        )
+        return WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url)
+
+    auto_ingest = AutoIngestService(settings, session_factory, _wcl_factory)
+    set_auto_ingest_service(auto_ingest)
+    await auto_ingest.start()
+
     yield
 
     # Shutdown
+    await auto_ingest.stop()
     if langfuse_handler is not None:
         from langfuse import get_client
         get_client().flush()
@@ -101,12 +121,14 @@ def create_app() -> FastAPI:
     )
 
     from shukketsu.api.routes.analyze import router as analyze_router
+    from shukketsu.api.routes.auto_ingest import router as auto_ingest_router
     from shukketsu.api.routes.data import router as data_router
     from shukketsu.api.routes.health import router as health_router
 
     app.include_router(health_router)
     app.include_router(analyze_router)
     app.include_router(data_router)
+    app.include_router(auto_ingest_router)
 
     # Serve frontend static files (production build)
     if FRONTEND_DIST.is_dir():

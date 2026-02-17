@@ -358,3 +358,14 @@ class CancelledCastResponse(BaseModel):
 class EventDataResponse(BaseModel):
     report_code: str
     event_rows: int
+
+
+class AutoIngestStatus(BaseModel):
+    enabled: bool
+    status: str
+    last_poll: str | None
+    last_error: str | None
+    guild_id: int
+    guild_name: str
+    poll_interval_minutes: int
+    stats: dict

@@ -40,6 +40,21 @@ class LangfuseConfig(BaseModel):
     host: str = "http://localhost:3000"
 
 
+class GuildConfig(BaseModel):
+    id: int = 0  # WCL guild ID
+    name: str = ""
+    server_slug: str = ""
+    server_region: str = "US"
+
+
+class AutoIngestConfig(BaseModel):
+    enabled: bool = False
+    poll_interval_minutes: int = 30
+    zone_ids: list[int] = []  # Empty = all zones
+    with_tables: bool = True
+    with_events: bool = True
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -54,6 +69,8 @@ class Settings(BaseSettings):
     llm: LLMConfig = LLMConfig()
     app: AppConfig = AppConfig()
     langfuse: LangfuseConfig = LangfuseConfig()
+    guild: GuildConfig = GuildConfig()
+    auto_ingest: AutoIngestConfig = AutoIngestConfig()
 
 
 @lru_cache(maxsize=1)
