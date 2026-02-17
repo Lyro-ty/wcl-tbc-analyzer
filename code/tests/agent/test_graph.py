@@ -28,7 +28,6 @@ class TestCreateGraph:
         assert "query" in node_names
         assert "grade" in node_names
         assert "analyze" in node_names
-        assert "respond" in node_names
         assert "rewrite" in node_names
 
 

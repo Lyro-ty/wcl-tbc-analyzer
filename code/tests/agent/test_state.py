@@ -15,13 +15,13 @@ class TestAnalyzerState:
         state = AnalyzerState(messages=[])
         assert state.get("query_type") is None
 
-    def test_has_encounter_context(self):
-        state = AnalyzerState(messages=[], encounter_context={"name": "Gruul"})
-        assert state["encounter_context"]["name"] == "Gruul"
+    def test_has_grade(self):
+        state = AnalyzerState(messages=[], grade="relevant")
+        assert state["grade"] == "relevant"
 
-    def test_has_character_context(self):
-        state = AnalyzerState(messages=[], character_context={"name": "TestRogue"})
-        assert state["character_context"]["name"] == "TestRogue"
+    def test_grade_defaults_none(self):
+        state = AnalyzerState(messages=[])
+        assert state.get("grade") is None
 
     def test_has_retry_count(self):
         state = AnalyzerState(messages=[], retry_count=0)

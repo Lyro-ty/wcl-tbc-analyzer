@@ -120,24 +120,6 @@ async def analyze_results(state: dict[str, Any], llm: Any) -> dict[str, Any]:
     return {"messages": [response]}
 
 
-async def generate_insight(state: dict[str, Any], llm: Any) -> dict[str, Any]:
-    """Generate the final response with actionable advice."""
-    # The analysis step already produced a good response, so we pass it through.
-    # If we need extra formatting, this node can refine.
-    last = state["messages"][-1]
-    if isinstance(last, AIMessage) and last.content:
-        return {}
-
-    # Fallback: generate a response
-    messages = [
-        SystemMessage(content=SYSTEM_PROMPT),
-        *state["messages"],
-        HumanMessage(content="Please provide a concise, actionable summary."),
-    ]
-    response = await llm.ainvoke(messages)
-    return {"messages": [response]}
-
-
 async def rewrite_query(state: dict[str, Any], llm: Any) -> dict[str, Any]:
     """Reformulate the query when initial retrieval was insufficient."""
     retry_count = state.get("retry_count", 0)
@@ -186,7 +168,6 @@ def create_graph(llm: Any, tools: list) -> Any:
     graph.add_node("tool_executor", ToolNode(tools) if tools else _noop_tool_node)
     graph.add_node("grade", partial(grade_results, llm=llm))
     graph.add_node("analyze", partial(analyze_results, llm=llm))
-    graph.add_node("respond", partial(generate_insight, llm=llm))
     graph.add_node("rewrite", partial(rewrite_query, llm=llm))
 
     # Edges
@@ -204,8 +185,7 @@ def create_graph(llm: Any, tools: list) -> Any:
         {"analyze": "analyze", "rewrite": "rewrite"},
     )
     graph.add_edge("rewrite", "query")
-    graph.add_edge("analyze", "respond")
-    graph.add_edge("respond", END)
+    graph.add_edge("analyze", END)
 
     return graph.compile()
 
