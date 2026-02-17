@@ -36,6 +36,7 @@ from shukketsu.api.models import (
     PersonalBestEntry,
     ProgressionPoint,
     RaidComparison,
+    RaidNightSummary,
     RaidSummaryFight,
     RankingsRefreshResponse,
     RecentReportSummary,
@@ -1202,6 +1203,86 @@ async def get_regressions_endpoint(player: str | None = None):
         return [RegressionEntry(**dict(r._mapping)) for r in rows]
     except Exception as e:
         logger.exception("Failed to get regressions")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get("/reports/{report_code}/night-summary")
+async def night_summary(
+    report_code: str, format: str | None = None,
+):
+    """Generate a post-raid night summary for a report.
+
+    When format=discord, returns a PlainTextResponse with Discord-ready
+    markdown. Otherwise returns the JSON RaidNightSummary model.
+    """
+    from shukketsu.pipeline.summaries import build_raid_night_summary
+
+    session = await _get_session()
+    try:
+        # Fetch fight-level aggregates
+        fight_result = await session.execute(
+            q.NIGHT_SUMMARY_FIGHTS, {"report_code": report_code},
+        )
+        fight_rows = fight_result.fetchall()
+        if not fight_rows:
+            raise HTTPException(
+                status_code=404, detail=f"No data for report {report_code}",
+            )
+
+        # Fetch player-level details
+        player_result = await session.execute(
+            q.NIGHT_SUMMARY_PLAYERS, {"report_code": report_code},
+        )
+        player_rows = player_result.fetchall()
+
+        # Fetch week-over-week comparison
+        wow_data = None
+        wow_result = await session.execute(
+            q.WEEK_OVER_WEEK, {"report_code": report_code},
+        )
+        wow_row = wow_result.fetchone()
+        if wow_row:
+            wow_data = {
+                "previous_report": wow_row.previous_report,
+                "clear_time_delta_ms": wow_row.clear_time_delta_ms,
+                "kills_delta": wow_row.kills_delta,
+                "avg_parse_delta": (
+                    float(wow_row.avg_parse_delta)
+                    if wow_row.avg_parse_delta is not None else None
+                ),
+            }
+
+        # Fetch player parse deltas for most improved / biggest regression
+        player_deltas = None
+        delta_result = await session.execute(
+            q.PLAYER_PARSE_DELTAS, {"report_code": report_code},
+        )
+        delta_rows = delta_result.fetchall()
+        if delta_rows:
+            player_deltas = delta_rows
+
+        summary = build_raid_night_summary(
+            report_code, fight_rows, player_rows,
+            wow_data=wow_data, player_deltas=player_deltas,
+        )
+
+        if format == "discord":
+            from fastapi.responses import PlainTextResponse
+
+            from shukketsu.pipeline.discord_format import (
+                format_raid_summary_discord,
+            )
+
+            text = format_raid_summary_discord(summary)
+            return PlainTextResponse(content=text)
+
+        return RaidNightSummary(**summary)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to generate night summary for %s", report_code)
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()
