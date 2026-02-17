@@ -174,16 +174,20 @@ async def ingest_report(
                     session.add(perf)
                 total_performances += len(perfs)
 
+    # Build actor maps from masterData (needed by table_data and event pipelines)
+    actor_name_by_id: dict[int, str] = {}
+    player_class_map: dict[str, str] = {}
+    if (ingest_tables or ingest_events) and fights:
+        master_data = report_info.get("masterData", {})
+        for actor in master_data.get("actors", []):
+            actor_name_by_id[actor["id"]] = actor["name"]
+            if "type" in actor:
+                player_class_map[actor["name"]] = actor["type"]
+
     # Optionally ingest table data (ability breakdowns, buff uptimes)
     table_rows = 0
     if ingest_tables and fights:
         from shukketsu.pipeline.table_data import ingest_table_data_for_fight
-
-        # Build actor name-by-id map from masterData
-        actor_name_by_id = {}
-        master_data = report_info.get("masterData", {})
-        for actor in master_data.get("actors", []):
-            actor_name_by_id[actor["id"]] = actor["name"]
 
         for fight in fights:
             rows = await ingest_table_data_for_fight(
@@ -191,20 +195,34 @@ async def ingest_report(
             )
             table_rows += rows
 
-    # Optionally ingest CombatantInfo (consumables + gear snapshots)
-    combatant_rows = 0
+    # Optionally ingest event data (combatant info, deaths, casts, resources)
+    event_rows = 0
     if ingest_events and fights:
+        from shukketsu.pipeline.cast_events import ingest_cast_events_for_fight
         from shukketsu.pipeline.combatant_info import ingest_combatant_info_for_report
+        from shukketsu.pipeline.death_events import ingest_death_events_for_fight
+        from shukketsu.pipeline.resource_events import ingest_resource_data_for_fight
 
         try:
-            combatant_rows = await ingest_combatant_info_for_report(
+            event_rows += await ingest_combatant_info_for_report(
                 wcl, session, report_code,
             )
         except Exception:
             logger.exception(
                 "Failed to ingest combatant info for %s", report_code,
             )
-            combatant_rows = 0
+
+        for fight in fights:
+            event_rows += await ingest_death_events_for_fight(
+                wcl, session, report_code, fight,
+            )
+            event_rows += await ingest_cast_events_for_fight(
+                wcl, session, report_code, fight,
+                actor_name_by_id, player_class_map,
+            )
+            event_rows += await ingest_resource_data_for_fight(
+                wcl, session, report_code, fight, actor_name_by_id,
+            )
 
     # Auto-snapshot progression for tracked characters
     try:
@@ -215,13 +233,13 @@ async def ingest_report(
 
     logger.info(
         "Ingested report %s: %d fights, %d performances, %d table rows, "
-        "%d combatant rows, %d snapshots",
+        "%d event rows, %d snapshots",
         report_code, len(fights), total_performances, table_rows,
-        combatant_rows, snapshot_count,
+        event_rows, snapshot_count,
     )
     return IngestResult(
         fights=len(fights), performances=total_performances,
         table_rows=table_rows,
-        event_rows=combatant_rows,
+        event_rows=event_rows,
         snapshots=snapshot_count,
     )

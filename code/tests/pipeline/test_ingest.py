@@ -322,3 +322,164 @@ class TestAutoSnapshotAfterIngest:
 
         assert result.snapshots == 0
         assert result.fights == 1
+
+
+class TestIngestEventsWiring:
+    """Verify ingest_report calls event pipelines when ingest_events=True."""
+
+    REPORT_DATA = {
+        "reportData": {
+            "report": {
+                "title": "Naxx Clear",
+                "startTime": 1700000000000,
+                "endTime": 1700003600000,
+                "guild": {"id": 1, "name": "Test"},
+                "masterData": {
+                    "actors": [
+                        {
+                            "id": 5, "name": "TestWarrior",
+                            "type": "Warrior", "subType": "Arms",
+                        },
+                        {
+                            "id": 6, "name": "TestMage",
+                            "type": "Mage", "subType": "Fire",
+                        },
+                    ]
+                },
+                "fights": [
+                    {
+                        "id": 1, "name": "Patchwerk",
+                        "startTime": 0, "endTime": 180000,
+                        "kill": True, "encounterID": 201115, "difficulty": 0,
+                    },
+                ],
+                "rankings": {"data": []},
+            }
+        }
+    }
+
+    def _make_mocks(self):
+        """Create standard mock WCL client and DB session."""
+        mock_wcl = AsyncMock()
+        mock_wcl.query.return_value = self.REPORT_DATA
+
+        mock_session = AsyncMock()
+        mock_select_result = MagicMock()
+        mock_select_result.__iter__ = MagicMock(return_value=iter([]))
+        mock_session.execute.return_value = mock_select_result
+        mock_session.flush = AsyncMock()
+
+        return mock_wcl, mock_session
+
+    @patch("shukketsu.pipeline.ingest.snapshot_all_characters", return_value=0)
+    @patch(
+        "shukketsu.pipeline.resource_events.ingest_resource_data_for_fight",
+        new_callable=AsyncMock, return_value=3,
+    )
+    @patch(
+        "shukketsu.pipeline.cast_events.ingest_cast_events_for_fight",
+        new_callable=AsyncMock, return_value=10,
+    )
+    @patch(
+        "shukketsu.pipeline.death_events.ingest_death_events_for_fight",
+        new_callable=AsyncMock, return_value=2,
+    )
+    @patch(
+        "shukketsu.pipeline.combatant_info.ingest_combatant_info_for_report",
+        new_callable=AsyncMock, return_value=5,
+    )
+    async def test_ingest_events_calls_all_pipelines(
+        self, mock_combatant, mock_death, mock_cast, mock_resource, mock_snap,
+    ):
+        """All 4 event pipelines are called when ingest_events=True."""
+        mock_wcl, mock_session = self._make_mocks()
+
+        result = await ingest_report(
+            mock_wcl, mock_session, "abc123", ingest_events=True,
+        )
+
+        mock_combatant.assert_awaited_once_with(
+            mock_wcl, mock_session, "abc123",
+        )
+        mock_death.assert_awaited_once()
+        mock_cast.assert_awaited_once()
+        mock_resource.assert_awaited_once()
+
+        # 5 (combatant) + 2 (death) + 10 (cast) + 3 (resource) = 20
+        assert result.event_rows == 20
+
+    @patch("shukketsu.pipeline.ingest.snapshot_all_characters", return_value=0)
+    @patch(
+        "shukketsu.pipeline.resource_events.ingest_resource_data_for_fight",
+        new_callable=AsyncMock, return_value=3,
+    )
+    @patch(
+        "shukketsu.pipeline.cast_events.ingest_cast_events_for_fight",
+        new_callable=AsyncMock, return_value=10,
+    )
+    @patch(
+        "shukketsu.pipeline.death_events.ingest_death_events_for_fight",
+        new_callable=AsyncMock, return_value=2,
+    )
+    @patch(
+        "shukketsu.pipeline.combatant_info.ingest_combatant_info_for_report",
+        new_callable=AsyncMock, return_value=5,
+    )
+    async def test_ingest_events_builds_actor_maps(
+        self, mock_combatant, mock_death, mock_cast, mock_resource, mock_snap,
+    ):
+        """Actor maps are built from masterData and passed to pipelines."""
+        mock_wcl, mock_session = self._make_mocks()
+
+        await ingest_report(
+            mock_wcl, mock_session, "abc123", ingest_events=True,
+        )
+
+        # Verify cast_events received correct actor_name_by_id and player_class_map
+        cast_call = mock_cast.call_args
+        actor_name_by_id = cast_call[0][4]  # 5th positional arg
+        player_class_map = cast_call[0][5]  # 6th positional arg
+
+        assert actor_name_by_id == {5: "TestWarrior", 6: "TestMage"}
+        assert player_class_map == {
+            "TestWarrior": "Warrior", "TestMage": "Mage",
+        }
+
+        # Verify resource_events received correct actor_name_by_id
+        resource_call = mock_resource.call_args
+        resource_actors = resource_call[0][4]  # 5th positional arg
+        assert resource_actors == {5: "TestWarrior", 6: "TestMage"}
+
+    @patch("shukketsu.pipeline.ingest.snapshot_all_characters", return_value=0)
+    async def test_ingest_events_false_skips_pipelines(self, mock_snap):
+        """No event pipelines are called when ingest_events=False."""
+        mock_wcl, mock_session = self._make_mocks()
+
+        with (
+            patch(
+                "shukketsu.pipeline.combatant_info.ingest_combatant_info_for_report",
+                new_callable=AsyncMock,
+            ) as mock_combatant,
+            patch(
+                "shukketsu.pipeline.death_events.ingest_death_events_for_fight",
+                new_callable=AsyncMock,
+            ) as mock_death,
+            patch(
+                "shukketsu.pipeline.cast_events.ingest_cast_events_for_fight",
+                new_callable=AsyncMock,
+            ) as mock_cast,
+            patch(
+                "shukketsu.pipeline.resource_events.ingest_resource_data_for_fight",
+                new_callable=AsyncMock,
+            ) as mock_resource,
+        ):
+            result = await ingest_report(
+                mock_wcl, mock_session, "abc123", ingest_events=False,
+            )
+
+            mock_combatant.assert_not_awaited()
+            mock_death.assert_not_awaited()
+            mock_cast.assert_not_awaited()
+            mock_resource.assert_not_awaited()
+
+            assert result.event_rows == 0
