@@ -23,6 +23,8 @@ class LLMConfig(BaseModel):
     model: str = "nemotron-3-nano:30b"
     api_key: str = "ollama"
     temperature: float = 0.1
+    max_tokens: int = 4096
+    timeout: int = 300
 
 
 class AppConfig(BaseModel):

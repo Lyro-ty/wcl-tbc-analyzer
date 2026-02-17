@@ -1,4 +1,4 @@
-from shukketsu.config import Settings, get_settings
+from shukketsu.config import LLMConfig, Settings, get_settings
 
 
 def test_default_settings_have_sane_defaults(monkeypatch):
@@ -36,3 +36,13 @@ def test_get_settings_returns_same_instance(monkeypatch):
     s2 = get_settings()
     assert s1 is s2
     get_settings.cache_clear()
+
+
+def test_llm_max_tokens_default():
+    cfg = LLMConfig()
+    assert cfg.max_tokens == 4096
+
+
+def test_llm_timeout_default():
+    cfg = LLMConfig()
+    assert cfg.timeout == 300

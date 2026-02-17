@@ -37,3 +37,37 @@ def test_llm_uses_configured_temperature(monkeypatch):
     settings = Settings()
     llm = create_llm(settings)
     assert llm.temperature == 0.5
+
+
+def test_llm_uses_configured_max_tokens(monkeypatch):
+    monkeypatch.setenv("WCL__CLIENT_ID", "x")
+    monkeypatch.setenv("WCL__CLIENT_SECRET", "x")
+    monkeypatch.setenv("LLM__MAX_TOKENS", "2048")
+    settings = Settings()
+    llm = create_llm(settings)
+    assert llm.max_tokens == 2048
+
+
+def test_llm_uses_default_max_tokens(monkeypatch):
+    monkeypatch.setenv("WCL__CLIENT_ID", "x")
+    monkeypatch.setenv("WCL__CLIENT_SECRET", "x")
+    settings = Settings()
+    llm = create_llm(settings)
+    assert llm.max_tokens == 4096
+
+
+def test_llm_uses_configured_timeout(monkeypatch):
+    monkeypatch.setenv("WCL__CLIENT_ID", "x")
+    monkeypatch.setenv("WCL__CLIENT_SECRET", "x")
+    monkeypatch.setenv("LLM__TIMEOUT", "120")
+    settings = Settings()
+    llm = create_llm(settings)
+    assert llm.request_timeout == 120
+
+
+def test_llm_uses_default_timeout(monkeypatch):
+    monkeypatch.setenv("WCL__CLIENT_ID", "x")
+    monkeypatch.setenv("WCL__CLIENT_SECRET", "x")
+    settings = Settings()
+    llm = create_llm(settings)
+    assert llm.request_timeout == 300
