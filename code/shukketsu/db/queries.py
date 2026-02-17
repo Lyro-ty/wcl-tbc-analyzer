@@ -592,6 +592,25 @@ PERSONAL_BESTS_BY_ENCOUNTER = text("""
     ORDER BY e.name
 """)
 
+WIPE_PROGRESSION = text("""
+    SELECT f.fight_id,
+           f.kill,
+           f.fight_percentage,
+           f.duration_ms,
+           COUNT(fp.id) AS player_count,
+           ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
+           SUM(fp.deaths) AS total_deaths,
+           ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse
+    FROM fights f
+    JOIN fight_performances fp ON f.id = fp.fight_id
+    WHERE f.report_code = :report_code
+      AND f.encounter_id = (
+          SELECT id FROM encounters WHERE name ILIKE :encounter_name LIMIT 1
+      )
+    GROUP BY f.id, f.fight_id, f.kill, f.fight_percentage, f.duration_ms
+    ORDER BY f.fight_id
+""")
+
 CONSUMABLE_CHECK = text("""
     SELECT bu.ability_name, bu.spell_id, bu.uptime_pct
     FROM buff_uptimes bu

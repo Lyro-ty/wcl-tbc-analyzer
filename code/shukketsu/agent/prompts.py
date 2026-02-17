@@ -66,6 +66,9 @@ started but not completed, with cancel rate grade.
 - **get_personal_bests**: Get a player's personal records (best DPS/parse/HPS) per encounter. \
 Shows PR values and kill count per boss. Useful for tracking personal progression \
 (player_name, optional encounter_name).
+- **get_wipe_progression**: Show wipe-to-kill progression for a boss encounter in a raid. \
+Lists each attempt with boss HP% at wipe, DPS trends, deaths, and duration. Useful for \
+seeing how quickly the raid learned the fight (report_code + encounter_name).
 
 ## Analysis Framework
 

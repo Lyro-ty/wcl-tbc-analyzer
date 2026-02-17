@@ -932,6 +932,47 @@ async def get_personal_bests(
         await session.close()
 
 
+@tool
+async def get_wipe_progression(report_code: str, encounter_name: str) -> str:
+    """Show wipe-to-kill progression for a boss encounter in a raid.
+    Lists each attempt with boss HP% at wipe, DPS, deaths, and duration.
+    Useful for seeing how quickly the raid learned the fight."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.WIPE_PROGRESSION,
+            {"report_code": report_code, "encounter_name": f"%{encounter_name}%"},
+        )
+        rows = result.fetchall()
+        if not rows:
+            return (
+                f"No attempts found for '{encounter_name}' in report {report_code}."
+            )
+
+        lines = [f"{encounter_name} Progression (report {report_code}):"]
+        for i, r in enumerate(rows, 1):
+            duration = _format_duration(r.duration_ms)
+            if r.kill:
+                parse_str = f" | Parse: {r.avg_parse}%" if r.avg_parse is not None else ""
+                lines.append(
+                    f"  Attempt {i}: KILL | {duration} | "
+                    f"Avg DPS: {r.avg_dps:,.1f} | Deaths: {r.total_deaths} | "
+                    f"{r.player_count} players{parse_str}"
+                )
+            else:
+                pct = r.fight_percentage if r.fight_percentage is not None else 0
+                lines.append(
+                    f"  Attempt {i}: WIPE at {pct:.1f}% | {duration} | "
+                    f"Avg DPS: {r.avg_dps:,.1f} | Deaths: {r.total_deaths} | "
+                    f"{r.player_count} players"
+                )
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
 ALL_TOOLS = [
     get_my_performance,
     get_top_rankings,
@@ -954,4 +995,5 @@ ALL_TOOLS = [
     get_overheal_analysis,
     get_cancelled_casts,
     get_personal_bests,
+    get_wipe_progression,
 ]

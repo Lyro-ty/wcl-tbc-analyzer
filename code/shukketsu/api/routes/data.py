@@ -42,6 +42,7 @@ from shukketsu.api.models import (
     SpecLeaderboardEntry,
     SpeedComparison,
     TableDataResponse,
+    WipeProgressionAttempt,
 )
 from shukketsu.db import queries as q
 
@@ -1044,6 +1045,34 @@ async def fetch_event_data(report_code: str):
     except Exception as e:
         await session.rollback()
         logger.exception("Failed to fetch event data for %s", report_code)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/wipe-progression/{encounter_name}",
+    response_model=list[WipeProgressionAttempt],
+)
+async def wipe_progression(report_code: str, encounter_name: str):
+    """Get attempt-by-attempt progression for an encounter in a report."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.WIPE_PROGRESSION,
+            {"report_code": report_code, "encounter_name": f"%{encounter_name}%"},
+        )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No attempts found for '{encounter_name}' in report {report_code}",
+            )
+        return [WipeProgressionAttempt(**dict(r._mapping)) for r in rows]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get wipe progression")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

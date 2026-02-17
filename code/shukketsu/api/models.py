@@ -369,6 +369,17 @@ class PersonalBestEntry(BaseModel):
     peak_ilvl: float | None
 
 
+class WipeProgressionAttempt(BaseModel):
+    fight_id: int
+    kill: bool
+    fight_percentage: float | None
+    duration_ms: int
+    player_count: int
+    avg_dps: float
+    total_deaths: int
+    avg_parse: float | None
+
+
 class AutoIngestStatus(BaseModel):
     enabled: bool
     status: str

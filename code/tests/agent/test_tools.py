@@ -14,6 +14,7 @@ from shukketsu.agent.tools import (
     get_raid_execution,
     get_raid_summary,
     get_top_rankings,
+    get_wipe_progression,
 )
 
 
@@ -27,7 +28,7 @@ class TestToolDecorators:
             assert tool.description, f"{tool.name} has no description"
 
     def test_expected_tool_count(self):
-        assert len(ALL_TOOLS) == 21
+        assert len(ALL_TOOLS) == 22
 
     def test_tool_names(self):
         names = {t.name for t in ALL_TOOLS}
@@ -39,7 +40,7 @@ class TestToolDecorators:
             "get_ability_breakdown", "get_buff_analysis",
             "get_death_analysis", "get_activity_report", "get_cooldown_efficiency",
             "get_consumable_check", "get_overheal_analysis", "get_cancelled_casts",
-            "get_personal_bests",
+            "get_personal_bests", "get_wipe_progression",
         }
         assert names == expected
 
@@ -543,6 +544,96 @@ class TestGetPersonalBests:
         assert "Patchwerk" in result
         assert "1,500.0" in result
         assert "N/A" in result
+
+
+class TestGetWipeProgression:
+    async def test_returns_formatted_progression(self):
+        """Tool should show attempt-by-attempt progression with wipes and kills."""
+        mock_rows = [
+            MagicMock(
+                fight_id=1, kill=False, fight_percentage=45.2,
+                duration_ms=92000, player_count=25,
+                avg_dps=1205.3, total_deaths=8, avg_parse=None,
+            ),
+            MagicMock(
+                fight_id=2, kill=False, fight_percentage=22.1,
+                duration_ms=125000, player_count=25,
+                avg_dps=1450.0, total_deaths=5, avg_parse=None,
+            ),
+            MagicMock(
+                fight_id=3, kill=True, fight_percentage=0.0,
+                duration_ms=195000, player_count=25,
+                avg_dps=1890.2, total_deaths=2, avg_parse=65.0,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_wipe_progression.ainvoke(
+                {"report_code": "abc123", "encounter_name": "Patchwerk"}
+            )
+
+        assert "WIPE at 45.2%" in result
+        assert "WIPE at 22.1%" in result
+        assert "KILL" in result
+        assert "Attempt 1" in result
+        assert "Attempt 2" in result
+        assert "Attempt 3" in result
+        assert "Parse: 65.0%" in result
+        assert "abc123" in result
+
+    async def test_no_data_returns_friendly_message(self):
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_wipe_progression.ainvoke(
+                {"report_code": "abc123", "encounter_name": "Patchwerk"}
+            )
+
+        assert "no" in result.lower() or "not found" in result.lower()
+
+    async def test_error_handling(self):
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = Exception("connection lost")
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_wipe_progression.ainvoke(
+                {"report_code": "abc123", "encounter_name": "Patchwerk"}
+            )
+
+        assert "Error" in result
+        assert "connection lost" in result
+
+    async def test_fight_percentage_appears_for_wipes(self):
+        """Verify fight_percentage is shown for wipe attempts."""
+        mock_rows = [
+            MagicMock(
+                fight_id=1, kill=False, fight_percentage=73.5,
+                duration_ms=45000, player_count=25,
+                avg_dps=800.0, total_deaths=15, avg_parse=None,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_wipe_progression.ainvoke(
+                {"report_code": "xyz789", "encounter_name": "Kel'Thuzad"}
+            )
+
+        assert "73.5%" in result
+        assert "WIPE" in result
 
 
 class TestNoResults:
