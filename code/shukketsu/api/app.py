@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     from shukketsu.agent.tools import ALL_TOOLS, set_session_factory
     from shukketsu.api.routes.analyze import set_graph
     from shukketsu.api.routes.data import set_session_factory as set_data_session_factory
+    from shukketsu.api.routes.health import set_health_deps
     from shukketsu.config import get_settings
     from shukketsu.db.engine import create_db_engine, create_session_factory
 
@@ -41,6 +42,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     graph = create_graph(llm, ALL_TOOLS)
     set_graph(graph)
     logger.info("Agent graph compiled with %d tools, model=%s", len(ALL_TOOLS), settings.llm.model)
+
+    # Health check dependencies
+    set_health_deps(session_factory=session_factory, llm_base_url=settings.llm.base_url)
 
     yield
 
