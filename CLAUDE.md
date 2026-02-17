@@ -10,8 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Architecture:** Three-layer monolith:
 1. **Data pipeline** — Python scripts + pipeline modules pull from WCL GraphQL API v2 into PostgreSQL
-2. **FastAPI server** — serves health, analysis endpoints; lifespan wires DB + LLM + agent
+2. **FastAPI server** — serves REST API (54 endpoints), health, analysis; lifespan wires DB + LLM + agent + auto-ingest
 3. **LangGraph agent** — CRAG pattern: route → query DB (via tools) → grade → analyze → END
+4. **React frontend** — TypeScript + Tailwind CSS dashboard with 15 pages (charts via Recharts)
 
 **Tech stack:** Python 3.12, FastAPI, LangGraph, langchain-openai (OpenAI-compatible ollama), PostgreSQL 16, SQLAlchemy 2.0 async, httpx, pydantic-settings v2, tenacity, structlog
 
@@ -44,18 +45,19 @@ Layout defined in `.project/spec.yaml`:
 ```
 code/
 ├── shukketsu/              # Main Python package
-│   ├── config.py           # Pydantic settings (nested: wcl, db, llm, app)
+│   ├── config.py           # Pydantic settings (nested: wcl, db, llm, app, guild, auto_ingest)
 │   ├── wcl/                # WCL API client layer
-│   │   ├── auth.py         # OAuth2 client credentials
+│   │   ├── auth.py         # OAuth2 client credentials (tenacity retry on 5xx + network errors)
 │   │   ├── rate_limiter.py # Points-based rate limiting
 │   │   ├── models.py       # WCL API response models (camelCase alias)
 │   │   ├── queries.py      # GraphQL query strings
-│   │   └── client.py       # GraphQL HTTP client (tenacity retry on 429/5xx)
+│   │   ├── events.py       # WCL events() API pagination helper
+│   │   └── client.py       # GraphQL HTTP client (tenacity retry on 429/5xx/network errors)
 │   ├── db/                 # Database layer
 │   │   ├── engine.py       # Async engine + session factory
 │   │   ├── models.py       # SQLAlchemy ORM models (18 tables)
-│   │   └── queries.py      # Analytical SQL queries for agent tools (~50 queries)
-│   ├── pipeline/           # Data transformation
+│   │   └── queries.py      # Analytical SQL queries for agent tools + REST API (~50 queries)
+│   ├── pipeline/           # Data transformation (16 modules)
 │   │   ├── ingest.py       # WCL response → DB rows (delete-then-insert, supports --with-tables/--with-events)
 │   │   ├── normalize.py    # Fight normalization (DPS/HPS calc, boss detection)
 │   │   ├── characters.py   # Character registration + retroactive fight_performances marking
@@ -68,20 +70,25 @@ code/
 │   │   ├── combatant_info.py # WCL CombatantInfo events → fight_consumables + gear_snapshots
 │   │   ├── death_events.py  # WCL Death events → death_details (per-fight)
 │   │   ├── cast_events.py   # WCL Cast events → cast_events + cast_metrics + cooldown_usage + cancelled_casts
-│   │   └── resource_events.py # WCL Resource events → resource_snapshots (per-fight)
+│   │   ├── resource_events.py # WCL Resource events → resource_snapshots (per-fight)
+│   │   ├── auto_ingest.py   # Background polling service for guild report auto-ingestion
+│   │   ├── discord_format.py # Discord export formatting for raid summaries
+│   │   └── summaries.py     # Report/raid night summary generation
 │   ├── agent/              # LangGraph agent
 │   │   ├── llm.py          # LLM client (ChatOpenAI pointing at ollama)
-│   │   ├── tools.py        # 29 SQL query tools (@tool decorated)
+│   │   ├── tools.py        # 30 SQL query tools (@tool decorated)
 │   │   ├── state.py        # AnalyzerState (extends MessagesState)
 │   │   ├── prompts.py      # System prompts and templates
 │   │   └── graph.py        # CRAG state graph (6 nodes, MAX_RETRIES=2)
-│   ├── api/                # FastAPI layer
-│   │   ├── app.py          # App factory + lifespan (wires DB, LLM, graph)
+│   ├── api/                # FastAPI layer (54 endpoints across 4 route files)
+│   │   ├── app.py          # App factory + lifespan (wires DB, LLM, graph, auto-ingest)
 │   │   ├── deps.py         # Dependency injection
 │   │   └── routes/
-│   │       ├── health.py   # GET /health
-│   │       └── analyze.py  # POST /api/analyze (strips think tags from LLM output)
-│   └── scripts/            # CLI entry points (6 total, registered in pyproject.toml)
+│   │       ├── health.py       # GET /health (DB + LLM ping)
+│   │       ├── analyze.py      # POST /api/analyze + POST /api/analyze/stream (SSE)
+│   │       ├── data.py         # 49 REST endpoints: reports, fights, characters, rankings, dashboard, etc.
+│   │       └── auto_ingest.py  # GET /status + POST /trigger for background auto-ingest service
+│   └── scripts/            # CLI entry points (7 total, registered in pyproject.toml)
 │       ├── pull_my_logs.py       # pull-my-logs: fetch report data from WCL
 │       ├── pull_rankings.py      # pull-rankings: fetch top rankings per encounter/spec
 │       ├── pull_speed_rankings.py # pull-speed-rankings: fetch speed (kill time) rankings
@@ -89,7 +96,11 @@ code/
 │       ├── seed_encounters.py    # seed-encounters: bootstrap encounter table from WCL
 │       ├── snapshot_progression.py # snapshot-progression: compute progression snapshots
 │       └── pull_table_data.py   # pull-table-data: backfill ability/buff data for existing reports
-├── tests/                  # Test suite (mirrors package structure)
+├── frontend/               # React + TypeScript + Tailwind CSS + Recharts dashboard
+│   └── src/
+│       ├── lib/            # api.ts (API client), types.ts (TypeScript interfaces)
+│       └── pages/          # 15 page components (Dashboard, Reports, Roster, Chat, etc.)
+├── tests/                  # Test suite (509 tests, mirrors package structure)
 └── alembic/                # Database migrations (async-aware)
 ```
 
@@ -203,7 +214,7 @@ Tools are in `code/shukketsu/agent/tools.py`, SQL queries (raw `text()` with nam
 - Report ingestion uses **delete-then-insert** for fights+performances, `session.merge()` for the report itself
 - Rankings use **delete-then-insert** refresh with staleness checks (default 24h)
 - Speed rankings follow the same delete-then-insert + staleness pattern, one API call per encounter
-- `register_character()` retroactively marks existing `fight_performances` rows via bulk UPDATE
+- `register_character()` retroactively marks existing `fight_performances` rows via case-insensitive bulk UPDATE
 - Agent queries use raw SQL with CTEs and PostgreSQL functions (`PERCENTILE_CONT`, `ROUND(...::numeric, 1)`)
 - Raid comparison queries use CTEs to aggregate `fight_performances` per fight, then JOIN against `speed_rankings` or FULL OUTER JOIN two reports
 
@@ -215,7 +226,13 @@ Uses nested pydantic-settings with `env_nested_delimiter="__"`:
 - `LLM__BASE_URL` — LLM endpoint (default for ollama: `http://localhost:11434/v1`)
 - `LLM__MODEL` — Model name (current: `nemotron-3-nano:30b`)
 - `LLM__API_KEY` — API key (set to `ollama` for ollama)
+- `LLM__NUM_CTX` — Context window size (default: `32768`)
 - `APP__HOST`, `APP__PORT` — FastAPI server config
+- `GUILD__ID`, `GUILD__NAME`, `GUILD__SERVER_SLUG`, `GUILD__SERVER_REGION` — Guild config for auto-ingest
+- `AUTO_INGEST__ENABLED` — Enable background auto-ingest polling (default: `false`)
+- `AUTO_INGEST__POLL_INTERVAL_MINUTES` — Polling interval (default: `30`)
+- `AUTO_INGEST__ZONE_IDS` — Zones to poll (default: all)
+- `AUTO_INGEST__WITH_TABLES`, `AUTO_INGEST__WITH_EVENTS` — Include table/event data (default: `true`)
 - `LANGFUSE__ENABLED` — Enable Langfuse tracing (default: `false`)
 - `LANGFUSE__PUBLIC_KEY`, `LANGFUSE__SECRET_KEY` — Langfuse API keys (from Langfuse UI project settings)
 - `LANGFUSE__HOST` — Langfuse endpoint (default: `http://localhost:3000`)
@@ -249,10 +266,11 @@ docker compose -f docker-compose.langfuse.yml up -d  # Start Langfuse stack
 # Start FastAPI server (initializes DB + LLM + agent on startup)
 uvicorn shukketsu.api.app:create_app --factory --port 8000
 
-# CLI scripts (all registered as entry points in pyproject.toml)
+# CLI scripts (7 total, all registered as entry points in pyproject.toml)
 pull-my-logs --report-code <CODE>
-pull-my-logs --report-code <CODE> --with-tables  # Also fetch ability/buff data
-pull-table-data --report-code <CODE>             # Backfill ability/buff for existing report
+pull-my-logs --report-code <CODE> --with-tables   # Also fetch ability/buff data
+pull-my-logs --report-code <CODE> --with-events   # Also fetch event-level data
+pull-table-data --report-code <CODE>              # Backfill ability/buff for existing report
 pull-rankings --encounter "Patchwerk" --zone-id 2017
 pull-speed-rankings --zone-id 2017 --force
 register-character --name Lyro --server Whitemane --region US --class-name Warrior --spec Arms
@@ -273,6 +291,7 @@ curl -X POST http://localhost:8000/api/analyze \
 - **respx** for HTTP mocking (httpx client)
 - **Class-based grouping** — tests organized by class (e.g., `TestParseZoneRankings`)
 - **No SQL execution in tests** — queries could have syntax errors undetectable by unit tests
+- **Mock sync methods explicitly** — SQLAlchemy `session.add()` is synchronous; always mock as `session.add = MagicMock()` (not `AsyncMock`) to avoid "coroutine was never awaited" warnings
 
 ## WCL API notes
 
@@ -280,8 +299,7 @@ curl -X POST http://localhost:8000/api/analyze \
 - GraphQL API v2 at `https://www.warcraftlogs.com/api/v2/client`
 - Rate limited by points per hour; every response includes `rateLimitData`
 - Rankings API returns `{"data": [{"fightID": N, "roles": {...}}]}` — a list with fightID fields, not a dict keyed by fight ID
-- `characterRankings` may return JSON string OR dict — `parse_zone_rankings()` handles both
-- `fightRankings(metric: speed)` returns fastest raid kills per encounter; same JSON string/dict ambiguity — `parse_speed_rankings()` handles both
+- **GraphQL JSON scalar:** `characterRankings`, `fightRankings`, and report `rankings` may return JSON string OR dict. All parsers handle both via `json.loads()` guard: `if isinstance(data, str): data = json.loads(data)`
 - Fresh Classic zones are in the 2000+ ID range (zone 2017 = Fresh Naxxramas)
 - Reports may contain fights from other raids — the ingest pipeline auto-inserts unknown encounters as stubs via `session.merge()`
 
@@ -295,14 +313,17 @@ curl -X POST http://localhost:8000/api/analyze \
 - **DoT refresh analysis:** Only covers Warlock, Shadow Priest, and Balance Druid DoTs.
 - **Trinket tracking:** Limited to 10 known Classic/TBC trinkets. Expand `CLASSIC_TRINKETS` for more coverage.
 - **Cooldown windows:** DPS gain during burst windows is estimated (20% boost), not computed from actual damage events.
+- **GCD fixed at 1500ms:** `cast_events.py` uses a fixed 1500ms GCD. In WoW, haste reduces GCD to as low as 1.0s for some classes.
+- **Healer DPS field:** `parse_rankings_to_performances()` stores WCL's `amount` in the `dps` column for all players. For healers in report rankings, `amount` is actually HPS but gets stored as `dps`. The `total_healing`/`hps` fields are zero from report ingestion (they'd require a separate WCL API call with `metric: hps`).
 
 ## Resolved issues
 
 - **Think tags in output:** `_strip_think_tags()` in `analyze.py` strips Nemotron's leaked `<think>...</think>` reasoning from API responses via regex.
 - **429 rate limits:** `WCLClient.query()` has a `tenacity` retry decorator (exponential backoff, 5 attempts) for 429, 502/503/504, connection errors, and read timeouts.
+- **Auth retry:** `_request_token()` in `auth.py` retries on 5xx responses AND `ConnectError`/`ReadTimeout` network errors (matching the client's behavior).
 - **Grader blindness:** `_format_messages()` in `graph.py` now includes `ToolMessage` content so the grader can see DB query results.
 - **Ingest idempotency:** `ingest_report()` uses delete-then-insert for fights+performances, `session.merge()` for reports — safe to re-ingest the same report.
-- **Tool error handling:** All 29 agent tools catch exceptions and return friendly error strings instead of propagating tracebacks to the LLM.
+- **Tool error handling:** All 30 agent tools catch exceptions and return friendly error strings instead of propagating tracebacks to the LLM.
 - **Missing indexes:** Migration 003 adds indexes on `fight_performances(fight_id, player_name, class+spec)`, `fights(report_code, encounter_id)`, and `top_rankings(encounter_id, class, spec)`.
 - **Think tags in agent nodes:** `_strip_think_tags()` now applied in both `route_query` and `grade_results` graph nodes, not just the API response.
 - **Tool arg case normalization:** `_normalize_tool_args()` in `graph.py` converts Nemotron's PascalCase tool argument keys to snake_case.
@@ -311,16 +332,69 @@ curl -X POST http://localhost:8000/api/analyze \
 - **Health check:** `/health` endpoint now pings the database (`SELECT 1`) and LLM (`/v1/models`) and returns 503 when either is unreachable.
 - **LLM guardrails:** `max_tokens` (4096) and `timeout` (300s) now configured on the ChatOpenAI client.
 - **Batch deaths endpoint:** `GET /api/data/reports/{code}/deaths` replaces N+1 per-fight queries on the roster page.
-- **Dead code removed:** `compute_dps`/`compute_hps` (unused), `CHARACTER_RANKINGS`/`REPORT_EVENTS`/`RATE_LIMIT_FRAGMENT` (unused WCL queries).
+- **Dead code removed:** `compute_dps`/`compute_hps` (unused), `CHARACTER_RANKINGS`/`REPORT_EVENTS`/`RATE_LIMIT_FRAGMENT`/`TOP_ENCOUNTER_RANKINGS` (unused WCL queries).
 - **No streaming:** `POST /api/analyze/stream` SSE endpoint streams analysis tokens via LangGraph `astream(stream_mode="messages")`. Think-tag buffering strips `<think>...</think>` before forwarding. Frontend uses `fetch` + `ReadableStream` for incremental message rendering.
-- **No event-level data:** WCL `table()` API now ingested into `ability_metrics` and `buff_uptimes` tables. Provides per-ability damage/healing breakdowns and buff/debuff uptimes. Agent tools `get_ability_breakdown` and `get_buff_analysis` expose this to Nemotron. Frontend `PlayerFightPage` renders interactive charts.
+- **No event-level data:** WCL `table()` API now ingested into `ability_metrics` and `buff_uptimes` tables. WCL `events()` API ingested via `--with-events` for death recaps, cast timelines, GCD metrics, cooldown tracking, cancel rates, and resource snapshots.
 - **Context window truncation:** ollama `num_ctx` now explicitly set to 32768 via `LLM__NUM_CTX` config. Previously defaulted to 2048, causing silent context truncation.
 - **No observability:** Langfuse `CallbackHandler` traces all LLM calls, tool executions, and CRAG loop iterations. Self-hosted via `docker-compose.langfuse.yml`. Toggleable via `LANGFUSE__ENABLED`.
-- **Missing event pipeline:** WCL `events()` API now ingested via `--with-events` flag. Death recaps, cast timelines, GCD metrics, cooldown tracking, cancel rates, and resource snapshots all populated. Three new pipeline modules: `death_events.py`, `cast_events.py`, `resource_events.py`.
 - **Phantom agent prompt sections:** Sections 9-14 in ANALYSIS_PROMPT (Resource Usage, Cooldown Windows, Phase Performance, DoT Management, Rotation Score, Trinket Performance) now have matching agent tools and DB data backing them.
-- **Missing frontend API routes:** All 8 previously-missing endpoints now implemented: `events-available`, `cast-timeline`, `cooldown-windows`, `resources`, `dot-refreshes`, `rotation`, `trinkets`, `phases/{player}`.
-- **Agent tool gaps:** Tools consolidated from 26 to 29 (removed 2 overlapping, added 5 new). All 17 ANALYSIS_PROMPT sections now have corresponding tools.
-- **Dead WCL query:** Removed unused `TOP_ENCOUNTER_RANKINGS` from `wcl/queries.py`.
+- **Missing frontend API routes:** All event-data endpoints implemented: `events-available`, `cast-timeline`, `cooldown-windows`, `resources`, `dot-refreshes`, `rotation`, `trinkets`, `phases/{player}`, `event-data` backfill.
+- **Agent tool gaps:** Tools consolidated to 30 (removed 2 overlapping, added 6 new). All 17 ANALYSIS_PROMPT sections now have corresponding tools.
+- **Case-insensitive player matching:** All SQL queries use `ILIKE` for `player_name`/`character_name`. Agent tools wrap with `%` wildcards. Character registration uses `func.lower()` for retroactive marking. Ingest pipeline uses lowercase set for `is_my_character` check.
+- **Consumable name mismatches:** Fixed 4 incorrect spell ID → name mappings in `CONSUMABLE_CATEGORIES` (28490, 28502, 28509, 28514).
+- **Enchantable slots:** Corrected from `{0,2,4,5,7,8,9,11,14,15}` to `{0,2,4,6,7,8,9,14,15}` — waist (5) cannot be enchanted, legs (6) can, rings (10-11) are enchanter-only.
+- **WCL client assert:** Replaced `assert self._http is not None` with `raise RuntimeError()` — asserts are stripped by `python -O`.
+- **Auto-ingest error tracking:** `_last_error` now set in exception handlers; `trigger_now()` stores task reference to prevent GC.
+- **Timezone handling:** Staleness checks now handle both naive and timezone-aware datetimes safely.
+- **Resource time_at_zero:** `compute_resource_snapshots()` uses actual `fight_start_time` instead of approximating from first event timestamp.
+- **Unused parameter:** Removed dead `actor_name_by_id` from `ingest_table_data_for_fight()`.
+
+## Coding rules
+
+These rules prevent bugs that have occurred in this codebase. Follow them strictly.
+
+### Player name matching — ALWAYS case-insensitive
+- **SQL queries:** Always use `ILIKE :player_name`, never `= :player_name`
+- **Agent tools:** Always wrap with wildcards: `f"%{player_name}%"`
+- **Python comparisons:** Use `.lower()` on both sides or lowercase sets: `{n.lower() for n in names}`
+- **Why:** WCL API may return names with different casing than registered characters
+
+### WCL API responses — ALWAYS handle JSON string ambiguity
+- WCL GraphQL JSON scalars (`rankings`, `characterRankings`, `fightRankings`, `table`) may return either a JSON string or a parsed dict/list
+- **Rule:** Always add a string guard before processing: `if isinstance(data, str): data = json.loads(data)`
+
+### Error messages — MUST match the actual CLI flag
+- When referencing CLI flags in error messages (e.g., `--with-tables` vs `--with-events`), grep the codebase for the flag name to verify accuracy
+- Event-data tools should reference `--with-events`, table-data tools should reference `--with-tables`
+
+### Game constants — single source of truth in constants.py
+- All WoW data (spell IDs, consumable names, gear slots, cooldowns, DoTs, trinkets, phase definitions) lives in `pipeline/constants.py`
+- **Never duplicate** these values in tools.py or elsewhere — import from constants
+- When adding new spell IDs, verify names against Wowhead/WCL
+
+### Runtime preconditions — NEVER use assert
+- `assert` statements are stripped by `python -O`; use `if/raise RuntimeError()` for runtime checks
+
+### Retry decorators — MUST cover both HTTP errors and network errors
+- External API retry decorators must handle both response-level errors (5xx status) and connection errors (`ConnectError`, `ReadTimeout`)
+- Pattern: `retry = retry_if_result(check_status) | retry_if_exception_type((ConnectError, ReadTimeout))`
+
+### Timezone handling — check before replace
+- When comparing timestamps, always check `.tzinfo` before calling `.replace(tzinfo=UTC)`
+- Pattern: `aware = dt if dt.tzinfo else dt.replace(tzinfo=UTC)`
+
+### AsyncMock in tests — mock sync methods explicitly
+- SQLAlchemy `session.add()`, `session.merge()` are synchronous even on async sessions
+- **Rule:** Always use `session.add = MagicMock()` with a comment explaining why
+- **Why:** `AsyncMock` makes all methods return coroutines; calling sync methods produces "coroutine was never awaited" warnings
+
+### Imports — always at module level
+- All imports go at the top of the file (PEP 8), never inline within functions
+- **Exception:** Circular import guards in pipeline modules (e.g., `from shukketsu.wcl.queries import ...` inside functions)
+
+### Function parameters — audit for usage
+- When adding parameters to functions, ensure they're actually used in the body
+- Periodically audit for dead parameters and remove them
 
 ## Conventions
 
@@ -330,3 +404,4 @@ curl -X POST http://localhost:8000/api/analyze \
 - `tenacity` for retries on external API calls.
 - Large files in `models/` or `data/` (Git LFS). Scratch data in `data/scratch/` (gitignored).
 - Never commit `.env`.
+- CORS is currently permissive (`allow_origins=["*"]`) — tighten for production.
