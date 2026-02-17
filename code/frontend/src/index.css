@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --color-warrior: #C79C6E;
+  --color-paladin: #F58CBA;
+  --color-hunter: #ABD473;
+  --color-rogue: #FFF569;
+  --color-priest: #FFFFFF;
+  --color-shaman: #0070DE;
+  --color-mage: #69CCF0;
+  --color-warlock: #9482C9;
+  --color-druid: #FF7D0A;
+}
+
+html {
+  color-scheme: dark;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}

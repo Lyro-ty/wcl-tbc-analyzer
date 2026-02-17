@@ -238,3 +238,29 @@ SPEC_LEADERBOARD = text("""
     HAVING COUNT(*) >= 3
     ORDER BY avg_dps DESC
 """)
+
+REPORTS_LIST = text("""
+    SELECT r.code, r.title, r.guild_name, r.start_time, r.end_time,
+           COUNT(DISTINCT f.id) AS fight_count,
+           COUNT(DISTINCT f.encounter_id) AS boss_count
+    FROM reports r
+    LEFT JOIN fights f ON f.report_code = r.code
+    GROUP BY r.code, r.title, r.guild_name, r.start_time, r.end_time
+    ORDER BY r.start_time DESC
+""")
+
+ENCOUNTERS_LIST = text("""
+    SELECT e.id, e.name, e.zone_id, e.zone_name,
+           COUNT(f.id) AS fight_count
+    FROM encounters e
+    LEFT JOIN fights f ON f.encounter_id = e.id
+    GROUP BY e.id, e.name, e.zone_id, e.zone_name
+    ORDER BY e.zone_name, e.name
+""")
+
+CHARACTERS_LIST = text("""
+    SELECT mc.id, mc.name, mc.server_slug, mc.server_region,
+           mc.character_class, mc.spec
+    FROM my_characters mc
+    ORDER BY mc.name
+""")
