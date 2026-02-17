@@ -666,6 +666,21 @@ REGRESSION_CHECK = text("""
     ORDER BY parse_delta ASC
 """)
 
+MY_RECENT_KILLS = text("""
+    SELECT f.report_code, f.fight_id, e.name AS encounter_name,
+           fp.dps, fp.parse_percentile, fp.deaths, fp.item_level,
+           f.duration_ms, r.title AS report_title, r.start_time AS report_time
+    FROM fight_performances fp
+    JOIN fights f ON fp.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    JOIN reports r ON f.report_code = r.code
+    WHERE fp.is_my_character = true
+      AND f.kill = true
+      AND (:encounter_name IS NULL OR e.name ILIKE :encounter_name)
+    ORDER BY r.start_time DESC, f.fight_id DESC
+    LIMIT :limit
+""")
+
 REGRESSION_CHECK_PLAYER = text("""
     WITH ranked_fights AS (
         SELECT fp.player_name, e.name AS encounter_name,

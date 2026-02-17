@@ -16,6 +16,7 @@ from shukketsu.agent.tools import (
     get_regressions,
     get_top_rankings,
     get_wipe_progression,
+    resolve_my_fights,
 )
 
 
@@ -29,7 +30,7 @@ class TestToolDecorators:
             assert tool.description, f"{tool.name} has no description"
 
     def test_expected_tool_count(self):
-        assert len(ALL_TOOLS) == 23
+        assert len(ALL_TOOLS) == 24
 
     def test_tool_names(self):
         names = {t.name for t in ALL_TOOLS}
@@ -42,6 +43,7 @@ class TestToolDecorators:
             "get_death_analysis", "get_activity_report", "get_cooldown_efficiency",
             "get_consumable_check", "get_overheal_analysis", "get_cancelled_casts",
             "get_personal_bests", "get_wipe_progression", "get_regressions",
+            "resolve_my_fights",
         }
         assert names == expected
 
@@ -760,6 +762,148 @@ class TestGetRegressions:
 
         assert "REGRESSION" in result
         assert "N/A" in result
+
+
+class TestResolveMyFights:
+    async def test_returns_recent_kills(self):
+        """Tool should return formatted list of recent kills."""
+        mock_rows = [
+            MagicMock(
+                report_code="abc123", fight_id=4, encounter_name="Patchwerk",
+                dps=2847.3, parse_percentile=92.1, deaths=0, item_level=141,
+                duration_ms=195000, report_title="Naxx Run", report_time=None,
+            ),
+            MagicMock(
+                report_code="abc123", fight_id=7, encounter_name="Patchwerk",
+                dps=2691.0, parse_percentile=85.4, deaths=1, item_level=140,
+                duration_ms=202000, report_title="Naxx Run", report_time=None,
+            ),
+            MagicMock(
+                report_code="xyz789", fight_id=2, encounter_name="Grobbulus",
+                dps=1950.5, parse_percentile=78.0, deaths=0, item_level=139,
+                duration_ms=241000, report_title="Naxx Alt Run", report_time=None,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await resolve_my_fights.ainvoke({})
+
+        assert "abc123" in result
+        assert "xyz789" in result
+        assert "Patchwerk" in result
+        assert "Grobbulus" in result
+        assert "2,847.3" in result
+        assert "92.1%" in result
+        assert "fight #4" in result
+        assert "fight #2" in result
+
+    async def test_with_encounter_filter(self):
+        """Tool should pass encounter_name filter to query."""
+        mock_rows = [
+            MagicMock(
+                report_code="abc123", fight_id=4, encounter_name="Patchwerk",
+                dps=2847.3, parse_percentile=92.1, deaths=0, item_level=141,
+                duration_ms=195000, report_title="Naxx Run", report_time=None,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await resolve_my_fights.ainvoke(
+                {"encounter_name": "Patchwerk"}
+            )
+
+        assert "Patchwerk" in result
+        assert "abc123" in result
+        # Verify encounter_name was passed to the query
+        call_args = mock_session.execute.call_args
+        params = call_args[0][1]
+        assert params["encounter_name"] == "%Patchwerk%"
+
+    async def test_no_data(self):
+        """Tool should return friendly message when no kills found."""
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await resolve_my_fights.ainvoke({})
+
+        assert "no recent kills" in result.lower()
+
+    async def test_no_data_with_filter(self):
+        """Tool should include encounter name in no-data message."""
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await resolve_my_fights.ainvoke(
+                {"encounter_name": "Sapphiron"}
+            )
+
+        assert "no recent kills" in result.lower()
+        assert "Sapphiron" in result
+
+    async def test_error_handling(self):
+        """Tool should return error string on DB failure."""
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = Exception("connection lost")
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await resolve_my_fights.ainvoke({})
+
+        assert "Error" in result
+        assert "connection lost" in result
+
+    async def test_null_parse_percentile(self):
+        """Tool should handle None parse_percentile gracefully."""
+        mock_rows = [
+            MagicMock(
+                report_code="abc123", fight_id=1, encounter_name="Patchwerk",
+                dps=1500.0, parse_percentile=None, deaths=0, item_level=130,
+                duration_ms=200000, report_title="Naxx Run", report_time=None,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await resolve_my_fights.ainvoke({})
+
+        assert "N/A" in result
+        assert "Patchwerk" in result
+
+    async def test_custom_count(self):
+        """Tool should pass count parameter to limit."""
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            await resolve_my_fights.ainvoke({"count": 3})
+
+        call_args = mock_session.execute.call_args
+        params = call_args[0][1]
+        assert params["limit"] == 3
 
 
 class TestNoResults:

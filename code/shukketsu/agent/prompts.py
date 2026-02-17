@@ -73,6 +73,15 @@ seeing how quickly the raid learned the fight (report_code + encounter_name).
 Compares recent kills (last 2) against rolling baseline (kills 3-7). Flags significant \
 drops (>=15 percentile points) as regressions. Only tracks registered characters \
 (optional player_name).
+- **resolve_my_fights**: Find your recent kills with report codes and fight IDs. \
+Use this when the user refers to fights without specifying a report code \
+(optional encounter_name, optional count — default 5).
+
+## Context Resolution
+
+When the user refers to "my last fight", "my recent kills", "last raid", or similar \
+relative references, use the resolve_my_fights tool first to find the relevant report \
+codes and fight IDs, then use other tools with those specific identifiers.
 
 ## Analysis Framework
 

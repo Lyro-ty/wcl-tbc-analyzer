@@ -1026,6 +1026,45 @@ async def get_regressions(player_name: str | None = None) -> str:
         await session.close()
 
 
+@tool
+async def resolve_my_fights(
+    encounter_name: str | None = None, count: int = 5,
+) -> str:
+    """Find your recent fights. Returns report codes and fight IDs for your
+    tracked character's recent kills. Use this to look up fight details
+    without needing to know report codes.
+    If encounter_name is provided, filters to that boss.
+    Returns up to 'count' recent fights (default 5)."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.MY_RECENT_KILLS,
+            {
+                "encounter_name": f"%{encounter_name}%" if encounter_name else None,
+                "limit": count,
+            },
+        )
+        rows = result.fetchall()
+        if not rows:
+            filter_msg = f" on '{encounter_name}'" if encounter_name else ""
+            return f"No recent kills found for your tracked characters{filter_msg}."
+
+        lines = ["Your recent kills:\n"]
+        for i, r in enumerate(rows, 1):
+            duration = _format_duration(r.duration_ms)
+            parse_str = f"{r.parse_percentile}%" if r.parse_percentile is not None else "N/A"
+            lines.append(
+                f"  {i}. {r.encounter_name} — report {r.report_code} fight "
+                f"#{r.fight_id} | DPS: {r.dps:,.1f} | Parse: {parse_str} | "
+                f"{duration}"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
 ALL_TOOLS = [
     get_my_performance,
     get_top_rankings,
@@ -1050,4 +1089,5 @@ ALL_TOOLS = [
     get_personal_bests,
     get_wipe_progression,
     get_regressions,
+    resolve_my_fights,
 ]
