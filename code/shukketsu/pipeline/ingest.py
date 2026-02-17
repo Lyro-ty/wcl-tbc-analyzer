@@ -73,10 +73,12 @@ def parse_rankings_to_performances(
 class IngestResult:
     fights: int
     performances: int
+    table_rows: int = 0
 
 
 async def ingest_report(
     wcl, session, report_code: str, my_character_names: set[str] | None = None,
+    *, ingest_tables: bool = False,
 ) -> IngestResult:
     """Fetch a report from WCL and persist it to the database."""
     from shukketsu.wcl.queries import REPORT_FIGHTS, REPORT_RANKINGS
@@ -168,8 +170,27 @@ async def ingest_report(
                     session.add(perf)
                 total_performances += len(perfs)
 
+    # Optionally ingest table data (ability breakdowns, buff uptimes)
+    table_rows = 0
+    if ingest_tables and fights:
+        from shukketsu.pipeline.table_data import ingest_table_data_for_fight
+
+        # Build actor name-by-id map from masterData
+        actor_name_by_id = {}
+        master_data = report_info.get("masterData", {})
+        for actor in master_data.get("actors", []):
+            actor_name_by_id[actor["id"]] = actor["name"]
+
+        for fight in fights:
+            rows = await ingest_table_data_for_fight(
+                wcl, session, report_code, fight, actor_name_by_id,
+            )
+            table_rows += rows
+
     logger.info(
-        "Ingested report %s: %d fights, %d performances",
-        report_code, len(fights), total_performances,
+        "Ingested report %s: %d fights, %d performances, %d table rows",
+        report_code, len(fights), total_performances, table_rows,
     )
-    return IngestResult(fights=len(fights), performances=total_performances)
+    return IngestResult(
+        fights=len(fights), performances=total_performances, table_rows=table_rows,
+    )

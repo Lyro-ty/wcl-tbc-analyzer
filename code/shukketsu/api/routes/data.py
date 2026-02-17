@@ -6,6 +6,9 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shukketsu.api.models import (
+    AbilitiesAvailable,
+    AbilityMetricResponse,
+    BuffUptimeResponse,
     CharacterFightSummary,
     CharacterInfo,
     CharacterReportSummary,
@@ -348,6 +351,131 @@ async def character_report_detail(character_name: str, report_code: str):
         await session.close()
 
 
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/abilities",
+    response_model=list[AbilityMetricResponse],
+)
+async def fight_abilities(report_code: str, fight_id: int):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.FIGHT_ABILITIES, {"report_code": report_code, "fight_id": fight_id}
+        )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No ability data for fight {fight_id} in report {report_code}",
+            )
+        return [AbilityMetricResponse(**dict(r._mapping)) for r in rows]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get fight abilities")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/abilities/{player}",
+    response_model=list[AbilityMetricResponse],
+)
+async def player_abilities(report_code: str, fight_id: int, player: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.FIGHT_ABILITIES_PLAYER,
+            {"report_code": report_code, "fight_id": fight_id, "player_name": player},
+        )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No ability data for {player} in fight {fight_id}",
+            )
+        return [AbilityMetricResponse(**dict(r._mapping)) for r in rows]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get player abilities")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/buffs",
+    response_model=list[BuffUptimeResponse],
+)
+async def fight_buffs(report_code: str, fight_id: int):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.FIGHT_BUFFS, {"report_code": report_code, "fight_id": fight_id}
+        )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No buff data for fight {fight_id} in report {report_code}",
+            )
+        return [BuffUptimeResponse(**dict(r._mapping)) for r in rows]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get fight buffs")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/buffs/{player}",
+    response_model=list[BuffUptimeResponse],
+)
+async def player_buffs(report_code: str, fight_id: int, player: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.FIGHT_BUFFS_PLAYER,
+            {"report_code": report_code, "fight_id": fight_id, "player_name": player},
+        )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No buff data for {player} in fight {fight_id}",
+            )
+        return [BuffUptimeResponse(**dict(r._mapping)) for r in rows]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get player buffs")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/abilities-available",
+    response_model=AbilitiesAvailable,
+)
+async def abilities_available(report_code: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.TABLE_DATA_EXISTS, {"report_code": report_code}
+        )
+        row = result.fetchone()
+        return AbilitiesAvailable(has_data=row.has_data if row else False)
+    except Exception as e:
+        logger.exception("Failed to check abilities availability")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest_report_endpoint(req: IngestRequest):
     from sqlalchemy import select
@@ -379,16 +507,18 @@ async def ingest_report_endpoint(req: IngestRequest):
         async with WCLClient(auth, RateLimiter()) as wcl:
             result = await ingest_report(
                 wcl, session, req.report_code, my_names,
+                ingest_tables=req.with_tables,
             )
         await session.commit()
         logger.info(
-            "Ingested report %s: %d fights, %d performances",
-            req.report_code, result.fights, result.performances,
+            "Ingested report %s: %d fights, %d performances, %d table rows",
+            req.report_code, result.fights, result.performances, result.table_rows,
         )
         return IngestResponse(
             report_code=req.report_code,
             fights=result.fights,
             performances=result.performances,
+            table_rows=result.table_rows,
         )
     except HTTPException:
         raise

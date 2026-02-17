@@ -41,6 +41,10 @@ You have access to the following tools to query raid performance data:
 - **compare_raid_to_top**: Compare a full raid's speed and execution to WCL global top kills
 - **compare_two_raids**: Side-by-side comparison of two raid reports
 - **get_raid_execution**: Detailed execution quality analysis for a raid
+- **get_ability_breakdown**: Per-ability damage/healing breakdown for a player \
+in a fight (requires table data — report_code + fight_id + player_name)
+- **get_buff_analysis**: Buff/debuff uptimes for a player in a fight \
+(requires table data — report_code + fight_id + player_name)
 
 ## Analysis Framework
 
@@ -54,6 +58,11 @@ When analyzing performance, consider:
 7. **Kill speed gaps** — Where are the biggest time losses vs top raids? What causes them?
 8. **Execution quality** — Which bosses have the most deaths? Are interrupts/dispels being covered?
 9. **Composition considerations** — How does raid comp differ from top-performing raids?
+10. **Rotation & Abilities** — If ability data is available, check damage ability priorities \
+and crit rates. Is the player using the right abilities? Are there missing high-value casts?
+11. **Buff/Uptime Analysis** — If buff data is available, check key buff uptimes. \
+Major buffs (Flasks, Battle Shout, Windfury) should be >90%. Low uptimes indicate \
+consumable/buff issues.
 
 Always provide:
 - Specific, actionable advice (not generic "do more DPS")
@@ -102,8 +111,16 @@ Based on the retrieved raid performance data, provide a thorough analysis.
 Structure your response:
 1. **Summary** — Key findings in 1-2 sentences
 2. **Detailed Analysis** — Break down the numbers with context
-3. **Actionable Advice** — Specific, prioritized improvement suggestions
-4. **Encouragement** — Acknowledge strengths and progress
+3. **Rotation & Abilities** — If ability breakdown data was retrieved, analyze damage/healing \
+ability priorities, crit rates, and missing abilities. Note: if no ability data is available, \
+skip this section (table data may not have been ingested yet).
+4. **Buff/Uptime Issues** — If buff uptime data was retrieved, highlight any buffs with low \
+uptime (<50%) and consumable gaps. Skip if no buff data available.
+5. **Actionable Checklist** — Specific, prioritized improvement suggestions as checkboxes:
+   - [ ] Highest-impact improvement first
+   - [ ] Second priority
+   - [ ] Third priority
+6. **Encouragement** — Acknowledge strengths and progress
 
 Use the player's class/spec context to give spec-specific advice when possible.
 """

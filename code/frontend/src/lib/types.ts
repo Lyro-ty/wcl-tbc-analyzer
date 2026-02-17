@@ -161,3 +161,28 @@ export interface CharacterFightSummary {
   player_class: string
   player_spec: string
 }
+
+export interface AbilityMetric {
+  player_name: string
+  metric_type: string
+  ability_name: string
+  spell_id: number
+  total: number
+  hit_count: number
+  crit_count: number
+  crit_pct: number
+  pct_of_total: number
+}
+
+export interface BuffUptime {
+  player_name: string
+  metric_type: string
+  ability_name: string
+  spell_id: number
+  uptime_pct: number
+  stack_count: number
+}
+
+export interface AbilitiesAvailable {
+  has_data: boolean
+}

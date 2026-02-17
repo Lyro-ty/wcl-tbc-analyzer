@@ -89,6 +89,17 @@ query SpeedRankings($encounterID: Int!, $page: Int) {
 }
 """
 
+REPORT_TABLE = """
+query ReportTable($code: String!, $fightIDs: [Int]!, $dataType: TableDataType!) {
+    reportData {
+        report(code: $code) {
+            table(fightIDs: $fightIDs, dataType: $dataType)
+        }
+    }
+    RATE_LIMIT
+}
+"""
+
 ZONE_ENCOUNTERS = """
 query ZoneEncounters($zoneID: Int!) {
     worldData {

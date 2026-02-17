@@ -1,5 +1,8 @@
 import type {
+  AbilitiesAvailable,
+  AbilityMetric,
   AnalyzeResponse,
+  BuffUptime,
   CharacterFightSummary,
   CharacterInfo,
   CharacterReportSummary,
@@ -157,16 +160,37 @@ export async function registerCharacter(data: {
   })
 }
 
+export async function fetchFightAbilities(code: string, fightId: number): Promise<AbilityMetric[]> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/abilities`)
+}
+
+export async function fetchPlayerAbilities(code: string, fightId: number, player: string): Promise<AbilityMetric[]> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/abilities/${encodeURIComponent(player)}`)
+}
+
+export async function fetchFightBuffs(code: string, fightId: number): Promise<BuffUptime[]> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/buffs`)
+}
+
+export async function fetchPlayerBuffs(code: string, fightId: number, player: string): Promise<BuffUptime[]> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/buffs/${encodeURIComponent(player)}`)
+}
+
+export async function fetchAbilitiesAvailable(code: string): Promise<AbilitiesAvailable> {
+  return fetchJson(`/api/data/reports/${code}/abilities-available`)
+}
+
 export interface IngestResponse {
   report_code: string
   fights: number
   performances: number
+  table_rows: number
 }
 
-export async function ingestReport(reportCode: string): Promise<IngestResponse> {
+export async function ingestReport(reportCode: string, withTables: boolean = false): Promise<IngestResponse> {
   return fetchJson('/api/data/ingest', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ report_code: reportCode }),
+    body: JSON.stringify({ report_code: reportCode, with_tables: withTables }),
   })
 }

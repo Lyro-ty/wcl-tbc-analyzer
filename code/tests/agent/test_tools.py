@@ -6,6 +6,8 @@ from shukketsu.agent.tools import (
     ALL_TOOLS,
     compare_raid_to_top,
     compare_two_raids,
+    get_ability_breakdown,
+    get_buff_analysis,
     get_deaths_and_mechanics,
     get_my_performance,
     get_raid_execution,
@@ -24,7 +26,7 @@ class TestToolDecorators:
             assert tool.description, f"{tool.name} has no description"
 
     def test_expected_tool_count(self):
-        assert len(ALL_TOOLS) == 12
+        assert len(ALL_TOOLS) == 14
 
     def test_tool_names(self):
         names = {t.name for t in ALL_TOOLS}
@@ -33,6 +35,7 @@ class TestToolDecorators:
             "get_fight_details", "get_progression", "get_deaths_and_mechanics",
             "get_raid_summary", "search_fights", "get_spec_leaderboard",
             "compare_raid_to_top", "compare_two_raids", "get_raid_execution",
+            "get_ability_breakdown", "get_buff_analysis",
         }
         assert names == expected
 
@@ -284,6 +287,139 @@ class TestToolErrorHandling:
             result = await compare_raid_to_top.ainvoke({"report_code": "abc123"})
 
         assert "Error" in result
+
+
+class TestGetAbilityBreakdown:
+    async def test_returns_damage_and_healing(self):
+        mock_rows = [
+            MagicMock(
+                player_name="TestWarr", metric_type="damage",
+                ability_name="Mortal Strike", spell_id=12294,
+                total=50000, hit_count=20, crit_count=10,
+                crit_pct=50.0, pct_of_total=45.0,
+            ),
+            MagicMock(
+                player_name="TestWarr", metric_type="healing",
+                ability_name="Bloodthirst", spell_id=23881,
+                total=5000, hit_count=10, crit_count=2,
+                crit_pct=20.0, pct_of_total=100.0,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_ability_breakdown.ainvoke(
+                {"report_code": "abc123", "fight_id": 1, "player_name": "TestWarr"}
+            )
+
+        assert "Mortal Strike" in result
+        assert "Damage abilities" in result
+        assert "45.0%" in result
+
+    async def test_no_data_shows_helpful_message(self):
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_ability_breakdown.ainvoke(
+                {"report_code": "abc123", "fight_id": 1, "player_name": "Nobody"}
+            )
+
+        assert "table data" in result.lower() or "not have been ingested" in result.lower()
+
+    async def test_error_handling(self):
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = Exception("db error")
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_ability_breakdown.ainvoke(
+                {"report_code": "abc123", "fight_id": 1, "player_name": "Test"}
+            )
+
+        assert "Error" in result
+
+
+class TestGetBuffAnalysis:
+    async def test_returns_buffs_and_debuffs(self):
+        mock_rows = [
+            MagicMock(
+                player_name="TestWarr", metric_type="buff",
+                ability_name="Battle Shout", spell_id=2048,
+                uptime_pct=95.0, stack_count=0,
+            ),
+            MagicMock(
+                player_name="TestWarr", metric_type="debuff",
+                ability_name="Sunder Armor", spell_id=7386,
+                uptime_pct=85.0, stack_count=5,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_buff_analysis.ainvoke(
+                {"report_code": "abc123", "fight_id": 1, "player_name": "TestWarr"}
+            )
+
+        assert "Battle Shout" in result
+        assert "Buffs:" in result
+        assert "[HIGH]" in result
+        assert "Sunder Armor" in result
+        assert "Debuffs" in result
+
+    async def test_buff_tier_labels(self):
+        mock_rows = [
+            MagicMock(
+                player_name="Test", metric_type="buff",
+                ability_name="HighBuff", spell_id=1, uptime_pct=95.0, stack_count=0,
+            ),
+            MagicMock(
+                player_name="Test", metric_type="buff",
+                ability_name="MedBuff", spell_id=2, uptime_pct=60.0, stack_count=0,
+            ),
+            MagicMock(
+                player_name="Test", metric_type="buff",
+                ability_name="LowBuff", spell_id=3, uptime_pct=30.0, stack_count=0,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_buff_analysis.ainvoke(
+                {"report_code": "abc123", "fight_id": 1, "player_name": "Test"}
+            )
+
+        assert "[HIGH]" in result
+        assert "[MED]" in result
+        assert "[LOW]" in result
+
+    async def test_no_data_shows_helpful_message(self):
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_buff_analysis.ainvoke(
+                {"report_code": "abc123", "fight_id": 1, "player_name": "Nobody"}
+            )
+
+        assert "table data" in result.lower() or "not have been ingested" in result.lower()
 
 
 class TestNoResults:

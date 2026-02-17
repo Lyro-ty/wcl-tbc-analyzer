@@ -91,6 +91,8 @@ class Fight(Base):
     report: Mapped["Report"] = relationship(back_populates="fights")
     encounter: Mapped["Encounter"] = relationship(back_populates="fights")
     performances: Mapped[list["FightPerformance"]] = relationship(back_populates="fight")
+    ability_metrics: Mapped[list["AbilityMetric"]] = relationship(back_populates="fight")
+    buff_uptimes: Mapped[list["BuffUptime"]] = relationship(back_populates="fight")
 
 
 class FightPerformance(Base):
@@ -182,3 +184,43 @@ class ProgressionSnapshot(Base):
 
     character: Mapped["MyCharacter"] = relationship(back_populates="progression_snapshots")
     encounter: Mapped["Encounter"] = relationship(back_populates="progression_snapshots")
+
+
+class AbilityMetric(Base):
+    __tablename__ = "ability_metrics"
+    __table_args__ = (
+        Index("ix_ability_metrics_fight_player", "fight_id", "player_name"),
+        Index("ix_ability_metrics_spell_type", "spell_id", "metric_type"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    player_name: Mapped[str] = mapped_column(String(100))
+    metric_type: Mapped[str] = mapped_column(String(20))
+    ability_name: Mapped[str] = mapped_column(String(200))
+    spell_id: Mapped[int] = mapped_column(Integer)
+    total: Mapped[int] = mapped_column(BigInteger, default=0)
+    hit_count: Mapped[int] = mapped_column(Integer, default=0)
+    crit_count: Mapped[int] = mapped_column(Integer, default=0)
+    crit_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    pct_of_total: Mapped[float] = mapped_column(Float, default=0.0)
+
+    fight: Mapped["Fight"] = relationship(back_populates="ability_metrics")
+
+
+class BuffUptime(Base):
+    __tablename__ = "buff_uptimes"
+    __table_args__ = (
+        Index("ix_buff_uptimes_fight_player", "fight_id", "player_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    player_name: Mapped[str] = mapped_column(String(100))
+    metric_type: Mapped[str] = mapped_column(String(20))
+    ability_name: Mapped[str] = mapped_column(String(200))
+    spell_id: Mapped[int] = mapped_column(Integer)
+    uptime_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    stack_count: Mapped[float] = mapped_column(Float, default=0.0)
+
+    fight: Mapped["Fight"] = relationship(back_populates="buff_uptimes")

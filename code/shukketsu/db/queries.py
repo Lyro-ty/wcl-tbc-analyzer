@@ -292,6 +292,90 @@ REPORT_DEATHS = text("""
     ORDER BY f.fight_id ASC, fp.deaths DESC
 """)
 
+ABILITY_BREAKDOWN = text("""
+    SELECT am.player_name, am.metric_type, am.ability_name, am.spell_id,
+           am.total, am.hit_count, am.crit_count, am.crit_pct, am.pct_of_total
+    FROM ability_metrics am
+    JOIN fights f ON am.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND am.player_name ILIKE :player_name
+    ORDER BY am.metric_type, am.pct_of_total DESC
+""")
+
+BUFF_ANALYSIS = text("""
+    SELECT bu.player_name, bu.metric_type, bu.ability_name, bu.spell_id,
+           bu.uptime_pct, bu.stack_count
+    FROM buff_uptimes bu
+    JOIN fights f ON bu.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND bu.player_name ILIKE :player_name
+    ORDER BY bu.metric_type, bu.uptime_pct DESC
+""")
+
+RAID_ABILITY_SUMMARY = text("""
+    SELECT am.player_name, am.ability_name, am.spell_id,
+           am.total, am.pct_of_total, am.crit_pct
+    FROM ability_metrics am
+    JOIN fights f ON am.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND am.metric_type = 'damage'
+      AND am.pct_of_total >= 5.0
+    ORDER BY am.total DESC
+""")
+
+FIGHT_ABILITIES = text("""
+    SELECT am.player_name, am.metric_type, am.ability_name, am.spell_id,
+           am.total, am.hit_count, am.crit_count, am.crit_pct, am.pct_of_total
+    FROM ability_metrics am
+    JOIN fights f ON am.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+    ORDER BY am.player_name, am.metric_type, am.pct_of_total DESC
+""")
+
+FIGHT_ABILITIES_PLAYER = text("""
+    SELECT am.player_name, am.metric_type, am.ability_name, am.spell_id,
+           am.total, am.hit_count, am.crit_count, am.crit_pct, am.pct_of_total
+    FROM ability_metrics am
+    JOIN fights f ON am.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND am.player_name = :player_name
+    ORDER BY am.metric_type, am.pct_of_total DESC
+""")
+
+FIGHT_BUFFS = text("""
+    SELECT bu.player_name, bu.metric_type, bu.ability_name, bu.spell_id,
+           bu.uptime_pct, bu.stack_count
+    FROM buff_uptimes bu
+    JOIN fights f ON bu.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+    ORDER BY bu.player_name, bu.metric_type, bu.uptime_pct DESC
+""")
+
+FIGHT_BUFFS_PLAYER = text("""
+    SELECT bu.player_name, bu.metric_type, bu.ability_name, bu.spell_id,
+           bu.uptime_pct, bu.stack_count
+    FROM buff_uptimes bu
+    JOIN fights f ON bu.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND bu.player_name = :player_name
+    ORDER BY bu.metric_type, bu.uptime_pct DESC
+""")
+
+TABLE_DATA_EXISTS = text("""
+    SELECT EXISTS(
+        SELECT 1 FROM ability_metrics am
+        JOIN fights f ON am.fight_id = f.id
+        WHERE f.report_code = :report_code
+    ) AS has_data
+""")
+
 CHARACTER_REPORT_DETAIL = text("""
     SELECT f.fight_id, e.name AS encounter_name, f.kill, f.duration_ms,
            fp.dps, fp.hps, fp.parse_percentile, fp.deaths,

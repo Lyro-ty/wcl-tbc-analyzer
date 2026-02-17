@@ -75,6 +75,30 @@ class SpeedRankingEntry(WCLBaseModel):
     report: dict  # {"code": str, "guild": {"name": str} | None}
 
 
+class TableEntry(WCLBaseModel):
+    """Individual entry from report table() response (damage/healing/buffs/debuffs)."""
+
+    name: str
+    guid: int = 0
+    type: str | None = None
+    total: int = 0
+    hit_count: int = Field(0, alias="hitCount")
+    crit_count: int = Field(0, alias="critCount")
+    crit_pct: float = Field(0.0, alias="critPct")
+    uptime: float | None = None  # For buffs/debuffs: uptime in ms
+    uses: int | None = None
+
+
+class TableSourceEntry(WCLBaseModel):
+    """Top-level entry from report table() — one per player (source)."""
+
+    name: str
+    id: int = 0
+    type: str | None = None
+    total: int = 0
+    entries: list[TableEntry] = []
+
+
 class ZoneRankingEntry(WCLBaseModel):
     """Individual ranking entry from characterRankings response."""
 

@@ -11,4 +11,5 @@ def create_llm(settings: Settings) -> ChatOpenAI:
         temperature=settings.llm.temperature,
         max_tokens=settings.llm.max_tokens,
         timeout=settings.llm.timeout,
+        model_kwargs={"options": {"num_ctx": settings.llm.num_ctx}},
     )

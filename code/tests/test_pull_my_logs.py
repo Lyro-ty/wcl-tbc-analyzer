@@ -52,6 +52,8 @@ async def test_run_creates_client_and_ingests(
 
     await run("abc123")
 
-    mock_ingest.assert_called_once_with(mock_wcl, mock_session, "abc123")
+    mock_ingest.assert_called_once_with(
+        mock_wcl, mock_session, "abc123", ingest_tables=False,
+    )
     mock_session.commit.assert_called_once()
     mock_engine.dispose.assert_called_once()

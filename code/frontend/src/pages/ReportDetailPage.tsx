@@ -46,7 +46,17 @@ export default function ReportDetailPage() {
 
   const playerColumns: Column<FightPlayer>[] = [
     { key: 'name', label: 'Player', render: (r) => (
-      <span style={{ color: classColor(r.player_class) }}>{r.player_name}</span>
+      expandedFight ? (
+        <Link
+          to={`/reports/${code}/fights/${expandedFight}/player/${encodeURIComponent(r.player_name)}`}
+          className="underline decoration-zinc-700 underline-offset-2 hover:decoration-zinc-400"
+          style={{ color: classColor(r.player_class) }}
+        >
+          {r.player_name}
+        </Link>
+      ) : (
+        <span style={{ color: classColor(r.player_class) }}>{r.player_name}</span>
+      )
     )},
     { key: 'spec', label: 'Spec', render: (r) => (
       <span className="text-zinc-400">{r.player_spec} {r.player_class}</span>

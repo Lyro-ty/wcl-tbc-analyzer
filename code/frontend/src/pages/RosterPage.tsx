@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { getFightDetails, getReports, getReportSummary } from '../lib/api'
 import type { FightPlayer, RaidSummaryFight } from '../lib/types'
 import { useApiQuery } from '../hooks/useApiQuery'
@@ -52,9 +53,19 @@ export default function RosterPage() {
 
   const columns: Column<FightPlayer>[] = [
     { key: 'name', label: 'Player', render: (r) => (
-      <span className="font-medium" style={{ color: classColor(r.player_class) }}>
-        {r.player_name}
-      </span>
+      selectedReport && selectedFight ? (
+        <Link
+          to={`/reports/${selectedReport}/fights/${selectedFight}/player/${encodeURIComponent(r.player_name)}`}
+          className="font-medium underline decoration-zinc-700 underline-offset-2 hover:decoration-zinc-400"
+          style={{ color: classColor(r.player_class) }}
+        >
+          {r.player_name}
+        </Link>
+      ) : (
+        <span className="font-medium" style={{ color: classColor(r.player_class) }}>
+          {r.player_name}
+        </span>
+      )
     )},
     { key: 'spec', label: 'Spec', render: (r) => (
       <span className="text-zinc-400">{r.player_spec} {r.player_class}</span>

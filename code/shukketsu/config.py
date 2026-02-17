@@ -25,6 +25,7 @@ class LLMConfig(BaseModel):
     temperature: float = 0.1
     max_tokens: int = 4096
     timeout: int = 300
+    num_ctx: int = 32768
 
 
 class AppConfig(BaseModel):

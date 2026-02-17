@@ -56,14 +56,15 @@ code/
 │   │   ├── models.py       # SQLAlchemy ORM models (8 tables)
 │   │   └── queries.py      # Analytical SQL queries for agent tools (12 queries)
 │   ├── pipeline/           # Data transformation
-│   │   ├── ingest.py       # WCL response → DB rows (delete-then-insert for idempotent re-ingestion)
+│   │   ├── ingest.py       # WCL response → DB rows (delete-then-insert, supports --with-tables)
 │   │   ├── normalize.py    # Fight normalization (DPS/HPS calc, boss detection)
 │   │   ├── characters.py   # Character registration + retroactive fight_performances marking
 │   │   ├── constants.py    # Class/spec/zone data (TBC_SPECS, TBC_ZONES, FRESH_ZONES, ALL_BOSS_NAMES)
 │   │   ├── progression.py  # Snapshot computation (best/median parse/DPS via statistics.median)
 │   │   ├── rankings.py     # Top rankings ingestion (delete-then-insert, staleness checks)
 │   │   ├── seeds.py        # Encounter seed data (upsert from WCL API or manual list)
-│   │   └── speed_rankings.py # Speed (kill time) rankings ingestion from fightRankings API
+│   │   ├── speed_rankings.py # Speed (kill time) rankings ingestion from fightRankings API
+│   │   └── table_data.py   # WCL table() API → ability_metrics + buff_uptimes (per-fight)
 │   ├── agent/              # LangGraph agent
 │   │   ├── llm.py          # LLM client (ChatOpenAI pointing at ollama)
 │   │   ├── tools.py        # 12 SQL query tools (@tool decorated)
@@ -82,7 +83,8 @@ code/
 │       ├── pull_speed_rankings.py # pull-speed-rankings: fetch speed (kill time) rankings
 │       ├── register_character.py # register-character: register tracked characters
 │       ├── seed_encounters.py    # seed-encounters: bootstrap encounter table from WCL
-│       └── snapshot_progression.py # snapshot-progression: compute progression snapshots
+│       ├── snapshot_progression.py # snapshot-progression: compute progression snapshots
+│       └── pull_table_data.py   # pull-table-data: backfill ability/buff data for existing reports
 ├── tests/                  # Test suite (mirrors package structure)
 └── alembic/                # Database migrations (async-aware)
 ```
@@ -116,7 +118,7 @@ Tools use a **module-level global** pattern — no DI framework:
 4. All tools catch `Exception` and return `"Error retrieving data: {e}"` instead of propagating tracebacks
 5. The compiled graph and its tools are also injected into the analyze route via `set_graph()`
 
-## Agent tools (12 total)
+## Agent tools (14 total)
 
 ### Player/encounter-level tools
 | Tool | Purpose |
@@ -138,9 +140,17 @@ Tools use a **module-level global** pattern — no DI framework:
 | `compare_two_raids` | Side-by-side comparison of two raid reports |
 | `get_raid_execution` | Detailed execution quality analysis for a raid |
 
+### Ability/buff analysis tools
+| Tool | Purpose |
+|------|---------|
+| `get_ability_breakdown` | Per-ability damage/healing breakdown for a player in a fight |
+| `get_buff_analysis` | Buff/debuff uptimes for a player in a fight |
+
+These tools require table data to be ingested (via `--with-tables` or `pull-table-data`).
+
 Tools are in `code/shukketsu/agent/tools.py`, SQL queries (raw `text()` with named params, PostgreSQL-specific) in `code/shukketsu/db/queries.py`.
 
-## Database schema (8 tables)
+## Database schema (10 tables)
 
 - `encounters` — WCL encounter definitions (PK: WCL encounter ID, not auto-increment)
 - `my_characters` — tracked player characters (unique: name+server+region)
@@ -150,6 +160,8 @@ Tools are in `code/shukketsu/agent/tools.py`, SQL queries (raw `text()` with nam
 - `top_rankings` — top player rankings per encounter/class/spec
 - `speed_rankings` — top 100 fastest kills per encounter (from WCL `fightRankings` API, indexed on `encounter_id, rank_position`)
 - `progression_snapshots` — time-series character progression data
+- `ability_metrics` — per-player per-fight ability breakdowns (damage/healing by spell, indexed on `fight_id, player_name` and `spell_id, metric_type`)
+- `buff_uptimes` — per-player per-fight buff/debuff uptimes (indexed on `fight_id, player_name`)
 
 **Key DB patterns:**
 - `session.merge()` used for idempotent upserts (encounters, reports, snapshots, characters)
@@ -197,6 +209,8 @@ uvicorn shukketsu.api.app:create_app --factory --port 8000
 
 # CLI scripts (all registered as entry points in pyproject.toml)
 pull-my-logs --report-code <CODE>
+pull-my-logs --report-code <CODE> --with-tables  # Also fetch ability/buff data
+pull-table-data --report-code <CODE>             # Backfill ability/buff for existing report
 pull-rankings --encounter "Patchwerk" --zone-id 2017
 pull-speed-rankings --zone-id 2017 --force
 register-character --name Lyro --server Whitemane --region US --class-name Warrior --spec Arms
@@ -231,9 +245,9 @@ curl -X POST http://localhost:8000/api/analyze \
 
 ## Known issues
 
-- **No event-level data:** DB stores fight-level aggregates only (DPS, parse%). No spell casts, buff uptimes, or ability breakdowns — rotation analysis questions get hallucinated answers.
 - **top_rankings table:** Only populated via `pull-rankings` script, not from report ingestion.
 - **speed_rankings table:** Only populated via `pull-speed-rankings` script, not from report ingestion.
+- **ability_metrics/buff_uptimes tables:** Only populated when `--with-tables` flag is used with `pull-my-logs` or via `pull-table-data` backfill.
 
 ## Resolved issues
 
@@ -252,6 +266,8 @@ curl -X POST http://localhost:8000/api/analyze \
 - **Batch deaths endpoint:** `GET /api/data/reports/{code}/deaths` replaces N+1 per-fight queries on the roster page.
 - **Dead code removed:** `compute_dps`/`compute_hps` (unused), `CHARACTER_RANKINGS`/`REPORT_EVENTS`/`RATE_LIMIT_FRAGMENT` (unused WCL queries).
 - **No streaming:** `POST /api/analyze/stream` SSE endpoint streams analysis tokens via LangGraph `astream(stream_mode="messages")`. Think-tag buffering strips `<think>...</think>` before forwarding. Frontend uses `fetch` + `ReadableStream` for incremental message rendering.
+- **No event-level data:** WCL `table()` API now ingested into `ability_metrics` and `buff_uptimes` tables. Provides per-ability damage/healing breakdowns and buff/debuff uptimes. Agent tools `get_ability_breakdown` and `get_buff_analysis` expose this to Nemotron. Frontend `PlayerFightPage` renders interactive charts.
+- **Context window truncation:** ollama `num_ctx` now explicitly set to 32768 via `LLM__NUM_CTX` config. Previously defaulted to 2048, causing silent context truncation.
 
 ## Conventions
 

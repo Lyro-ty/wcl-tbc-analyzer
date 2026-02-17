@@ -135,12 +135,39 @@ class RegisterCharacterRequest(BaseModel):
 
 class IngestRequest(BaseModel):
     report_code: str
+    with_tables: bool = False
 
 
 class IngestResponse(BaseModel):
     report_code: str
     fights: int
     performances: int
+    table_rows: int = 0
+
+
+class AbilityMetricResponse(BaseModel):
+    player_name: str
+    metric_type: str
+    ability_name: str
+    spell_id: int
+    total: int
+    hit_count: int
+    crit_count: int
+    crit_pct: float
+    pct_of_total: float
+
+
+class BuffUptimeResponse(BaseModel):
+    player_name: str
+    metric_type: str
+    ability_name: str
+    spell_id: int
+    uptime_pct: float
+    stack_count: float
+
+
+class AbilitiesAvailable(BaseModel):
+    has_data: bool
 
 
 class DeathEntry(BaseModel):

@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Shield, Skull, Zap } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Shield, Skull, Swords, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getCharacterReportDetail } from '../lib/api'
 import { useApiQuery } from '../hooks/useApiQuery'
@@ -209,9 +209,17 @@ export default function CharacterReportDetailPage() {
 
             {/* Kill/wipe footer */}
             <div className="mt-2 flex items-center justify-between">
-              <span className="text-xs text-zinc-500">
-                {fight.kill ? 'Kill' : 'Wipe'} &middot; {formatDuration(fight.duration_ms)}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500">
+                  {fight.kill ? 'Kill' : 'Wipe'} &middot; {formatDuration(fight.duration_ms)}
+                </span>
+                <Link
+                  to={`/reports/${code}/fights/${fight.fight_id}/player/${encodeURIComponent(name!)}`}
+                  className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300"
+                >
+                  <Swords className="h-3 w-3" /> Abilities
+                </Link>
+              </div>
               <QuickAction
                 question={`How did ${name} do on ${fight.encounter_name} in ${code}?`}
               />
