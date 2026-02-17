@@ -143,6 +143,17 @@ class IngestResponse(BaseModel):
     performances: int
 
 
+class DeathEntry(BaseModel):
+    fight_id: int
+    encounter_name: str
+    player_name: str
+    player_class: str
+    player_spec: str
+    deaths: int
+    interrupts: int
+    dispels: int
+
+
 class CharacterReportSummary(BaseModel):
     code: str
     title: str

@@ -9,6 +9,7 @@ from shukketsu.api.models import (
     CharacterFightSummary,
     CharacterInfo,
     CharacterReportSummary,
+    DeathEntry,
     EncounterInfo,
     ExecutionBoss,
     FightPlayer,
@@ -135,6 +136,20 @@ async def fight_details(report_code: str, fight_id: int):
         raise
     except Exception as e:
         logger.exception("Failed to get fight details")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get("/reports/{report_code}/deaths", response_model=list[DeathEntry])
+async def report_deaths(report_code: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(q.REPORT_DEATHS, {"report_code": report_code})
+        rows = result.fetchall()
+        return [DeathEntry(**dict(r._mapping)) for r in rows]
+    except Exception as e:
+        logger.exception("Failed to get death data")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

@@ -280,6 +280,18 @@ CHARACTER_REPORTS = text("""
     ORDER BY r.start_time DESC
 """)
 
+REPORT_DEATHS = text("""
+    SELECT f.fight_id, e.name AS encounter_name,
+           fp.player_name, fp.player_class, fp.player_spec,
+           fp.deaths, fp.interrupts, fp.dispels
+    FROM fight_performances fp
+    JOIN fights f ON fp.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    WHERE f.report_code = :report_code
+      AND fp.deaths > 0
+    ORDER BY f.fight_id ASC, fp.deaths DESC
+""")
+
 CHARACTER_REPORT_DETAIL = text("""
     SELECT f.fight_id, e.name AS encounter_name, f.kill, f.duration_ms,
            fp.dps, fp.hps, fp.parse_percentile, fp.deaths,
