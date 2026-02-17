@@ -515,3 +515,43 @@ class CooldownWindowResponse(BaseModel):
     window_dps: float
     baseline_dps: float
     dps_gain_pct: float
+
+
+class DotRefreshResponse(BaseModel):
+    player_name: str
+    spell_id: int
+    ability_name: str
+    total_refreshes: int
+    early_refreshes: int
+    early_refresh_pct: float
+    avg_remaining_ms: float
+    clipped_ticks_est: float
+
+
+class RotationScoreResponse(BaseModel):
+    player_name: str
+    spec: str
+    score_pct: float
+    rules_checked: int
+    rules_passed: int
+    violations_json: str | None
+
+
+class TrinketProcResponse(BaseModel):
+    player_name: str
+    trinket_name: str
+    spell_id: int
+    uptime_pct: float
+    expected_uptime_pct: float
+    grade: str
+
+
+class PhaseMetricResponse(BaseModel):
+    player_name: str
+    phase_name: str
+    phase_start_ms: int
+    phase_end_ms: int
+    is_downtime: bool
+    phase_dps: float | None
+    phase_casts: int | None
+    phase_gcd_uptime_pct: float | None

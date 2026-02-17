@@ -942,3 +942,46 @@ COOLDOWN_WINDOWS = text("""
     ORDER BY cu.first_use_ms ASC NULLS LAST
 """)
 
+CAST_EVENTS_FOR_DOT_ANALYSIS = text("""
+    SELECT ce.spell_id, ce.ability_name, ce.timestamp_ms, ce.event_type
+    FROM cast_events ce
+    JOIN fights f ON ce.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND ce.player_name = :player_name
+      AND ce.event_type = 'cast'
+    ORDER BY ce.spell_id, ce.timestamp_ms ASC
+""")
+
+PLAYER_FIGHT_INFO = text("""
+    SELECT fp.player_class, fp.player_spec, fp.dps, fp.total_damage,
+           (f.end_time - f.start_time) AS fight_duration_ms,
+           f.encounter_id
+    FROM fight_performances fp
+    JOIN fights f ON fp.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND fp.player_name = :player_name
+""")
+
+PLAYER_BUFFS_FOR_TRINKETS = text("""
+    SELECT bu.ability_name, bu.spell_id, bu.uptime_pct
+    FROM buff_uptimes bu
+    JOIN fights f ON bu.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND bu.player_name = :player_name
+      AND bu.metric_type = 'buff'
+""")
+
+CAST_EVENTS_FOR_PHASES = text("""
+    SELECT ce.timestamp_ms, ce.event_type
+    FROM cast_events ce
+    JOIN fights f ON ce.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND ce.player_name = :player_name
+      AND ce.event_type = 'cast'
+    ORDER BY ce.timestamp_ms ASC
+""")
+

@@ -329,6 +329,61 @@ class PhaseDef:
 # These are approximate time-based splits for MVP phase annotation.
 # Actual phase transitions depend on boss HP or scripted events, but
 # these percentages give a useful estimate when we lack event-level data.
+@dataclass(frozen=True)
+class DotDef:
+    spell_id: int
+    name: str
+    duration_ms: int
+    tick_interval_ms: int
+
+
+CLASSIC_DOTS: dict[str, list[DotDef]] = {
+    "Warlock": [
+        DotDef(30108, "Unstable Affliction", 18000, 3000),
+        DotDef(27216, "Corruption", 18000, 3000),
+        DotDef(27218, "Curse of Agony", 24000, 2000),
+        DotDef(30405, "Seed of Corruption", 18000, 3000),
+        DotDef(27215, "Immolate", 15000, 3000),
+    ],
+    "Priest": [
+        DotDef(25368, "Shadow Word: Pain", 18000, 3000),
+        DotDef(25218, "Vampiric Touch", 15000, 3000),
+        DotDef(25387, "Devouring Plague", 24000, 3000),
+    ],
+    "Druid": [
+        DotDef(27013, "Moonfire", 12000, 3000),
+        DotDef(27012, "Insect Swarm", 12000, 2000),
+    ],
+}
+
+# Reverse lookup: spell_id -> DotDef
+DOT_BY_SPELL_ID: dict[int, DotDef] = {}
+for _class_dots in CLASSIC_DOTS.values():
+    for _dot in _class_dots:
+        DOT_BY_SPELL_ID[_dot.spell_id] = _dot
+
+
+@dataclass(frozen=True)
+class TrinketDef:
+    spell_id: int
+    name: str
+    expected_uptime_pct: float
+
+
+CLASSIC_TRINKETS: dict[int, TrinketDef] = {
+    28830: TrinketDef(28830, "Dragonspine Trophy", 22.0),
+    23046: TrinketDef(23046, "The Restrained Essence of Sapphiron", 15.0),
+    28789: TrinketDef(28789, "Eye of Magtheridon", 25.0),
+    23207: TrinketDef(23207, "Mark of the Champion", 100.0),
+    23001: TrinketDef(23001, "Eye of the Dead", 30.0),
+    28235: TrinketDef(28235, "Pendant of the Violet Eye", 15.0),
+    28727: TrinketDef(28727, "Pendant of the Violet Eye", 15.0),
+    33649: TrinketDef(33649, "Tome of Fiery Redemption", 20.0),
+    34321: TrinketDef(34321, "Shard of Contempt", 30.0),
+    34472: TrinketDef(34472, "Timbal's Focusing Crystal", 15.0),
+}
+
+
 ENCOUNTER_PHASES: dict[str, list[PhaseDef]] = {
     "Patchwerk": [
         PhaseDef("Full Fight", 0.0, 1.0, "Single phase DPS race"),
