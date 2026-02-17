@@ -193,6 +193,29 @@ class TestThinkTagHandling:
         assert result["grade"] == "insufficient"
 
 
+class TestToolArgNormalization:
+    def test_normalize_converts_pascal_to_snake(self):
+        from shukketsu.agent.graph import _normalize_tool_args
+
+        args = {"EncounterName": "Patchwerk", "PlayerName": "Lyro"}
+        result = _normalize_tool_args(args)
+        assert result == {"encounter_name": "Patchwerk", "player_name": "Lyro"}
+
+    def test_normalize_preserves_snake_case(self):
+        from shukketsu.agent.graph import _normalize_tool_args
+
+        args = {"encounter_name": "Patchwerk", "player_name": "Lyro"}
+        result = _normalize_tool_args(args)
+        assert result == {"encounter_name": "Patchwerk", "player_name": "Lyro"}
+
+    def test_normalize_handles_mixed_case(self):
+        from shukketsu.agent.graph import _normalize_tool_args
+
+        args = {"ClassName": "Warrior", "spec_name": "Arms"}
+        result = _normalize_tool_args(args)
+        assert result == {"class_name": "Warrior", "spec_name": "Arms"}
+
+
 class TestMaxRetries:
     def test_max_retries_is_two(self):
         assert MAX_RETRIES == 2

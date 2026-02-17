@@ -32,6 +32,19 @@ def _strip_think_tags(text: str) -> str:
     return _THINK_PATTERN.sub("", text)
 
 
+def _normalize_tool_args(args: dict[str, Any]) -> dict[str, Any]:
+    """Convert PascalCase tool argument keys to snake_case.
+
+    Nemotron sometimes generates PascalCase keys (e.g. EncounterName
+    instead of encounter_name). This normalizes them.
+    """
+    normalized = {}
+    for key, value in args.items():
+        snake_key = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", key).lower()
+        normalized[snake_key] = value
+    return normalized
+
+
 async def route_query(state: dict[str, Any], llm: Any) -> dict[str, Any]:
     """Classify the user's question type."""
     messages = [
@@ -63,6 +76,12 @@ async def query_database(state: dict[str, Any], llm_with_tools: Any) -> dict[str
         user_msg,
     ]
     response = await llm_with_tools.ainvoke(messages)
+
+    # Normalize PascalCase tool args from Nemotron
+    if hasattr(response, "tool_calls") and response.tool_calls:
+        for tc in response.tool_calls:
+            tc["args"] = _normalize_tool_args(tc["args"])
+
     return {"messages": [response]}
 
 
