@@ -22,7 +22,7 @@ export default function Layout() {
             )}
           </button>
         </header>
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex flex-1 flex-col overflow-auto p-6">
           <Outlet />
         </main>
       </div>
