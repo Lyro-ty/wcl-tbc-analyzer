@@ -1,25 +1,5 @@
 """GraphQL query strings for WCL API v2."""
 
-RATE_LIMIT_FRAGMENT = """
-    rateLimitData {
-        pointsSpentThisHour
-        limitPerHour
-        pointsResetIn
-    }
-"""
-
-CHARACTER_RANKINGS = """
-query CharacterRankings($name: String!, $serverSlug: String!, $serverRegion: String!,
-                         $zone: Int, $metric: CharacterRankingMetricType) {
-    characterData {
-        character(name: $name, serverSlug: $serverSlug, serverRegion: $serverRegion) {
-            zoneRankings(zoneID: $zone, metric: $metric)
-        }
-    }
-    RATE_LIMIT
-}
-"""
-
 ZONE_RANKINGS = """
 query ZoneRankings($encounterID: Int!, $className: String, $specName: String,
                    $metric: CharacterRankingMetricType, $page: Int) {
@@ -80,22 +60,6 @@ query ReportFights($code: String!) {
                     subType
                     server
                 }
-            }
-        }
-    }
-    RATE_LIMIT
-}
-"""
-
-REPORT_EVENTS = """
-query ReportEvents($code: String!, $fightIDs: [Int]!, $startTime: Float!,
-                   $endTime: Float!, $dataType: EventDataType!) {
-    reportData {
-        report(code: $code) {
-            events(fightIDs: $fightIDs, startTime: $startTime,
-                   endTime: $endTime, dataType: $dataType) {
-                data
-                nextPageTimestamp
             }
         }
     }

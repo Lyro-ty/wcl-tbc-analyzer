@@ -8,26 +8,10 @@ from shukketsu.pipeline.ingest import (
     parse_rankings_to_performances,
     parse_report,
 )
-from shukketsu.pipeline.normalize import compute_dps, compute_hps, is_boss_fight
+from shukketsu.pipeline.normalize import is_boss_fight
 
 
 class TestNormalize:
-    def test_compute_dps(self):
-        # 270000 damage over 180000ms (180s) = 1500.0 DPS
-        assert compute_dps(270000, 180000) == pytest.approx(1500.0)
-
-    def test_compute_dps_fractional(self):
-        assert compute_dps(100000, 60000) == pytest.approx(1666.6666666666667)
-
-    def test_compute_dps_zero_duration(self):
-        assert compute_dps(100000, 0) == 0.0
-
-    def test_compute_hps(self):
-        assert compute_hps(540000, 180000) == pytest.approx(3000.0)
-
-    def test_compute_hps_zero_duration(self):
-        assert compute_hps(100000, 0) == 0.0
-
     def test_is_boss_fight_true(self):
         assert is_boss_fight({"encounterID": 650}) is True
 
