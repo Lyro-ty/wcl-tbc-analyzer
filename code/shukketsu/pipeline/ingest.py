@@ -6,6 +6,7 @@ from sqlalchemy import delete, select
 
 from shukketsu.db.models import Encounter, Fight, FightPerformance, Report
 from shukketsu.pipeline.normalize import is_boss_fight
+from shukketsu.pipeline.progression import snapshot_all_characters
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ class IngestResult:
     performances: int
     table_rows: int = 0
     event_rows: int = 0
+    snapshots: int = 0
 
 
 async def ingest_report(
@@ -195,11 +197,20 @@ async def ingest_report(
 
         event_rows = await ingest_event_data_for_report(wcl, session, report_code)
 
+    # Auto-snapshot progression for tracked characters
+    try:
+        snapshot_count = await snapshot_all_characters(session)
+    except Exception:
+        logger.exception("Failed to auto-snapshot progression after ingest")
+        snapshot_count = 0
+
     logger.info(
-        "Ingested report %s: %d fights, %d performances, %d table rows, %d event rows",
+        "Ingested report %s: %d fights, %d performances, %d table rows, "
+        "%d event rows, %d snapshots",
         report_code, len(fights), total_performances, table_rows, event_rows,
+        snapshot_count,
     )
     return IngestResult(
         fights=len(fights), performances=total_performances,
-        table_rows=table_rows, event_rows=event_rows,
+        table_rows=table_rows, event_rows=event_rows, snapshots=snapshot_count,
     )

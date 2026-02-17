@@ -1,8 +1,9 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from shukketsu.pipeline.ingest import (
+    IngestResult,
     ingest_report,
     parse_fights,
     parse_rankings_to_performances,
@@ -206,3 +207,94 @@ class TestReingestionIdempotency:
 
         # select existing + delete perfs + delete fights + select rankings
         assert mock_session.execute.await_count >= 3
+
+
+class TestIngestResultSnapshots:
+    """Verify IngestResult includes snapshots field."""
+
+    def test_ingest_result_has_snapshots_field(self):
+        result = IngestResult(fights=5, performances=25, snapshots=3)
+        assert result.snapshots == 3
+
+    def test_ingest_result_snapshots_default_zero(self):
+        result = IngestResult(fights=5, performances=25)
+        assert result.snapshots == 0
+
+
+class TestAutoSnapshotAfterIngest:
+    """Verify ingest_report auto-snapshots progression for tracked characters."""
+
+    REPORT_DATA = {
+        "reportData": {
+            "report": {
+                "title": "Naxx Clear",
+                "startTime": 1700000000000,
+                "endTime": 1700003600000,
+                "guild": {"id": 1, "name": "Test"},
+                "fights": [
+                    {
+                        "id": 1, "name": "Patchwerk", "startTime": 0, "endTime": 180000,
+                        "kill": True, "encounterID": 201115, "difficulty": 0,
+                    },
+                ],
+                "rankings": {"data": []},
+            }
+        }
+    }
+
+    @patch("shukketsu.pipeline.ingest.snapshot_all_characters")
+    async def test_calls_snapshot_all_characters(self, mock_snapshot):
+        """Verify ingest_report calls snapshot_all_characters after ingestion."""
+        mock_snapshot.return_value = 5
+
+        mock_wcl = AsyncMock()
+        mock_wcl.query.return_value = self.REPORT_DATA
+
+        mock_session = AsyncMock()
+        mock_select_result = MagicMock()
+        mock_select_result.__iter__ = MagicMock(return_value=iter([]))
+        mock_session.execute.return_value = mock_select_result
+        mock_session.flush = AsyncMock()
+
+        result = await ingest_report(mock_wcl, mock_session, "abc123")
+
+        mock_snapshot.assert_awaited_once_with(mock_session)
+        assert result.snapshots == 5
+
+    @patch("shukketsu.pipeline.ingest.snapshot_all_characters")
+    async def test_snapshots_zero_when_no_characters(self, mock_snapshot):
+        """Verify snapshots=0 when no tracked characters exist."""
+        mock_snapshot.return_value = 0
+
+        mock_wcl = AsyncMock()
+        mock_wcl.query.return_value = self.REPORT_DATA
+
+        mock_session = AsyncMock()
+        mock_select_result = MagicMock()
+        mock_select_result.__iter__ = MagicMock(return_value=iter([]))
+        mock_session.execute.return_value = mock_select_result
+        mock_session.flush = AsyncMock()
+
+        result = await ingest_report(mock_wcl, mock_session, "abc123")
+
+        mock_snapshot.assert_awaited_once()
+        assert result.snapshots == 0
+
+    @patch("shukketsu.pipeline.ingest.snapshot_all_characters")
+    async def test_snapshot_failure_does_not_fail_ingest(self, mock_snapshot):
+        """Verify ingest succeeds even if snapshot_all_characters raises."""
+        mock_snapshot.side_effect = Exception("DB error")
+
+        mock_wcl = AsyncMock()
+        mock_wcl.query.return_value = self.REPORT_DATA
+
+        mock_session = AsyncMock()
+        mock_select_result = MagicMock()
+        mock_select_result.__iter__ = MagicMock(return_value=iter([]))
+        mock_session.execute.return_value = mock_select_result
+        mock_session.flush = AsyncMock()
+
+        result = await ingest_report(mock_wcl, mock_session, "abc123")
+
+        assert result.snapshots == 0
+        assert result.fights == 1
