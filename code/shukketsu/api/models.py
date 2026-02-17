@@ -152,6 +152,11 @@ class TableDataResponse(BaseModel):
     table_rows: int
 
 
+class EventDataResponse(BaseModel):
+    report_code: str
+    event_rows: int
+
+
 class RankingsRefreshResponse(BaseModel):
     fetched: int
     skipped: int

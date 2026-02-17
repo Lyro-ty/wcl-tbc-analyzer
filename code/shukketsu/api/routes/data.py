@@ -26,6 +26,7 @@ from shukketsu.api.models import (
     DeathEntry,
     DotRefreshResponse,
     EncounterInfo,
+    EventDataResponse,
     EventsAvailable,
     ExecutionBoss,
     FightPlayer,
@@ -598,6 +599,59 @@ async def fetch_table_data(report_code: str):
     except Exception as e:
         await session.rollback()
         logger.exception("Failed to fetch table data for %s", report_code)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.post(
+    "/reports/{report_code}/event-data",
+    response_model=EventDataResponse,
+)
+async def fetch_event_data(report_code: str):
+    from sqlalchemy import select
+
+    from shukketsu.config import get_settings
+    from shukketsu.db.models import MyCharacter
+    from shukketsu.pipeline.ingest import ingest_report
+    from shukketsu.wcl.auth import WCLAuth
+    from shukketsu.wcl.client import WCLClient
+    from shukketsu.wcl.rate_limiter import RateLimiter
+
+    settings = get_settings()
+    if not settings.wcl.client_id:
+        raise HTTPException(
+            status_code=503, detail="WCL credentials not configured"
+        )
+
+    session = await _get_session()
+    try:
+        chars = await session.execute(select(MyCharacter.name))
+        my_names = {r[0] for r in chars}
+
+        auth = WCLAuth(
+            settings.wcl.client_id,
+            settings.wcl.client_secret.get_secret_value(),
+            settings.wcl.oauth_url,
+        )
+        async with WCLClient(auth, RateLimiter()) as wcl:
+            result = await ingest_report(
+                wcl, session, report_code, my_names,
+                ingest_events=True,
+            )
+        await session.commit()
+        logger.info(
+            "Fetched event data for %s: %d event rows",
+            report_code, result.event_rows,
+        )
+        return EventDataResponse(
+            report_code=report_code, event_rows=result.event_rows,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        await session.rollback()
+        logger.exception("Failed to fetch event data for %s", report_code)
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()
