@@ -1,10 +1,13 @@
 import { useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, Swords, Heart, Shield, Sparkles, Skull, Activity, Timer } from 'lucide-react'
+import { ArrowLeft, Loader2, Swords, Heart, HeartCrack, Shield, Sparkles, Skull, Activity, Timer, ClipboardCheck, Ban } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
+  fetchCancelledCasts,
   fetchCastMetrics,
+  fetchConsumableCheck,
   fetchCooldownUsage,
   fetchFightDeaths,
+  fetchOverhealAnalysis,
   fetchPlayerAbilities,
   fetchPlayerBuffs,
   getFightDetails,
@@ -15,7 +18,10 @@ import AbilityBarChart from '../components/charts/AbilityBarChart'
 import UptimeBarChart from '../components/charts/UptimeBarChart'
 import ActivityGauge from '../components/charts/ActivityGauge'
 import CooldownChart from '../components/charts/CooldownChart'
+import CancelledCasts from '../components/CancelledCasts'
+import ConsumableCheck from '../components/ConsumableCheck'
 import DeathRecap from '../components/DeathRecap'
+import OverhealChart from '../components/charts/OverhealChart'
 import DataTable, { type Column } from '../components/ui/DataTable'
 import ErrorBoundary from '../components/ui/ErrorBoundary'
 import QuickAction from '../components/ui/QuickAction'
@@ -63,6 +69,24 @@ export default function PlayerFightPage() {
   // Load cooldown usage (event data)
   const { data: cooldowns } = useApiQuery(
     () => fetchCooldownUsage(code!, fightIdNum, player!),
+    [code, fightId, player],
+  )
+
+  // Load consumable check
+  const { data: consumables } = useApiQuery(
+    () => fetchConsumableCheck(code!, fightIdNum, player!),
+    [code, fightId, player],
+  )
+
+  // Load overhealing analysis
+  const { data: overheal } = useApiQuery(
+    () => fetchOverhealAnalysis(code!, fightIdNum, player!).catch(() => null),
+    [code, fightId, player],
+  )
+
+  // Load cancelled casts
+  const { data: cancelledCasts } = useApiQuery(
+    () => fetchCancelledCasts(code!, fightIdNum, player!),
     [code, fightId, player],
   )
 
@@ -290,6 +314,21 @@ export default function PlayerFightPage() {
         </div>
       )}
 
+      {/* Overhealing Analysis */}
+      {overheal && overheal.abilities.length > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <HeartCrack className="h-5 w-5 text-red-400" />
+            Overhealing Analysis
+          </h2>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <OverhealChart data={overheal} />
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
       {/* Buff uptimes */}
       {buffData.length > 0 && (
         <div className="mb-8">
@@ -355,6 +394,21 @@ export default function PlayerFightPage() {
         </div>
       )}
 
+      {/* Cancelled Casts (event data) */}
+      {cancelledCasts && cancelledCasts.cancel_count > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <Ban className="h-5 w-5 text-orange-400" />
+            Cancelled Casts
+          </h2>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <CancelledCasts data={cancelledCasts} />
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
       {/* Cooldown Efficiency (event data) */}
       {cooldowns && cooldowns.length > 0 && (
         <div className="mb-8">
@@ -365,6 +419,21 @@ export default function PlayerFightPage() {
           <ErrorBoundary>
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
               <CooldownChart data={cooldowns} />
+            </div>
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* Consumable Check */}
+      {consumables && (consumables.present.length > 0 || consumables.missing.length > 0) && (
+        <div className="mb-8">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
+            <ClipboardCheck className="h-5 w-5 text-teal-400" />
+            Consumable Check
+          </h2>
+          <ErrorBoundary>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
+              <ConsumableCheck data={consumables} />
             </div>
           </ErrorBoundary>
         </div>

@@ -697,6 +697,202 @@ async def get_cooldown_efficiency(
         await session.close()
 
 
+@tool
+async def get_consumable_check(
+    report_code: str, fight_id: int, player_name: str,
+) -> str:
+    """Check a player's consumable and preparation buff usage for a fight.
+    Compares buff uptimes against expected consumables for the player's spec/role.
+    Shows present consumables with uptimes and flags missing ones.
+    Requires table data to have been ingested with --with-tables."""
+    from shukketsu.pipeline.constants import (
+        ROLE_BY_SPEC,
+        get_expected_consumables,
+    )
+
+    session = await _get_session()
+    try:
+        # Get player's spec from fight_performances
+        perf_result = await session.execute(
+            q.FIGHT_DETAILS,
+            {"report_code": report_code, "fight_id": fight_id},
+        )
+        perf_rows = perf_result.fetchall()
+        player_row = None
+        for r in perf_rows:
+            if r.player_name.lower() == player_name.lower():
+                player_row = r
+                break
+        if not player_row:
+            return f"No performance data found for '{player_name}' in fight {fight_id}."
+
+        spec = player_row.player_spec
+        role = ROLE_BY_SPEC.get(spec, "melee_dps")
+        expected = get_expected_consumables(spec)
+
+        # Get actual buff uptimes
+        result = await session.execute(
+            q.CONSUMABLE_CHECK,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": player_name},
+        )
+        rows = result.fetchall()
+
+        actual_by_id: dict[int, tuple[str, float]] = {}
+        for r in rows:
+            actual_by_id[r.spell_id] = (r.ability_name, r.uptime_pct)
+
+        # Match expected consumables against actual buffs
+        present = []
+        missing = []
+        for c in expected:
+            if c.spell_id in actual_by_id:
+                name, uptime = actual_by_id[c.spell_id]
+                present.append(f"  [OK] {c.name} ({c.category}) | Uptime: {uptime}%")
+            else:
+                missing.append(f"  [MISSING] {c.name} ({c.category})")
+
+        lines = [
+            f"Consumable check for {player_name} ({spec}, role: {role}) "
+            f"in {report_code}#{fight_id}:\n"
+        ]
+
+        if present:
+            lines.append("Present consumables:")
+            lines.extend(present)
+
+        if missing:
+            lines.append("\nMissing consumables:")
+            lines.extend(missing)
+
+        if not present and not missing:
+            lines.append("No consumable data available (table data may not be ingested).")
+
+        score = len(present) / max(len(present) + len(missing), 1) * 100
+        lines.append(f"\nPrep score: {score:.0f}% ({len(present)}/{len(present) + len(missing)})")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
+@tool
+async def get_overheal_analysis(
+    report_code: str, fight_id: int, player_name: str,
+) -> str:
+    """Get overhealing analysis for a healer in a specific fight.
+    Shows per-ability overheal percentage and total overhealing.
+    Abilities with >30% overheal indicate potential wasted GCDs or poor healing targeting.
+    Requires table data to have been ingested with --with-tables."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.OVERHEAL_ANALYSIS,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": f"%{player_name}%"},
+        )
+        rows = result.fetchall()
+        if not rows:
+            return (
+                f"No healing data found for '{player_name}' in fight {fight_id} "
+                f"of report {report_code}. Table data may not have been ingested yet "
+                f"(use pull-my-logs --with-tables or pull-table-data to fetch it)."
+            )
+
+        total_heal = sum(r.total for r in rows)
+        total_overheal = sum(r.overheal_total or 0 for r in rows)
+        grand_total = total_heal + total_overheal
+        total_overheal_pct = (
+            (total_overheal / grand_total * 100) if grand_total > 0 else 0
+        )
+
+        lines = [
+            f"Overhealing analysis for {player_name} in {report_code}#{fight_id}:\n",
+            f"Total effective healing: {total_heal:,}",
+            f"Total overhealing: {total_overheal:,} ({total_overheal_pct:.1f}%)\n",
+            "Per-ability breakdown:",
+        ]
+
+        for r in rows:
+            overheal_amt = r.overheal_total or 0
+            oh_pct = float(r.overheal_pct) if r.overheal_pct else 0
+            flag = ""
+            if oh_pct >= 50:
+                flag = " [HIGH]"
+            elif oh_pct >= 30:
+                flag = " [MODERATE]"
+            lines.append(
+                f"  {r.ability_name} | Effective: {r.total:,} | "
+                f"Overheal: {overheal_amt:,} ({oh_pct:.1f}%){flag}"
+            )
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
+@tool
+async def get_cancelled_casts(
+    report_code: str, fight_id: int, player_name: str,
+) -> str:
+    """Get cancelled cast analysis for a player in a fight.
+    Shows how many casts were started but not completed
+    (interrupted, moved, or manually cancelled).
+    High cancel rates (>10%) indicate movement or cast decisions.
+    Requires event data to have been ingested with --with-events."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.CANCELLED_CASTS,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": player_name},
+        )
+        row = result.fetchone()
+        if not row:
+            return (
+                f"No cancelled cast data found for '{player_name}' in fight {fight_id} "
+                f"of report {report_code}. Event data may not have been ingested yet."
+            )
+
+        import json
+
+        lines = [
+            f"Cancelled cast analysis for {player_name} in {report_code}#{fight_id}:\n",
+            f"  Total cast begins: {row.total_begins}",
+            f"  Successful casts: {row.total_completions}",
+            f"  Cancelled casts: {row.cancel_count} ({row.cancel_pct}%)",
+        ]
+
+        if row.cancel_pct < 5:
+            grade = "EXCELLENT"
+        elif row.cancel_pct < 10:
+            grade = "GOOD"
+        elif row.cancel_pct < 20:
+            grade = "FAIR"
+        else:
+            grade = "NEEDS WORK"
+        lines.append(f"  Grade: [{grade}]")
+
+        if row.top_cancelled_json:
+            top = json.loads(row.top_cancelled_json)
+            if top:
+                lines.append("\n  Most cancelled abilities:")
+                for entry in top:
+                    lines.append(
+                        f"    Spell ID {entry['spell_id']}: {entry['count']} cancels"
+                    )
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
 ALL_TOOLS = [
     get_my_performance,
     get_top_rankings,
@@ -715,4 +911,7 @@ ALL_TOOLS = [
     get_death_analysis,
     get_activity_report,
     get_cooldown_efficiency,
+    get_consumable_check,
+    get_overheal_analysis,
+    get_cancelled_casts,
 ]

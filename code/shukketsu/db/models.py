@@ -97,6 +97,7 @@ class Fight(Base):
     death_details: Mapped[list["DeathDetail"]] = relationship(back_populates="fight")
     cast_metrics: Mapped[list["CastMetric"]] = relationship(back_populates="fight")
     cooldown_usage: Mapped[list["CooldownUsage"]] = relationship(back_populates="fight")
+    cancelled_casts: Mapped[list["CancelledCast"]] = relationship(back_populates="fight")
 
 
 class FightPerformance(Base):
@@ -208,6 +209,7 @@ class AbilityMetric(Base):
     crit_count: Mapped[int] = mapped_column(Integer, default=0)
     crit_pct: Mapped[float] = mapped_column(Float, default=0.0)
     pct_of_total: Mapped[float] = mapped_column(Float, default=0.0)
+    overheal_total: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     fight: Mapped["Fight"] = relationship(back_populates="ability_metrics")
 
@@ -290,3 +292,21 @@ class CooldownUsage(Base):
     efficiency_pct: Mapped[float] = mapped_column(Float, default=0.0)
 
     fight: Mapped["Fight"] = relationship(back_populates="cooldown_usage")
+
+
+class CancelledCast(Base):
+    __tablename__ = "cancelled_casts"
+    __table_args__ = (
+        Index("ix_cancelled_casts_fight_player", "fight_id", "player_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    player_name: Mapped[str] = mapped_column(String(100))
+    total_begins: Mapped[int] = mapped_column(Integer, default=0)
+    total_completions: Mapped[int] = mapped_column(Integer, default=0)
+    cancel_count: Mapped[int] = mapped_column(Integer, default=0)
+    cancel_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    top_cancelled_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    fight: Mapped["Fight"] = relationship(back_populates="cancelled_casts")

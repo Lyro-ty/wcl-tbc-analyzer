@@ -6,6 +6,7 @@ import logging
 from sqlalchemy import delete, select
 
 from shukketsu.db.models import (
+    CancelledCast,
     CastMetric,
     CooldownUsage,
     DeathDetail,
@@ -382,6 +383,120 @@ async def ingest_cooldowns_for_fight(
     return total_rows
 
 
+# ===== Cancelled cast detection =====
+
+def compute_cancelled_casts(cast_events: list[dict]) -> dict[str, dict]:
+    """Compute cancelled casts per player from Casts events.
+
+    WCL Casts events have type "begincast" (start casting) and "cast" (success).
+    A begincast without a matching cast = cancelled.
+
+    Returns:
+        Dict[player_name -> {total_begins, total_completions, cancel_count,
+                             cancel_pct, top_cancelled}]
+    """
+    # Track begincast/cast per player per spell
+    # Key: (sourceID, abilityGameID) -> list of {type, timestamp}
+    player_begins: dict[int, int] = {}
+    player_completions: dict[int, int] = {}
+    player_cancel_by_spell: dict[int, dict[int, int]] = {}
+
+    for event in cast_events:
+        sid = event.get("sourceID")
+        if sid is None:
+            continue
+
+        event_type = event.get("type", "")
+        spell_id = event.get("abilityGameID", 0)
+
+        if event_type == "begincast":
+            player_begins[sid] = player_begins.get(sid, 0) + 1
+        elif event_type == "cast":
+            player_completions[sid] = player_completions.get(sid, 0) + 1
+
+        # Track per-spell cancels by matching begincast to casts
+        # Simpler approach: count begincast - cast per spell per player
+        if event_type == "begincast":
+            player_cancel_by_spell.setdefault(sid, {}).setdefault(spell_id, 0)
+            player_cancel_by_spell[sid][spell_id] += 1
+        elif event_type == "cast" and sid in player_cancel_by_spell:
+            if spell_id in player_cancel_by_spell[sid]:
+                player_cancel_by_spell[sid][spell_id] -= 1
+
+    results = {}
+    all_sources = set(player_begins.keys()) | set(player_completions.keys())
+
+    for sid in all_sources:
+        begins = player_begins.get(sid, 0)
+        completions = player_completions.get(sid, 0)
+        cancels = max(0, begins - completions)
+        cancel_pct = round(cancels / begins * 100, 1) if begins > 0 else 0.0
+
+        # Get top cancelled spells
+        spell_cancels = player_cancel_by_spell.get(sid, {})
+        top_cancelled = sorted(
+            [(spell_id, count) for spell_id, count in spell_cancels.items() if count > 0],
+            key=lambda x: x[1],
+            reverse=True,
+        )[:5]
+
+        results[sid] = {
+            "total_begins": begins,
+            "total_completions": completions,
+            "cancel_count": cancels,
+            "cancel_pct": cancel_pct,
+            "top_cancelled": top_cancelled,
+        }
+
+    return results
+
+
+async def ingest_cancelled_casts_for_fight(
+    session, fight: Fight, cast_events: list[dict],
+    actor_name_by_id: dict[int, str],
+) -> int:
+    """Compute and store cancelled cast metrics for all players in a fight."""
+    await session.execute(
+        delete(CancelledCast).where(CancelledCast.fight_id == fight.id)
+    )
+
+    if not cast_events:
+        return 0
+
+    cancelled_data = compute_cancelled_casts(cast_events)
+
+    total_rows = 0
+    for source_id, data in cancelled_data.items():
+        player_name = actor_name_by_id.get(source_id)
+        if not player_name:
+            continue
+        if data["total_begins"] == 0:
+            continue
+
+        # Build top cancelled JSON with spell names
+        top_json = json.dumps([
+            {"spell_id": spell_id, "count": count}
+            for spell_id, count in data["top_cancelled"]
+        ]) if data["top_cancelled"] else None
+
+        session.add(CancelledCast(
+            fight_id=fight.id,
+            player_name=player_name,
+            total_begins=data["total_begins"],
+            total_completions=data["total_completions"],
+            cancel_count=data["cancel_count"],
+            cancel_pct=data["cancel_pct"],
+            top_cancelled_json=top_json,
+        ))
+        total_rows += 1
+
+    logger.info(
+        "Ingested %d cancelled cast rows for fight %d (%s)",
+        total_rows, fight.fight_id, fight.report_code,
+    )
+    return total_rows
+
+
 # ===== Report-level orchestration =====
 
 async def ingest_event_data_for_report(
@@ -450,6 +565,12 @@ async def ingest_event_data_for_report(
             session, fight, cast_events, actor_name_by_id, fight_duration_ms,
         )
         total_rows += cd_rows
+
+        # 5. Cancelled casts
+        cancel_rows = await ingest_cancelled_casts_for_fight(
+            session, fight, cast_events, actor_name_by_id,
+        )
+        total_rows += cancel_rows
 
     logger.info(
         "Ingested event data for report %s: %d total rows across %d fights",

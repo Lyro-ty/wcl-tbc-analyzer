@@ -259,6 +259,47 @@ export interface EventsAvailable {
   has_data: boolean
 }
 
+export interface OverhealAbility {
+  ability_name: string
+  spell_id: number
+  total: number
+  overheal_total: number
+  overheal_pct: number
+}
+
+export interface OverhealSummary {
+  player_name: string
+  total_effective: number
+  total_overheal: number
+  total_overheal_pct: number
+  abilities: OverhealAbility[]
+}
+
+export interface ConsumableEntry {
+  name: string
+  category: string
+  uptime_pct: number | null
+  present: boolean
+}
+
+export interface ConsumableCheck {
+  player_name: string
+  player_spec: string
+  role: string
+  present: ConsumableEntry[]
+  missing: ConsumableEntry[]
+  score_pct: number
+}
+
+export interface CancelledCastSummary {
+  player_name: string
+  total_begins: number
+  total_completions: number
+  cancel_count: number
+  cancel_pct: number
+  top_cancelled_json: string | null
+}
+
 export interface DashboardStats {
   total_reports: number
   total_kills: number

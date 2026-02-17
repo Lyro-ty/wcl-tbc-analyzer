@@ -46,6 +46,12 @@ def parse_ability_metrics(
         if "critPct" in entry and entry["critPct"]:
             crit_pct = entry["critPct"]
 
+        overheal = None
+        if metric_type == "healing":
+            overheal = entry.get("overheal", entry.get("totalOverheal")) or None
+            if overheal is not None:
+                overheal = int(overheal)
+
         result.append(AbilityMetric(
             fight_id=fight_id,
             player_name=player_name,
@@ -57,6 +63,7 @@ def parse_ability_metrics(
             crit_count=crit_count,
             crit_pct=round(crit_pct, 1),
             pct_of_total=round(pct, 1),
+            overheal_total=overheal,
         ))
     return result
 

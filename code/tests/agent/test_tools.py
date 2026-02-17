@@ -26,7 +26,7 @@ class TestToolDecorators:
             assert tool.description, f"{tool.name} has no description"
 
     def test_expected_tool_count(self):
-        assert len(ALL_TOOLS) == 17
+        assert len(ALL_TOOLS) == 20
 
     def test_tool_names(self):
         names = {t.name for t in ALL_TOOLS}
@@ -37,6 +37,7 @@ class TestToolDecorators:
             "compare_raid_to_top", "compare_two_raids", "get_raid_execution",
             "get_ability_breakdown", "get_buff_analysis",
             "get_death_analysis", "get_activity_report", "get_cooldown_efficiency",
+            "get_consumable_check", "get_overheal_analysis", "get_cancelled_casts",
         }
         assert names == expected
 

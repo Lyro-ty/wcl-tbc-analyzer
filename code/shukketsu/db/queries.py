@@ -530,3 +530,42 @@ FIGHT_COOLDOWNS = text("""
       AND cu.player_name = :player_name
     ORDER BY cu.efficiency_pct ASC
 """)
+
+OVERHEAL_ANALYSIS = text("""
+    SELECT am.player_name, am.ability_name, am.spell_id,
+           am.total, am.overheal_total,
+           CASE WHEN (am.total + COALESCE(am.overheal_total, 0)) > 0
+                THEN ROUND(
+                    (COALESCE(am.overheal_total, 0)::numeric
+                     / (am.total + COALESCE(am.overheal_total, 0))::numeric) * 100, 1)
+                ELSE 0 END AS overheal_pct
+    FROM ability_metrics am
+    JOIN fights f ON am.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND am.player_name ILIKE :player_name
+      AND am.metric_type = 'healing'
+      AND am.total > 0
+    ORDER BY am.total DESC
+""")
+
+CANCELLED_CASTS = text("""
+    SELECT cc.player_name, cc.total_begins, cc.total_completions,
+           cc.cancel_count, cc.cancel_pct, cc.top_cancelled_json
+    FROM cancelled_casts cc
+    JOIN fights f ON cc.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND cc.player_name = :player_name
+""")
+
+CONSUMABLE_CHECK = text("""
+    SELECT bu.ability_name, bu.spell_id, bu.uptime_pct
+    FROM buff_uptimes bu
+    JOIN fights f ON bu.fight_id = f.id
+    WHERE f.report_code = :report_code
+      AND f.fight_id = :fight_id
+      AND bu.player_name = :player_name
+      AND bu.metric_type = 'buff'
+    ORDER BY bu.uptime_pct DESC
+""")

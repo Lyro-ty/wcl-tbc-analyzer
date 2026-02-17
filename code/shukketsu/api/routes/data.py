@@ -9,12 +9,15 @@ from shukketsu.api.models import (
     AbilitiesAvailable,
     AbilityMetricResponse,
     BuffUptimeResponse,
+    CancelledCastResponse,
     CastMetricResponse,
     CharacterFightSummary,
     CharacterInfo,
     CharacterProfile,
     CharacterRecentParse,
     CharacterReportSummary,
+    ConsumableCheckResponse,
+    ConsumableEntry,
     CooldownUsageResponse,
     DashboardStats,
     DeathDetailResponse,
@@ -26,6 +29,8 @@ from shukketsu.api.models import (
     FightPlayer,
     IngestRequest,
     IngestResponse,
+    OverhealAbility,
+    OverhealResponse,
     ProgressionPoint,
     RaidComparison,
     RaidSummaryFight,
@@ -797,6 +802,152 @@ async def fight_cooldowns(report_code: str, fight_id: int, player: str):
         return [CooldownUsageResponse(**dict(r._mapping)) for r in rows]
     except Exception as e:
         logger.exception("Failed to get cooldowns")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/consumables/{player}",
+    response_model=ConsumableCheckResponse,
+)
+async def fight_consumable_check(report_code: str, fight_id: int, player: str):
+    from shukketsu.pipeline.constants import ROLE_BY_SPEC, get_expected_consumables
+
+    session = await _get_session()
+    try:
+        # Get player's spec
+        perf_result = await session.execute(
+            q.FIGHT_DETAILS, {"report_code": report_code, "fight_id": fight_id}
+        )
+        perf_rows = perf_result.fetchall()
+        player_row = None
+        for r in perf_rows:
+            if r.player_name.lower() == player.lower():
+                player_row = r
+                break
+        if not player_row:
+            raise HTTPException(
+                status_code=404, detail=f"Player {player} not found in fight {fight_id}"
+            )
+
+        spec = player_row.player_spec
+        role = ROLE_BY_SPEC.get(spec, "melee_dps")
+        expected = get_expected_consumables(spec)
+
+        # Get actual buffs
+        result = await session.execute(
+            q.CONSUMABLE_CHECK,
+            {"report_code": report_code, "fight_id": fight_id, "player_name": player},
+        )
+        rows = result.fetchall()
+        actual_by_id = {r.spell_id: (r.ability_name, r.uptime_pct) for r in rows}
+
+        present_list = []
+        missing_list = []
+        for c in expected:
+            if c.spell_id in actual_by_id:
+                _, uptime = actual_by_id[c.spell_id]
+                present_list.append(ConsumableEntry(
+                    name=c.name, category=c.category,
+                    uptime_pct=uptime, present=True,
+                ))
+            else:
+                missing_list.append(ConsumableEntry(
+                    name=c.name, category=c.category,
+                    uptime_pct=None, present=False,
+                ))
+
+        total = len(present_list) + len(missing_list)
+        score = (len(present_list) / total * 100) if total > 0 else 0.0
+
+        return ConsumableCheckResponse(
+            player_name=player,
+            player_spec=spec,
+            role=role,
+            present=present_list,
+            missing=missing_list,
+            score_pct=round(score, 1),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to check consumables")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/overheal/{player}",
+    response_model=OverhealResponse,
+)
+async def fight_overheal(report_code: str, fight_id: int, player: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.OVERHEAL_ANALYSIS,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": f"%{player}%"},
+        )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No healing data for {player} in fight {fight_id}",
+            )
+
+        abilities = []
+        total_effective = 0
+        total_overheal = 0
+        for r in rows:
+            oh = r.overheal_total or 0
+            total_effective += r.total
+            total_overheal += oh
+            abilities.append(OverhealAbility(
+                ability_name=r.ability_name,
+                spell_id=r.spell_id,
+                total=r.total,
+                overheal_total=oh,
+                overheal_pct=float(r.overheal_pct) if r.overheal_pct else 0.0,
+            ))
+
+        grand_total = total_effective + total_overheal
+        total_pct = (total_overheal / grand_total * 100) if grand_total > 0 else 0.0
+
+        return OverhealResponse(
+            player_name=player,
+            total_effective=total_effective,
+            total_overheal=total_overheal,
+            total_overheal_pct=round(total_pct, 1),
+            abilities=abilities,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get overheal data")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/reports/{report_code}/fights/{fight_id}/cancelled-casts/{player}",
+    response_model=CancelledCastResponse | None,
+)
+async def fight_cancelled_casts(report_code: str, fight_id: int, player: str):
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.CANCELLED_CASTS,
+            {"report_code": report_code, "fight_id": fight_id, "player_name": player},
+        )
+        row = result.fetchone()
+        if not row:
+            return None
+        return CancelledCastResponse(**dict(row._mapping))
+    except Exception as e:
+        logger.exception("Failed to get cancelled casts")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

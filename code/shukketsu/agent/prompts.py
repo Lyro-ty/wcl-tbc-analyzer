@@ -54,6 +54,15 @@ longest gap, and activity grade.
 - **get_cooldown_efficiency**: Major cooldown usage efficiency for a player in a fight \
 (requires event data — report_code + fight_id + player_name). Shows times used vs \
 max possible uses, efficiency %, and first/last use timing.
+- **get_consumable_check**: Check a player's consumable and prep buff usage for a fight \
+(requires table data — report_code + fight_id + player_name). Shows present consumables \
+with uptimes and flags missing ones by role/spec.
+- **get_overheal_analysis**: Get overhealing analysis for a healer in a fight \
+(requires table data — report_code + fight_id + player_name). Shows per-ability overheal %, \
+flags abilities >30% overheal as wasteful.
+- **get_cancelled_casts**: Get cancelled cast analysis for a player in a fight \
+(requires event data — report_code + fight_id + player_name). Shows how many casts were \
+started but not completed, with cancel rate grade.
 
 ## Analysis Framework
 
@@ -147,11 +156,14 @@ late first use on short cooldowns indicates rotation issues. Skip if no cooldown
 7. **Death Analysis** — If death data was retrieved, explain what killed the player(s). \
 Was it avoidable? What was the damage sequence? Could defensive cooldowns have prevented it? \
 Skip if no deaths or no death data available.
-8. **Actionable Checklist** — Specific, prioritized improvement suggestions as checkboxes:
+8. **Consumable/Prep Check** — If consumable data was retrieved, list missing consumables \
+and flag low-uptime buffs. Note: presence of a consumable with low uptime (<50%) \
+may indicate it was only used at pull or expired mid-fight. Skip if no consumable data available.
+9. **Actionable Checklist** — Specific, prioritized improvement suggestions as checkboxes:
    - [ ] Highest-impact improvement first
    - [ ] Second priority
    - [ ] Third priority
-9. **Encouragement** — Acknowledge strengths and progress
+10. **Encouragement** — Acknowledge strengths and progress
 
 Use the player's class/spec context to give spec-specific advice when possible.
 """

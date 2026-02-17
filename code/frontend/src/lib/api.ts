@@ -196,6 +196,18 @@ export async function fetchCooldownUsage(code: string, fightId: number, player: 
   return fetchJson(`/api/data/reports/${code}/fights/${fightId}/cooldowns/${encodeURIComponent(player)}`)
 }
 
+export async function fetchCancelledCasts(code: string, fightId: number, player: string): Promise<import('./types').CancelledCastSummary | null> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/cancelled-casts/${encodeURIComponent(player)}`)
+}
+
+export async function fetchOverhealAnalysis(code: string, fightId: number, player: string): Promise<import('./types').OverhealSummary> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/overheal/${encodeURIComponent(player)}`)
+}
+
+export async function fetchConsumableCheck(code: string, fightId: number, player: string): Promise<import('./types').ConsumableCheck> {
+  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/consumables/${encodeURIComponent(player)}`)
+}
+
 export async function fetchEventsAvailable(code: string): Promise<EventsAvailable> {
   return fetchJson(`/api/data/reports/${code}/events-available`)
 }

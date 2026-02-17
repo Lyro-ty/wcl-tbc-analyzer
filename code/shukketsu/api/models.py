@@ -314,6 +314,47 @@ class EventsAvailableResponse(BaseModel):
     has_data: bool
 
 
+class OverhealAbility(BaseModel):
+    ability_name: str
+    spell_id: int
+    total: int
+    overheal_total: int
+    overheal_pct: float
+
+
+class OverhealResponse(BaseModel):
+    player_name: str
+    total_effective: int
+    total_overheal: int
+    total_overheal_pct: float
+    abilities: list[OverhealAbility]
+
+
+class ConsumableEntry(BaseModel):
+    name: str
+    category: str
+    uptime_pct: float | None
+    present: bool
+
+
+class ConsumableCheckResponse(BaseModel):
+    player_name: str
+    player_spec: str
+    role: str
+    present: list[ConsumableEntry]
+    missing: list[ConsumableEntry]
+    score_pct: float
+
+
+class CancelledCastResponse(BaseModel):
+    player_name: str
+    total_begins: int
+    total_completions: int
+    cancel_count: int
+    cancel_pct: float
+    top_cancelled_json: str | None
+
+
 class EventDataResponse(BaseModel):
     report_code: str
     event_rows: int

@@ -190,3 +190,86 @@ CLASSIC_COOLDOWNS: dict[str, list[CooldownDef]] = {
         CooldownDef(33891, "Tree of Life", 0),  # Passive/stance — tracked for detection only
     ],
 }
+
+
+# --- Consumable / Prep Check definitions ---
+
+@dataclass(frozen=True)
+class ConsumableDef:
+    spell_id: int
+    name: str
+    category: str  # "flask", "elixir", "food", "weapon", "potion", "scroll"
+    min_uptime_pct: float  # Expected minimum uptime to count as "present"
+
+
+# Role mapping: spec name → role for consumable checks
+ROLE_BY_SPEC: dict[str, str] = {
+    # Melee DPS
+    "Arms": "melee_dps", "Fury": "melee_dps",
+    "Retribution": "melee_dps",
+    "Combat": "melee_dps", "Assassination": "melee_dps", "Subtlety": "melee_dps",
+    "Enhancement": "melee_dps",
+    "Feral": "melee_dps",
+    # Ranged DPS
+    "Beast Mastery": "ranged_dps", "Marksmanship": "ranged_dps", "Survival": "ranged_dps",
+    # Caster DPS
+    "Shadow": "caster_dps",
+    "Elemental": "caster_dps",
+    "Arcane": "caster_dps", "Fire": "caster_dps", "Frost": "caster_dps",
+    "Affliction": "caster_dps", "Demonology": "caster_dps", "Destruction": "caster_dps",
+    "Balance": "caster_dps",
+    # Healers
+    "Holy": "healer", "Discipline": "healer",
+    "Restoration": "healer",
+    # Tanks
+    "Protection": "tank",
+}
+
+# Consumables expected per role. spell_id values are WCL buff IDs.
+REQUIRED_CONSUMABLES: dict[str, list[ConsumableDef]] = {
+    "all": [
+        # Food buffs (Well Fed variants)
+        ConsumableDef(33254, "Well Fed (Spell Power)", "food", 80.0),
+        ConsumableDef(33256, "Well Fed (Agility)", "food", 80.0),
+        ConsumableDef(33259, "Well Fed (Stamina)", "food", 80.0),
+        ConsumableDef(33261, "Well Fed (Strength)", "food", 80.0),
+        ConsumableDef(43722, "Well Fed (Hit)", "food", 80.0),
+        ConsumableDef(43763, "Well Fed (Haste)", "food", 80.0),
+        ConsumableDef(43764, "Well Fed (AP)", "food", 80.0),
+    ],
+    "melee_dps": [
+        ConsumableDef(17538, "Elixir of the Mongoose", "elixir", 80.0),
+        ConsumableDef(28490, "Elixir of Major Agility", "elixir", 80.0),
+        ConsumableDef(11334, "Elixir of Greater Agility", "elixir", 80.0),
+        ConsumableDef(28497, "Mighty Rage Potion", "potion", 5.0),
+        ConsumableDef(22730, "Scroll of Strength V", "scroll", 80.0),
+    ],
+    "ranged_dps": [
+        ConsumableDef(28490, "Elixir of Major Agility", "elixir", 80.0),
+    ],
+    "caster_dps": [
+        ConsumableDef(17628, "Flask of Supreme Power", "flask", 80.0),
+        ConsumableDef(28509, "Elixir of Major Firepower", "elixir", 80.0),
+        ConsumableDef(28503, "Elixir of Major Shadow Power", "elixir", 80.0),
+        ConsumableDef(28501, "Elixir of Major Frost Power", "elixir", 80.0),
+        ConsumableDef(25122, "Brilliant Wizard Oil", "weapon", 80.0),
+    ],
+    "healer": [
+        ConsumableDef(17627, "Flask of Distilled Wisdom", "flask", 80.0),
+        ConsumableDef(28502, "Elixir of Healing Power", "elixir", 80.0),
+        ConsumableDef(25123, "Brilliant Mana Oil", "weapon", 80.0),
+    ],
+    "tank": [
+        ConsumableDef(17546, "Flask of the Titans", "flask", 80.0),
+        ConsumableDef(28502, "Elixir of Healing Power", "elixir", 80.0),
+        ConsumableDef(28514, "Elixir of Major Fortitude", "elixir", 80.0),
+        ConsumableDef(28509, "Elixir of Major Defense", "elixir", 80.0),
+        ConsumableDef(17549, "Ironshield Potion", "potion", 5.0),
+    ],
+}
+
+
+def get_expected_consumables(spec: str) -> list[ConsumableDef]:
+    """Return the combined list of expected consumables for a given spec."""
+    role = ROLE_BY_SPEC.get(spec, "melee_dps")
+    return REQUIRED_CONSUMABLES.get("all", []) + REQUIRED_CONSUMABLES.get(role, [])
