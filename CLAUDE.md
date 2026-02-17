@@ -181,6 +181,9 @@ Uses nested pydantic-settings with `env_nested_delimiter="__"`:
 - `LLM__MODEL` — Model name (current: `nemotron-3-nano:30b`)
 - `LLM__API_KEY` — API key (set to `ollama` for ollama)
 - `APP__HOST`, `APP__PORT` — FastAPI server config
+- `LANGFUSE__ENABLED` — Enable Langfuse tracing (default: `false`)
+- `LANGFUSE__PUBLIC_KEY`, `LANGFUSE__SECRET_KEY` — Langfuse API keys (from Langfuse UI project settings)
+- `LANGFUSE__HOST` — Langfuse endpoint (default: `http://localhost:3000`)
 
 Config lives in `.env` (gitignored). Template in `.env.example`. Settings are `@lru_cache(maxsize=1)` — loaded once per process.
 
@@ -203,6 +206,10 @@ ruff check code/
 docker compose -f docker-compose.dev.yml up -d   # Start dev PostgreSQL
 alembic upgrade head                              # Run migrations
 alembic downgrade -1                              # Rollback one migration
+
+# Langfuse (observability)
+docker compose -f docker-compose.langfuse.yml up -d  # Start Langfuse stack
+# Then open http://localhost:3000, create a project, copy API keys to .env
 
 # Start FastAPI server (initializes DB + LLM + agent on startup)
 uvicorn shukketsu.api.app:create_app --factory --port 8000
@@ -268,6 +275,7 @@ curl -X POST http://localhost:8000/api/analyze \
 - **No streaming:** `POST /api/analyze/stream` SSE endpoint streams analysis tokens via LangGraph `astream(stream_mode="messages")`. Think-tag buffering strips `<think>...</think>` before forwarding. Frontend uses `fetch` + `ReadableStream` for incremental message rendering.
 - **No event-level data:** WCL `table()` API now ingested into `ability_metrics` and `buff_uptimes` tables. Provides per-ability damage/healing breakdowns and buff/debuff uptimes. Agent tools `get_ability_breakdown` and `get_buff_analysis` expose this to Nemotron. Frontend `PlayerFightPage` renders interactive charts.
 - **Context window truncation:** ollama `num_ctx` now explicitly set to 32768 via `LLM__NUM_CTX` config. Previously defaulted to 2048, causing silent context truncation.
+- **No observability:** Langfuse `CallbackHandler` traces all LLM calls, tool executions, and CRAG loop iterations. Self-hosted via `docker-compose.langfuse.yml`. Toggleable via `LANGFUSE__ENABLED`.
 
 ## Conventions
 
