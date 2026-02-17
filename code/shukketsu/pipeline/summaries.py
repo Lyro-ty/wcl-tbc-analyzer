@@ -43,7 +43,7 @@ def build_raid_night_summary(
     report_title = first.report_title
     start_time = first.start_time
     guild_name = first.guild_name
-    date = datetime.fromtimestamp(start_time, tz=UTC).strftime("%Y-%m-%d")
+    date = datetime.fromtimestamp(start_time / 1000, tz=UTC).strftime("%Y-%m-%d")
 
     # Separate kills and wipes
     kills = [f for f in fight_rows if f.kill]

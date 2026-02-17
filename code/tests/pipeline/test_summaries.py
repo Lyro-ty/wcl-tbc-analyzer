@@ -9,7 +9,7 @@ from shukketsu.pipeline.summaries import build_raid_night_summary
 def _fight_row(
     *,
     report_title="Naxx Clear",
-    start_time=1700000000,
+    start_time=1700000000000,
     guild_name="Test Guild",
     encounter_name="Patchwerk",
     fight_id=1,
@@ -338,7 +338,7 @@ class TestBuildRaidNightSummary:
         fight_rows = [
             _fight_row(
                 encounter_name="Patchwerk", fight_id=1, kill=True,
-                start_time=1700000000,
+                start_time=1700000000000,
             ),
         ]
         player_rows = [
@@ -347,8 +347,8 @@ class TestBuildRaidNightSummary:
 
         result = build_raid_night_summary("ABC123", fight_rows, player_rows)
 
-        # Date should be derived from start_time (epoch seconds)
+        # Date should be derived from start_time (epoch milliseconds)
         expected_date = datetime.fromtimestamp(
-            1700000000, tz=UTC,
+            1700000000000 / 1000, tz=UTC,
         ).strftime("%Y-%m-%d")
         assert result["date"] == expected_date

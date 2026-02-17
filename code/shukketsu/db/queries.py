@@ -387,7 +387,7 @@ DEATH_ANALYSIS = text("""
     JOIN encounters e ON f.encounter_id = e.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND (:player_name IS NULL OR dd.player_name ILIKE :player_name)
+      AND (CAST(:player_name AS text) IS NULL OR dd.player_name ILIKE :player_name)
     ORDER BY dd.timestamp_ms ASC, dd.death_index ASC
 """)
 
@@ -401,7 +401,7 @@ CAST_ACTIVITY = text("""
     JOIN encounters e ON f.encounter_id = e.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND (:player_name IS NULL OR cm.player_name ILIKE :player_name)
+      AND (CAST(:player_name AS text) IS NULL OR cm.player_name ILIKE :player_name)
     ORDER BY cm.gcd_uptime_pct DESC
 """)
 
@@ -415,7 +415,7 @@ COOLDOWN_EFFICIENCY = text("""
     JOIN encounters e ON f.encounter_id = e.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-      AND (:player_name IS NULL OR cu.player_name ILIKE :player_name)
+      AND (CAST(:player_name AS text) IS NULL OR cu.player_name ILIKE :player_name)
     ORDER BY cu.player_name, cu.efficiency_pct ASC
 """)
 
@@ -609,7 +609,7 @@ CONSUMABLE_CHECK = text("""
     FROM fight_consumables fc
     JOIN fights f ON fc.fight_id = f.id
     WHERE f.report_code = :report_code AND f.fight_id = :fight_id
-      AND (:player_name IS NULL OR fc.player_name ILIKE :player_name)
+      AND (CAST(:player_name AS text) IS NULL OR fc.player_name ILIKE :player_name)
     ORDER BY fc.player_name, fc.category
 """)
 
@@ -667,7 +667,7 @@ MY_RECENT_KILLS = text("""
     JOIN reports r ON f.report_code = r.code
     WHERE fp.is_my_character = true
       AND f.kill = true
-      AND (:encounter_name IS NULL OR e.name ILIKE :encounter_name)
+      AND (CAST(:encounter_name AS text) IS NULL OR e.name ILIKE :encounter_name)
     ORDER BY r.start_time DESC, f.fight_id DESC
     LIMIT :limit
 """)
@@ -834,7 +834,7 @@ PHASE_BREAKDOWN = text("""
     JOIN encounters e ON f.encounter_id = e.id
     JOIN fight_performances fp ON fp.fight_id = f.id
     WHERE f.report_code = :report_code AND f.fight_id = :fight_id
-      AND (:player_name IS NULL OR fp.player_name ILIKE :player_name)
+      AND (CAST(:player_name AS text) IS NULL OR fp.player_name ILIKE :player_name)
     ORDER BY fp.dps DESC
 """)
 
