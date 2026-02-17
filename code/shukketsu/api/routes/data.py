@@ -31,6 +31,7 @@ from shukketsu.api.models import (
     IngestResponse,
     OverhealAbility,
     OverhealResponse,
+    PersonalBestEntry,
     ProgressionPoint,
     RaidComparison,
     RaidSummaryFight,
@@ -741,6 +742,43 @@ async def character_recent_parses(character_name: str):
         return [CharacterRecentParse(**dict(r._mapping)) for r in rows]
     except Exception as e:
         logger.exception("Failed to get recent parses")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        await session.close()
+
+
+@router.get(
+    "/characters/{character_name}/personal-bests",
+    response_model=list[PersonalBestEntry],
+)
+async def character_personal_bests(
+    character_name: str, encounter: str | None = None,
+):
+    """Get a character's personal records per encounter."""
+    session = await _get_session()
+    try:
+        if encounter:
+            result = await session.execute(
+                q.PERSONAL_BESTS_BY_ENCOUNTER,
+                {"player_name": f"%{character_name}%",
+                 "encounter_name": f"%{encounter}%"},
+            )
+        else:
+            result = await session.execute(
+                q.PERSONAL_BESTS,
+                {"player_name": f"%{character_name}%"},
+            )
+        rows = result.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No personal bests found for {character_name}",
+            )
+        return [PersonalBestEntry(**dict(r._mapping)) for r in rows]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get personal bests")
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await session.close()

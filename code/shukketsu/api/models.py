@@ -360,6 +360,15 @@ class EventDataResponse(BaseModel):
     event_rows: int
 
 
+class PersonalBestEntry(BaseModel):
+    encounter_name: str
+    best_dps: float
+    best_parse: float | None
+    best_hps: float
+    kill_count: int
+    peak_ilvl: float | None
+
+
 class AutoIngestStatus(BaseModel):
     enabled: bool
     status: str

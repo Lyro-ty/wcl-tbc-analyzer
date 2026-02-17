@@ -559,6 +559,39 @@ CANCELLED_CASTS = text("""
       AND cc.player_name = :player_name
 """)
 
+PERSONAL_BESTS = text("""
+    SELECT e.name AS encounter_name,
+           MAX(fp.dps) AS best_dps,
+           MAX(fp.parse_percentile) AS best_parse,
+           MAX(fp.hps) AS best_hps,
+           COUNT(*) AS kill_count,
+           MAX(fp.item_level) AS peak_ilvl
+    FROM fight_performances fp
+    JOIN fights f ON fp.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    WHERE fp.player_name ILIKE :player_name
+      AND f.kill = true
+    GROUP BY e.id, e.name
+    ORDER BY e.name
+""")
+
+PERSONAL_BESTS_BY_ENCOUNTER = text("""
+    SELECT e.name AS encounter_name,
+           MAX(fp.dps) AS best_dps,
+           MAX(fp.parse_percentile) AS best_parse,
+           MAX(fp.hps) AS best_hps,
+           COUNT(*) AS kill_count,
+           MAX(fp.item_level) AS peak_ilvl
+    FROM fight_performances fp
+    JOIN fights f ON fp.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
+    WHERE fp.player_name ILIKE :player_name
+      AND f.kill = true
+      AND e.name ILIKE :encounter_name
+    GROUP BY e.id, e.name
+    ORDER BY e.name
+""")
+
 CONSUMABLE_CHECK = text("""
     SELECT bu.ability_name, bu.spell_id, bu.uptime_pct
     FROM buff_uptimes bu

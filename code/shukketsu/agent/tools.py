@@ -893,6 +893,45 @@ async def get_cancelled_casts(
         await session.close()
 
 
+@tool
+async def get_personal_bests(
+    player_name: str, encounter_name: str | None = None,
+) -> str:
+    """Get a player's personal records (best DPS, parse, HPS) per encounter.
+    Shows PR values and kill count per boss. Useful for tracking personal progression."""
+    session = await _get_session()
+    try:
+        if encounter_name:
+            result = await session.execute(
+                q.PERSONAL_BESTS_BY_ENCOUNTER,
+                {"player_name": f"%{player_name}%",
+                 "encounter_name": f"%{encounter_name}%"},
+            )
+        else:
+            result = await session.execute(
+                q.PERSONAL_BESTS,
+                {"player_name": f"%{player_name}%"},
+            )
+        rows = result.fetchall()
+        if not rows:
+            return f"No personal bests found for '{player_name}'."
+
+        lines = [f"Personal bests for {player_name}:\n"]
+        for r in rows:
+            parse_str = f"{r.best_parse}%" if r.best_parse is not None else "N/A"
+            ilvl_str = f"{r.peak_ilvl}" if r.peak_ilvl is not None else "N/A"
+            lines.append(
+                f"{r.encounter_name}: Best DPS {r.best_dps:,.1f} | "
+                f"Best Parse {parse_str} | Best HPS {r.best_hps:,.1f} | "
+                f"Kills: {r.kill_count} | Peak iLvl: {ilvl_str}"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
 ALL_TOOLS = [
     get_my_performance,
     get_top_rankings,
@@ -914,4 +953,5 @@ ALL_TOOLS = [
     get_consumable_check,
     get_overheal_analysis,
     get_cancelled_casts,
+    get_personal_bests,
 ]

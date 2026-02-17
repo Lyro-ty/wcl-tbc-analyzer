@@ -63,6 +63,9 @@ flags abilities >30% overheal as wasteful.
 - **get_cancelled_casts**: Get cancelled cast analysis for a player in a fight \
 (requires event data — report_code + fight_id + player_name). Shows how many casts were \
 started but not completed, with cancel rate grade.
+- **get_personal_bests**: Get a player's personal records (best DPS/parse/HPS) per encounter. \
+Shows PR values and kill count per boss. Useful for tracking personal progression \
+(player_name, optional encounter_name).
 
 ## Analysis Framework
 

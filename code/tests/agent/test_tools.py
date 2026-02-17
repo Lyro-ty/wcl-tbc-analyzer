@@ -10,6 +10,7 @@ from shukketsu.agent.tools import (
     get_buff_analysis,
     get_deaths_and_mechanics,
     get_my_performance,
+    get_personal_bests,
     get_raid_execution,
     get_raid_summary,
     get_top_rankings,
@@ -26,7 +27,7 @@ class TestToolDecorators:
             assert tool.description, f"{tool.name} has no description"
 
     def test_expected_tool_count(self):
-        assert len(ALL_TOOLS) == 20
+        assert len(ALL_TOOLS) == 21
 
     def test_tool_names(self):
         names = {t.name for t in ALL_TOOLS}
@@ -38,6 +39,7 @@ class TestToolDecorators:
             "get_ability_breakdown", "get_buff_analysis",
             "get_death_analysis", "get_activity_report", "get_cooldown_efficiency",
             "get_consumable_check", "get_overheal_analysis", "get_cancelled_casts",
+            "get_personal_bests",
         }
         assert names == expected
 
@@ -422,6 +424,125 @@ class TestGetBuffAnalysis:
             )
 
         assert "table data" in result.lower() or "not have been ingested" in result.lower()
+
+
+class TestGetPersonalBests:
+    async def test_returns_formatted_string_multiple_encounters(self):
+        mock_rows = [
+            MagicMock(
+                encounter_name="Patchwerk",
+                best_dps=3012.5,
+                best_parse=95.2,
+                best_hps=0.0,
+                kill_count=12,
+                peak_ilvl=141.2,
+            ),
+            MagicMock(
+                encounter_name="Sapphiron",
+                best_dps=2100.3,
+                best_parse=82.0,
+                best_hps=50.0,
+                kill_count=5,
+                peak_ilvl=140.0,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_personal_bests.ainvoke(
+                {"player_name": "Lyro"}
+            )
+
+        assert "Patchwerk" in result
+        assert "Sapphiron" in result
+        assert "3,012.5" in result
+        assert "95.2%" in result
+        assert "Kills: 12" in result
+
+    async def test_with_encounter_filter(self):
+        mock_rows = [
+            MagicMock(
+                encounter_name="Patchwerk",
+                best_dps=3012.5,
+                best_parse=95.2,
+                best_hps=0.0,
+                kill_count=12,
+                peak_ilvl=141.2,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_personal_bests.ainvoke(
+                {"player_name": "Lyro", "encounter_name": "Patchwerk"}
+            )
+
+        assert "Patchwerk" in result
+        assert "3,012.5" in result
+        # Verify the encounter_name param was passed to the query
+        call_args = mock_session.execute.call_args
+        params = call_args[0][1]
+        assert "encounter_name" in params
+
+    async def test_no_data(self):
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_personal_bests.ainvoke(
+                {"player_name": "Nobody"}
+            )
+
+        assert "no" in result.lower() or "not found" in result.lower()
+
+    async def test_error_handling(self):
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = Exception("connection lost")
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_personal_bests.ainvoke(
+                {"player_name": "Test"}
+            )
+
+        assert "Error" in result
+        assert "connection lost" in result
+
+    async def test_null_parse_and_ilvl(self):
+        mock_rows = [
+            MagicMock(
+                encounter_name="Patchwerk",
+                best_dps=1500.0,
+                best_parse=None,
+                best_hps=0.0,
+                kill_count=1,
+                peak_ilvl=None,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+            result = await get_personal_bests.ainvoke(
+                {"player_name": "TestPlayer"}
+            )
+
+        assert "Patchwerk" in result
+        assert "1,500.0" in result
+        assert "N/A" in result
 
 
 class TestNoResults:
