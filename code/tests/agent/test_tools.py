@@ -12,10 +12,9 @@ from shukketsu.agent.tools import (
     get_deaths_and_mechanics,
     get_gear_changes,
     get_my_performance,
-    get_personal_bests,
     get_raid_execution,
-    get_raid_summary,
     get_regressions,
+    get_resource_usage,
     get_top_rankings,
     get_wipe_progression,
     resolve_my_fights,
@@ -32,20 +31,22 @@ class TestToolDecorators:
             assert tool.description, f"{tool.name} has no description"
 
     def test_expected_tool_count(self):
-        assert len(ALL_TOOLS) == 26
+        assert len(ALL_TOOLS) == 29
 
     def test_tool_names(self):
         names = {t.name for t in ALL_TOOLS}
         expected = {
             "get_my_performance", "get_top_rankings", "compare_to_top",
             "get_fight_details", "get_progression", "get_deaths_and_mechanics",
-            "get_raid_summary", "search_fights", "get_spec_leaderboard",
+            "search_fights", "get_spec_leaderboard",
             "compare_raid_to_top", "compare_two_raids", "get_raid_execution",
             "get_ability_breakdown", "get_buff_analysis",
             "get_death_analysis", "get_activity_report", "get_cooldown_efficiency",
             "get_consumable_check", "get_overheal_analysis", "get_cancelled_casts",
-            "get_personal_bests", "get_wipe_progression", "get_regressions",
+            "get_wipe_progression", "get_regressions",
             "resolve_my_fights", "get_gear_changes", "get_phase_analysis",
+            "get_resource_usage", "get_cooldown_windows", "get_dot_management",
+            "get_rotation_score", "get_trinket_performance",
         }
         assert names == expected
 
@@ -98,16 +99,14 @@ class TestGetTopRankings:
         assert "TopRogue" in result
 
 
-class TestGetRaidSummary:
+class TestGetResourceUsage:
     async def test_returns_formatted_string(self):
         mock_rows = [
             MagicMock(
-                fight_id=1, encounter_name="High King Maulgar",
-                kill=True, duration_ms=180000, player_count=25,
-            ),
-            MagicMock(
-                fight_id=2, encounter_name="Gruul",
-                kill=True, duration_ms=160000, player_count=25,
+                player_name="TestWarr", resource_type="rage",
+                min_value=0, max_value=100, avg_value=45.2,
+                time_at_zero_ms=5000, time_at_zero_pct=2.8,
+                samples_json=None,
             ),
         ]
         mock_result = MagicMock()
@@ -117,9 +116,14 @@ class TestGetRaidSummary:
         mock_session.execute.return_value = mock_result
 
         with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
-            result = await get_raid_summary.ainvoke({"report_code": "abc123"})
+            result = await get_resource_usage.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestWarr"}
+            )
 
-        assert "Gruul" in result
+        assert "rage" in result
+        assert "TestWarr" in result
+        assert "45.2" in result
 
 
 class TestGetDeathsAndMechanics:
@@ -279,12 +283,12 @@ class TestToolErrorHandling:
         assert "Error" in result
         assert "connection lost" in result
 
-    async def test_db_error_on_raid_summary(self):
+    async def test_db_error_on_raid_execution(self):
         mock_session = AsyncMock()
         mock_session.execute.side_effect = Exception("timeout")
 
         with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
-            result = await get_raid_summary.ainvoke({"report_code": "abc123"})
+            result = await get_raid_execution.ainvoke({"report_code": "abc123"})
 
         assert "Error" in result
         assert "timeout" in result
@@ -432,7 +436,9 @@ class TestGetBuffAnalysis:
         assert "table data" in result.lower() or "not have been ingested" in result.lower()
 
 
-class TestGetPersonalBests:
+class TestGetMyPerformanceBestsOnly:
+    """Tests for get_my_performance with bests_only=True (replaces get_personal_bests)."""
+
     async def test_returns_formatted_string_multiple_encounters(self):
         mock_rows = [
             MagicMock(
@@ -459,8 +465,9 @@ class TestGetPersonalBests:
         mock_session.execute.return_value = mock_result
 
         with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
-            result = await get_personal_bests.ainvoke(
-                {"player_name": "Lyro"}
+            result = await get_my_performance.ainvoke(
+                {"encounter_name": "", "player_name": "Lyro",
+                 "bests_only": True}
             )
 
         assert "Patchwerk" in result
@@ -487,8 +494,9 @@ class TestGetPersonalBests:
         mock_session.execute.return_value = mock_result
 
         with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
-            result = await get_personal_bests.ainvoke(
-                {"player_name": "Lyro", "encounter_name": "Patchwerk"}
+            result = await get_my_performance.ainvoke(
+                {"encounter_name": "Patchwerk", "player_name": "Lyro",
+                 "bests_only": True}
             )
 
         assert "Patchwerk" in result
@@ -506,8 +514,9 @@ class TestGetPersonalBests:
         mock_session.execute.return_value = mock_result
 
         with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
-            result = await get_personal_bests.ainvoke(
-                {"player_name": "Nobody"}
+            result = await get_my_performance.ainvoke(
+                {"encounter_name": "", "player_name": "Nobody",
+                 "bests_only": True}
             )
 
         assert "no" in result.lower() or "not found" in result.lower()
@@ -517,8 +526,9 @@ class TestGetPersonalBests:
         mock_session.execute.side_effect = Exception("connection lost")
 
         with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
-            result = await get_personal_bests.ainvoke(
-                {"player_name": "Test"}
+            result = await get_my_performance.ainvoke(
+                {"encounter_name": "", "player_name": "Test",
+                 "bests_only": True}
             )
 
         assert "Error" in result
@@ -542,8 +552,9 @@ class TestGetPersonalBests:
         mock_session.execute.return_value = mock_result
 
         with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
-            result = await get_personal_bests.ainvoke(
-                {"player_name": "TestPlayer"}
+            result = await get_my_performance.ainvoke(
+                {"encounter_name": "", "player_name": "TestPlayer",
+                 "bests_only": True}
             )
 
         assert "Patchwerk" in result

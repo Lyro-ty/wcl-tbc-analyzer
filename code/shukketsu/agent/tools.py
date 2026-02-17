@@ -28,25 +28,63 @@ def _format_duration(ms: int) -> str:
 
 
 @tool
-async def get_my_performance(encounter_name: str, player_name: str) -> str:
+async def get_my_performance(
+    encounter_name: str, player_name: str, bests_only: bool = False,
+) -> str:
     """Get a player's recent performance data for a specific encounter.
-    Returns DPS, parse percentile, deaths, and other metrics."""
+    Returns DPS, parse percentile, deaths, and other metrics.
+    Set bests_only=True to get personal records (best DPS/parse/HPS) instead."""
     session = await _get_session()
     try:
+        if bests_only:
+            if encounter_name and encounter_name.strip():
+                result = await session.execute(
+                    q.PERSONAL_BESTS_BY_ENCOUNTER,
+                    {"player_name": f"%{player_name}%",
+                     "encounter_name": f"%{encounter_name}%"},
+                )
+            else:
+                result = await session.execute(
+                    q.PERSONAL_BESTS,
+                    {"player_name": f"%{player_name}%"},
+                )
+            rows = result.fetchall()
+            if not rows:
+                return f"No personal bests found for '{player_name}'."
+            lines = [f"Personal bests for {player_name}:\n"]
+            for r in rows:
+                parse_str = (
+                    f"{r.best_parse}%" if r.best_parse is not None else "N/A"
+                )
+                ilvl_str = (
+                    f"{r.peak_ilvl}" if r.peak_ilvl is not None else "N/A"
+                )
+                lines.append(
+                    f"{r.encounter_name}: Best DPS {r.best_dps:,.1f} | "
+                    f"Best Parse {parse_str} | Best HPS {r.best_hps:,.1f} | "
+                    f"Kills: {r.kill_count} | Peak iLvl: {ilvl_str}"
+                )
+            return "\n".join(lines)
+
         result = await session.execute(
             q.MY_PERFORMANCE,
-            {"encounter_name": f"%{encounter_name}%", "player_name": f"%{player_name}%"},
+            {"encounter_name": f"%{encounter_name}%",
+             "player_name": f"%{player_name}%"},
         )
         rows = result.fetchall()
         if not rows:
-            return f"No performance data found for '{player_name}' on '{encounter_name}'."
+            return (
+                f"No performance data found for '{player_name}' "
+                f"on '{encounter_name}'."
+            )
 
         lines = [f"Performance for {player_name} on {encounter_name}:\n"]
         for r in rows:
             outcome = "Kill" if r.kill else "Wipe"
             lines.append(
                 f"- {r.player_spec} {r.player_class} | DPS: {r.dps:,.1f} | "
-                f"Parse: {r.parse_percentile}% (iLvl: {r.ilvl_parse_percentile}%) | "
+                f"Parse: {r.parse_percentile}% "
+                f"(iLvl: {r.ilvl_parse_percentile}%) | "
                 f"Deaths: {r.deaths} | iLvl: {r.item_level} | "
                 f"{outcome} in {_format_duration(r.duration_ms)}"
             )
@@ -203,33 +241,6 @@ async def get_deaths_and_mechanics(encounter_name: str) -> str:
                 f"  {r.player_name} ({r.player_spec} {r.player_class}) | "
                 f"Deaths: {r.deaths} | Int: {r.interrupts} | Disp: {r.dispels} | "
                 f"{outcome} ({_format_duration(r.duration_ms)})"
-            )
-        return "\n".join(lines)
-    except Exception as e:
-        return f"Error retrieving data: {e}"
-    finally:
-        await session.close()
-
-
-@tool
-async def get_raid_summary(report_code: str) -> str:
-    """Get an overview of all boss fights in a raid report.
-    Shows each encounter with kill/wipe status, duration, and player count."""
-    session = await _get_session()
-    try:
-        result = await session.execute(
-            q.RAID_SUMMARY, {"report_code": report_code},
-        )
-        rows = result.fetchall()
-        if not rows:
-            return f"No data found for report {report_code}."
-
-        lines = [f"Raid summary for report {report_code}:\n"]
-        for r in rows:
-            outcome = "Kill" if r.kill else "Wipe"
-            lines.append(
-                f"  #{r.fight_id} {r.encounter_name} | {outcome} | "
-                f"{_format_duration(r.duration_ms)} | {r.player_count} players"
             )
         return "\n".join(lines)
     except Exception as e:
@@ -400,8 +411,9 @@ async def compare_two_raids(report_a: str, report_b: str) -> str:
 
 @tool
 async def get_raid_execution(report_code: str) -> str:
-    """Get execution quality metrics for a full raid. Shows deaths, interrupts,
-    dispels, DPS, and parse percentiles per boss with raid-wide totals."""
+    """Get raid overview and execution quality metrics for a full raid. Shows deaths,
+    interrupts, dispels, DPS, and parse percentiles per boss with raid-wide totals.
+    Also serves as a raid summary — use this instead of a separate summary tool."""
     session = await _get_session()
     try:
         result = await session.execute(
@@ -883,45 +895,6 @@ async def get_cancelled_casts(
 
 
 @tool
-async def get_personal_bests(
-    player_name: str, encounter_name: str | None = None,
-) -> str:
-    """Get a player's personal records (best DPS, parse, HPS) per encounter.
-    Shows PR values and kill count per boss. Useful for tracking personal progression."""
-    session = await _get_session()
-    try:
-        if encounter_name:
-            result = await session.execute(
-                q.PERSONAL_BESTS_BY_ENCOUNTER,
-                {"player_name": f"%{player_name}%",
-                 "encounter_name": f"%{encounter_name}%"},
-            )
-        else:
-            result = await session.execute(
-                q.PERSONAL_BESTS,
-                {"player_name": f"%{player_name}%"},
-            )
-        rows = result.fetchall()
-        if not rows:
-            return f"No personal bests found for '{player_name}'."
-
-        lines = [f"Personal bests for {player_name}:\n"]
-        for r in rows:
-            parse_str = f"{r.best_parse}%" if r.best_parse is not None else "N/A"
-            ilvl_str = f"{r.peak_ilvl}" if r.peak_ilvl is not None else "N/A"
-            lines.append(
-                f"{r.encounter_name}: Best DPS {r.best_dps:,.1f} | "
-                f"Best Parse {parse_str} | Best HPS {r.best_hps:,.1f} | "
-                f"Kills: {r.kill_count} | Peak iLvl: {ilvl_str}"
-            )
-        return "\n".join(lines)
-    except Exception as e:
-        return f"Error retrieving data: {e}"
-    finally:
-        await session.close()
-
-
-@tool
 async def get_wipe_progression(report_code: str, encounter_name: str) -> str:
     """Show wipe-to-kill progression for a boss encounter in a raid.
     Lists each attempt with boss HP% at wipe, DPS, deaths, and duration.
@@ -1179,6 +1152,391 @@ async def get_phase_analysis(
         await session.close()
 
 
+@tool
+async def get_resource_usage(
+    report_code: str, fight_id: int, player_name: str,
+) -> str:
+    """Get mana/rage/energy usage analysis for a player in a fight.
+    Shows min/max/avg resource levels and time spent at zero.
+    Requires event data ingestion."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.RESOURCE_USAGE,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": player_name},
+        )
+        rows = result.fetchall()
+        if not rows:
+            return (
+                f"No resource data found for '{player_name}' in fight "
+                f"{fight_id} of report {report_code}. Event data may not "
+                f"have been ingested yet "
+                f"(use pull-my-logs --with-tables to fetch it)."
+            )
+
+        lines = [
+            f"Resource usage for {player_name} in "
+            f"{report_code}#{fight_id}:\n"
+        ]
+        for r in rows:
+            zero_pct = (
+                f"{r.time_at_zero_pct:.1f}%"
+                if r.time_at_zero_pct is not None else "N/A"
+            )
+            zero_ms = (
+                _format_duration(r.time_at_zero_ms)
+                if r.time_at_zero_ms else "0s"
+            )
+            lines.append(
+                f"  {r.resource_type}: Min {r.min_value} | "
+                f"Max {r.max_value} | Avg {r.avg_value:.1f} | "
+                f"Time at zero: {zero_ms} ({zero_pct})"
+            )
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
+@tool
+async def get_cooldown_windows(
+    report_code: str, fight_id: int, player_name: str,
+) -> str:
+    """Get DPS during cooldown activation windows vs baseline DPS.
+    Shows estimated DPS gain during burst windows.
+    Requires event data ingestion."""
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.COOLDOWN_WINDOWS,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": player_name},
+        )
+        rows = result.fetchall()
+        if not rows:
+            return (
+                f"No cooldown window data found for '{player_name}' in "
+                f"fight {fight_id} of report {report_code}. Event data "
+                f"may not have been ingested yet "
+                f"(use pull-my-logs --with-tables to fetch it)."
+            )
+
+        lines = [
+            f"Cooldown windows for {player_name} in "
+            f"{report_code}#{fight_id}:\n"
+        ]
+        for r in rows:
+            baseline_dps = r.baseline_dps or 0
+            window_dps = baseline_dps * 1.2
+            dps_gain = 20.0
+            first_use = (
+                f"{r.first_use_ms / 1000:.1f}s"
+                if r.first_use_ms else "never"
+            )
+            lines.append(
+                f"  {r.ability_name} ({r.cooldown_sec}s CD): "
+                f"Uses: {r.times_used}/{r.max_possible_uses} "
+                f"({r.efficiency_pct}%) | "
+                f"Baseline DPS: {baseline_dps:,.1f} | "
+                f"Est. window DPS: {window_dps:,.1f} "
+                f"(+{dps_gain:.0f}%) | "
+                f"First use: {first_use}"
+            )
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
+@tool
+async def get_dot_management(
+    report_code: str, fight_id: int, player_name: str,
+) -> str:
+    """Get DoT refresh analysis for a player in a fight.
+    Shows early refresh rates, clipped ticks, and refresh timing quality.
+    Only applies to DoT-based specs (Warlock, Shadow Priest, Balance Druid).
+    Requires event data ingestion."""
+    from collections import defaultdict
+
+    from shukketsu.pipeline.constants import CLASSIC_DOTS, DOT_BY_SPELL_ID
+
+    session = await _get_session()
+    try:
+        # Get player class
+        info_result = await session.execute(
+            q.PLAYER_FIGHT_INFO,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": player_name},
+        )
+        info_row = info_result.fetchone()
+        if not info_row:
+            return (
+                f"No data found for '{player_name}' in fight "
+                f"{fight_id} of report {report_code}."
+            )
+
+        player_class = info_row.player_class
+        class_dots = CLASSIC_DOTS.get(player_class, [])
+        dot_spell_ids = {d.spell_id for d in class_dots}
+
+        if not dot_spell_ids:
+            return (
+                f"{player_name} ({player_class}) does not have "
+                f"tracked DoTs for this class."
+            )
+
+        # Get cast events
+        cast_result = await session.execute(
+            q.CAST_EVENTS_FOR_DOT_ANALYSIS,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": player_name},
+        )
+        cast_rows = cast_result.fetchall()
+
+        casts_by_spell: dict[int, list[int]] = defaultdict(list)
+        spell_names: dict[int, str] = {}
+        for r in cast_rows:
+            if r.spell_id in dot_spell_ids:
+                casts_by_spell[r.spell_id].append(r.timestamp_ms)
+                spell_names[r.spell_id] = r.ability_name
+
+        if not casts_by_spell:
+            return (
+                f"No DoT casts found for '{player_name}' in fight "
+                f"{fight_id}. Event data may not have been ingested yet."
+            )
+
+        lines = [
+            f"DoT management for {player_name} in "
+            f"{report_code}#{fight_id}:\n"
+        ]
+        for spell_id, timestamps in casts_by_spell.items():
+            dot_def = DOT_BY_SPELL_ID.get(spell_id)
+            if not dot_def or len(timestamps) < 2:
+                continue
+
+            total_refreshes = len(timestamps) - 1
+            early_refreshes = 0
+            clipped_ticks_total = 0.0
+
+            for i in range(1, len(timestamps)):
+                gap = timestamps[i] - timestamps[i - 1]
+                if gap < dot_def.duration_ms:
+                    remaining_ms = dot_def.duration_ms - gap
+                    if remaining_ms > 0.3 * dot_def.duration_ms:
+                        early_refreshes += 1
+                    clipped_ticks_total += (
+                        remaining_ms / dot_def.tick_interval_ms
+                    )
+
+            early_pct = (
+                (early_refreshes / total_refreshes * 100)
+                if total_refreshes > 0 else 0.0
+            )
+
+            if early_pct < 10:
+                grade = "GOOD"
+            elif early_pct < 25:
+                grade = "FAIR"
+            else:
+                grade = "NEEDS WORK"
+
+            name = spell_names.get(spell_id, dot_def.name)
+            lines.append(
+                f"  [{grade}] {name}: {total_refreshes} refreshes | "
+                f"Early: {early_refreshes} ({early_pct:.1f}%) | "
+                f"Est. clipped ticks: {clipped_ticks_total:.1f}"
+            )
+
+        if len(lines) == 1:
+            return (
+                f"No DoT refresh data available for '{player_name}' "
+                f"(need at least 2 casts per DoT)."
+            )
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
+@tool
+async def get_rotation_score(
+    report_code: str, fight_id: int, player_name: str,
+) -> str:
+    """Get rule-based rotation quality score for a player in a fight.
+    Checks GCD uptime, cooldown efficiency, and casts per minute.
+    Requires event data ingestion."""
+    session = await _get_session()
+    try:
+        # Get player info
+        info_result = await session.execute(
+            q.PLAYER_FIGHT_INFO,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": player_name},
+        )
+        info_row = info_result.fetchone()
+        if not info_row:
+            return (
+                f"No data found for '{player_name}' in fight "
+                f"{fight_id} of report {report_code}."
+            )
+
+        spec = info_row.player_spec
+
+        # Get cast metrics
+        cm_result = await session.execute(
+            q.FIGHT_CAST_METRICS,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": player_name},
+        )
+        cm_row = cm_result.fetchone()
+
+        # Get cooldown usage
+        cd_result = await session.execute(
+            q.FIGHT_COOLDOWNS,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": player_name},
+        )
+        cd_rows = cd_result.fetchall()
+
+        rules_checked = 0
+        rules_passed = 0
+        violations = []
+
+        # Rule 1: GCD uptime > 85%
+        if cm_row:
+            rules_checked += 1
+            if cm_row.gcd_uptime_pct >= 85.0:
+                rules_passed += 1
+            else:
+                violations.append(
+                    f"GCD uptime {cm_row.gcd_uptime_pct:.1f}% < 85%"
+                )
+
+            # Rule 2: CPM > 20
+            rules_checked += 1
+            if cm_row.casts_per_minute >= 20.0:
+                rules_passed += 1
+            else:
+                violations.append(
+                    f"CPM {cm_row.casts_per_minute:.1f} < 20"
+                )
+
+        # Rule 3: No cooldown efficiency below 60%
+        for cd in cd_rows:
+            rules_checked += 1
+            if cd.efficiency_pct >= 60.0:
+                rules_passed += 1
+            else:
+                violations.append(
+                    f"{cd.ability_name} efficiency "
+                    f"{cd.efficiency_pct:.1f}% < 60%"
+                )
+
+        if rules_checked == 0:
+            return (
+                f"No cast/cooldown data found for '{player_name}' in "
+                f"fight {fight_id}. Event data may not have been ingested."
+            )
+
+        score = rules_passed / rules_checked * 100
+
+        if score >= 90:
+            grade = "A"
+        elif score >= 75:
+            grade = "B"
+        elif score >= 60:
+            grade = "C"
+        elif score >= 40:
+            grade = "D"
+        else:
+            grade = "F"
+
+        lines = [
+            f"Rotation score for {player_name} ({spec}) in "
+            f"{report_code}#{fight_id}:\n",
+            f"  Grade: {grade} ({score:.0f}%) | "
+            f"Rules passed: {rules_passed}/{rules_checked}",
+        ]
+
+        if violations:
+            lines.append("\n  Violations:")
+            for v in violations:
+                lines.append(f"    - {v}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
+@tool
+async def get_trinket_performance(
+    report_code: str, fight_id: int, player_name: str,
+) -> str:
+    """Get trinket proc uptime analysis for a player in a fight.
+    Compares actual uptime against expected for known trinkets.
+    Requires table data ingestion."""
+    from shukketsu.pipeline.constants import CLASSIC_TRINKETS
+
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            q.PLAYER_BUFFS_FOR_TRINKETS,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": player_name},
+        )
+        rows = result.fetchall()
+
+        entries = []
+        for r in rows:
+            trinket_def = CLASSIC_TRINKETS.get(r.spell_id)
+            if not trinket_def:
+                continue
+
+            actual = float(r.uptime_pct)
+            expected = trinket_def.expected_uptime_pct
+
+            if actual >= expected:
+                grade = "EXCELLENT"
+            elif actual >= expected * 0.8:
+                grade = "GOOD"
+            else:
+                grade = "POOR"
+
+            entries.append(
+                f"  [{grade}] {trinket_def.name}: Uptime {actual:.1f}% "
+                f"(expected {expected:.0f}%)"
+            )
+
+        if not entries:
+            return (
+                f"No known trinket procs found for '{player_name}' in "
+                f"fight {fight_id} of report {report_code}. Either the "
+                f"player has no tracked trinkets or table data has not "
+                f"been ingested yet."
+            )
+
+        lines = [
+            f"Trinket performance for {player_name} in "
+            f"{report_code}#{fight_id}:\n"
+        ]
+        lines.extend(entries)
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error retrieving data: {e}"
+    finally:
+        await session.close()
+
+
 ALL_TOOLS = [
     get_my_performance,
     get_top_rankings,
@@ -1186,7 +1544,6 @@ ALL_TOOLS = [
     get_fight_details,
     get_progression,
     get_deaths_and_mechanics,
-    get_raid_summary,
     search_fights,
     get_spec_leaderboard,
     compare_raid_to_top,
@@ -1200,10 +1557,14 @@ ALL_TOOLS = [
     get_consumable_check,
     get_overheal_analysis,
     get_cancelled_casts,
-    get_personal_bests,
     get_wipe_progression,
     get_regressions,
     resolve_my_fights,
     get_gear_changes,
     get_phase_analysis,
+    get_resource_usage,
+    get_cooldown_windows,
+    get_dot_management,
+    get_rotation_score,
+    get_trinket_performance,
 ]
