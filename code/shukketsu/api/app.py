@@ -114,10 +114,10 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=["http://localhost:5173", "http://localhost:8000"],
+        allow_credentials=False,
+        allow_methods=["GET", "POST"],
+        allow_headers=["X-API-Key", "Content-Type"],
     )
 
     from shukketsu.api.routes.analyze import router as analyze_router
@@ -137,9 +137,9 @@ def create_app() -> FastAPI:
         @app.get("/{path:path}")
         async def spa_catchall(path: str):
             """Serve index.html for SPA client-side routing."""
-            file = FRONTEND_DIST / path
-            if file.is_file():
-                return FileResponse(file)
+            resolved = (FRONTEND_DIST / path).resolve()
+            if resolved.is_relative_to(FRONTEND_DIST.resolve()) and resolved.is_file():
+                return FileResponse(resolved)
             return FileResponse(FRONTEND_DIST / "index.html")
 
     return app

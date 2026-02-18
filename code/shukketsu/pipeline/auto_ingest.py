@@ -165,6 +165,8 @@ class AutoIngestService:
 
     async def trigger_now(self) -> dict:
         """Manual trigger, runs poll in background."""
+        if self._trigger_task and not self._trigger_task.done():
+            return {"status": "already_running", "message": "Poll already in progress"}
         self._trigger_task = asyncio.create_task(self._poll_once())
         return {"status": "triggered", "message": "Poll started in background"}
 
