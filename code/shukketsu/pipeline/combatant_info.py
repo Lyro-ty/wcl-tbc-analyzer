@@ -94,12 +94,14 @@ async def ingest_combatant_info_for_report(
             delete(GearSnapshot).where(GearSnapshot.fight_id == fight.id)
         )
 
-        # Fetch CombatantInfo events
+        # Fetch CombatantInfo events (async generator yields pages)
         try:
-            events = await fetch_all_events(
+            all_events: list[dict] = []
+            async for page in fetch_all_events(
                 wcl, report_code, fight.start_time, fight.end_time,
                 data_type="CombatantInfo",
-            )
+            ):
+                all_events.extend(page)
         except Exception:
             logger.exception(
                 "Failed to fetch CombatantInfo events for fight %d in %s",
@@ -107,7 +109,7 @@ async def ingest_combatant_info_for_report(
             )
             continue
 
-        for event in events:
+        for event in all_events:
             # CombatantInfo events include a "name" field for the player
             player_name = event.get(
                 "name", f"Unknown-{event.get('sourceID', 0)}"

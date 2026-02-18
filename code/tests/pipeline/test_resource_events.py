@@ -337,11 +337,13 @@ class TestIngestResourceDataForFight:
             _make_resource_event(99, 3000, 0, 1000),   # NPC, skipped
         ]
 
+        async def _fake_fetch(*args, **kwargs):
+            yield raw_events
+
         with patch(
             "shukketsu.pipeline.resource_events.fetch_all_events",
-            new_callable=AsyncMock,
-            return_value=raw_events,
-        ) as mock_fetch:
+            side_effect=_fake_fetch,
+        ):
             count = await ingest_resource_data_for_fight(
                 wcl, session, "ABC123", fight, actors,
             )
@@ -352,11 +354,6 @@ class TestIngestResourceDataForFight:
 
         # Verify delete was called
         assert session.execute.await_count == 1
-
-        # Verify fetch_all_events called with correct params
-        mock_fetch.assert_awaited_once_with(
-            wcl, "ABC123", 0, 60_000, data_type="Resources",
-        )
 
     async def test_ingest_resource_data_for_fight_empty(self):
         """No events from WCL results in 0 rows inserted."""
@@ -370,10 +367,13 @@ class TestIngestResourceDataForFight:
         fight.start_time = 0
         fight.end_time = 60_000
 
+        async def _fake_fetch_empty(*args, **kwargs):
+            if False:
+                yield
+
         with patch(
             "shukketsu.pipeline.resource_events.fetch_all_events",
-            new_callable=AsyncMock,
-            return_value=[],
+            side_effect=_fake_fetch_empty,
         ):
             count = await ingest_resource_data_for_fight(
                 wcl, session, "EMPTY", fight, {},

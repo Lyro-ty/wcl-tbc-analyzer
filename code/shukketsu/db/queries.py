@@ -66,6 +66,7 @@ FIGHT_DETAILS = text("""
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
     ORDER BY fp.dps DESC
+    LIMIT 50
 """)
 
 PROGRESSION = text("""
@@ -78,6 +79,7 @@ PROGRESSION = text("""
     WHERE mc.name ILIKE :character_name
       AND e.name ILIKE :encounter_name
     ORDER BY ps.time ASC
+    LIMIT 100
 """)
 
 DEATHS_AND_MECHANICS = text("""
@@ -218,6 +220,7 @@ RAID_EXECUTION_SUMMARY = text("""
       AND f.kill = true
     GROUP BY e.name, f.fight_id, f.duration_ms
     ORDER BY f.fight_id ASC
+    LIMIT 25
 """)
 
 SPEC_LEADERBOARD = text("""
@@ -237,6 +240,7 @@ SPEC_LEADERBOARD = text("""
     GROUP BY fp.player_class, fp.player_spec
     HAVING COUNT(*) >= 3
     ORDER BY avg_dps DESC
+    LIMIT 50
 """)
 
 REPORTS_LIST = text("""

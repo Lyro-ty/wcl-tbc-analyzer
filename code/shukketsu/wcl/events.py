@@ -16,8 +16,8 @@ async def fetch_all_events(
     end_time: float,
     data_type: str,
     source_id: int | None = None,
-) -> list[dict]:
-    """Fetch all events of a given type, paginating through nextPageTimestamp.
+):
+    """Yield event pages as lists instead of accumulating all in memory.
 
     Args:
         wcl: WCLClient instance.
@@ -27,12 +27,12 @@ async def fetch_all_events(
         data_type: WCL EventDataType (e.g. "Deaths", "Casts", "DamageDone").
         source_id: Optional actor source ID filter.
 
-    Returns:
-        Combined list of all event dicts across all pages.
+    Yields:
+        Lists of event dicts, one per API page.
     """
     query = REPORT_EVENTS.replace("RATE_LIMIT", RATE_LIMIT_FRAG)
-    all_events: list[dict] = []
     current_start = start_time
+    total_fetched = 0
 
     while True:
         variables: dict = {
@@ -48,7 +48,9 @@ async def fetch_all_events(
         events_data = raw["reportData"]["report"]["events"]
 
         page_events = events_data.get("data", [])
-        all_events.extend(page_events)
+        total_fetched += len(page_events)
+        if page_events:
+            yield page_events
 
         next_page = events_data.get("nextPageTimestamp")
         if next_page is None:
@@ -57,11 +59,10 @@ async def fetch_all_events(
         current_start = next_page
         logger.debug(
             "Events pagination: fetched %d events so far, next page at %d",
-            len(all_events), next_page,
+            total_fetched, next_page,
         )
 
     logger.info(
         "Fetched %d %s events for %s (%.0f-%.0f)",
-        len(all_events), data_type, report_code, start_time, end_time,
+        total_fetched, data_type, report_code, start_time, end_time,
     )
-    return all_events

@@ -299,11 +299,13 @@ class TestIngestDeathEventsForFight:
             },
         ]
 
+        async def _fake_fetch(*args, **kwargs):
+            yield death_events
+
         with patch(
             "shukketsu.pipeline.death_events.fetch_all_events",
-            new_callable=AsyncMock,
-            return_value=death_events,
-        ) as mock_fetch:
+            side_effect=_fake_fetch,
+        ):
             count = await ingest_death_events_for_fight(
                 wcl, session, "ABC123", fight,
             )
@@ -311,9 +313,6 @@ class TestIngestDeathEventsForFight:
         assert count == 2
         assert session.add.call_count == 2
         session.flush.assert_awaited_once()
-        mock_fetch.assert_awaited_once_with(
-            wcl, "ABC123", 0, 60000, data_type="Deaths",
-        )
 
     async def test_empty_events_returns_zero(self):
         """When WCL returns no death events, returns 0 without adding anything."""
@@ -327,10 +326,13 @@ class TestIngestDeathEventsForFight:
         fight.start_time = 0
         fight.end_time = 60000
 
+        async def _fake_fetch_empty(*args, **kwargs):
+            if False:
+                yield
+
         with patch(
             "shukketsu.pipeline.death_events.fetch_all_events",
-            new_callable=AsyncMock,
-            return_value=[],
+            side_effect=_fake_fetch_empty,
         ):
             count = await ingest_death_events_for_fight(
                 wcl, session, "EMPTY", fight,

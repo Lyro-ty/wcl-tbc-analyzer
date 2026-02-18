@@ -450,7 +450,7 @@ class TestIngestCastEventsForFight:
         actors = {1: "Lyro", 2: "Healer"}
         player_class_map = {"Lyro": "Warrior", "Healer": "Priest"}
 
-        # Mock fetch_all_events to return some cast events
+        # Mock fetch_all_events as async generator yielding one page
         raw_events = [
             _make_event(1, "begincast", 100, "Slam", 0),
             _make_event(1, "cast", 100, "Slam", 1500),
@@ -459,10 +459,12 @@ class TestIngestCastEventsForFight:
             _make_event(99, "cast", 400, "NPC Spell", 2000),  # NPC, skipped
         ]
 
+        async def _fake_fetch(*args, **kwargs):
+            yield raw_events
+
         with patch(
             "shukketsu.pipeline.cast_events.fetch_all_events",
-            new_callable=AsyncMock,
-            return_value=raw_events,
+            side_effect=_fake_fetch,
         ):
             total = await ingest_cast_events_for_fight(
                 wcl, session, "ABC123", fight, actors, player_class_map,
@@ -493,10 +495,14 @@ class TestIngestCastEventsForFight:
         fight.start_time = 0
         fight.end_time = 60_000
 
+        async def _fake_fetch_empty(*args, **kwargs):
+            # Empty async generator — yields nothing
+            if False:
+                yield
+
         with patch(
             "shukketsu.pipeline.cast_events.fetch_all_events",
-            new_callable=AsyncMock,
-            return_value=[],
+            side_effect=_fake_fetch_empty,
         ):
             total = await ingest_cast_events_for_fight(
                 wcl, session, "ABC", fight, {}, {},

@@ -157,20 +157,22 @@ async def ingest_resource_data_for_fight(
             delete(ResourceSnapshot).where(ResourceSnapshot.fight_id == fight.id)
         )
 
-        # Fetch resource events from WCL
-        events = await fetch_all_events(
+        # Fetch resource events from WCL (async generator yields pages)
+        all_events: list[dict] = []
+        async for page in fetch_all_events(
             wcl, report_code, fight.start_time, fight.end_time,
             data_type="Resources",
-        )
+        ):
+            all_events.extend(page)
 
-        if not events:
+        if not all_events:
             return 0
 
         fight_duration_ms = fight.end_time - fight.start_time
 
         # Compute snapshots and insert
         snapshots = compute_resource_snapshots(
-            events, fight.id, fight_duration_ms, actors,
+            all_events, fight.id, fight_duration_ms, actors,
             fight_start_time=fight.start_time,
         )
         for snapshot in snapshots:

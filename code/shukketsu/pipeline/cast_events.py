@@ -301,17 +301,19 @@ async def ingest_cast_events_for_fight(
                 delete(model).where(model.fight_id == fight.id)
             )
 
-        # Fetch cast events from WCL
-        events = await fetch_all_events(
+        # Fetch cast events from WCL (async generator yields pages)
+        all_events: list[dict] = []
+        async for page in fetch_all_events(
             wcl, report_code, fight.start_time, fight.end_time,
             data_type="Casts",
-        )
+        ):
+            all_events.extend(page)
 
-        if not events:
+        if not all_events:
             return 0
 
         # Parse raw events into CastEvent ORM objects
-        cast_event_rows = parse_cast_events(events, fight.id, actors)
+        cast_event_rows = parse_cast_events(all_events, fight.id, actors)
         for row in cast_event_rows:
             session.add(row)
 

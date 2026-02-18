@@ -104,17 +104,19 @@ async def ingest_death_events_for_fight(
             delete(DeathDetail).where(DeathDetail.fight_id == fight.id)
         )
 
-        # Fetch death events from WCL
-        events = await fetch_all_events(
+        # Fetch death events from WCL (async generator yields pages)
+        all_events: list[dict] = []
+        async for page in fetch_all_events(
             wcl, report_code, fight.start_time, fight.end_time,
             data_type="Deaths",
-        )
+        ):
+            all_events.extend(page)
 
-        if not events:
+        if not all_events:
             return 0
 
         # Parse and insert
-        details = parse_death_events(events, fight.id)
+        details = parse_death_events(all_events, fight.id)
         for detail in details:
             session.add(detail)
         await session.flush()
