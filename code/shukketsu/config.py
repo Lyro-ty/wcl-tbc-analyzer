@@ -31,6 +31,7 @@ class LLMConfig(BaseModel):
 class AppConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8000
+    api_key: str = ""  # empty = auth disabled
 
 
 class LangfuseConfig(BaseModel):

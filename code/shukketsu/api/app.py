@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,8 +12,8 @@ from shukketsu.agent.graph import create_graph
 from shukketsu.agent.llm import create_llm
 from shukketsu.agent.tool_utils import set_session_factory
 from shukketsu.agent.tools import ALL_TOOLS
+from shukketsu.api.deps import set_dependencies, verify_api_key
 from shukketsu.api.routes.analyze import set_graph, set_langfuse_handler
-from shukketsu.api.routes.data import set_session_factory as set_data_session_factory
 from shukketsu.api.routes.health import set_health_deps
 from shukketsu.config import get_settings
 from shukketsu.db.engine import create_db_engine, create_session_factory
@@ -49,7 +49,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     engine = create_db_engine(settings)
     session_factory = create_session_factory(engine)
     set_session_factory(session_factory)
-    set_data_session_factory(session_factory)
     logger.info("Database engine created: %s", settings.db.url.split("@")[-1])
 
     # LLM + Agent
@@ -60,6 +59,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         "Agent graph compiled with %d tools, model=%s",
         len(ALL_TOOLS), settings.llm.model,
     )
+
+    # Wire up DI for data routes
+    set_dependencies(session_factory=session_factory, graph=graph)
 
     # Health check dependencies
     set_health_deps(session_factory=session_factory, llm_base_url=settings.llm.base_url)
@@ -126,10 +128,12 @@ def create_app() -> FastAPI:
     from shukketsu.api.routes.data import router as data_router
     from shukketsu.api.routes.health import router as health_router
 
+    # Health router has no auth
     app.include_router(health_router)
-    app.include_router(analyze_router)
-    app.include_router(data_router)
-    app.include_router(auto_ingest_router)
+    # Protected routers require API key (when configured)
+    app.include_router(data_router, dependencies=[Depends(verify_api_key)])
+    app.include_router(analyze_router, dependencies=[Depends(verify_api_key)])
+    app.include_router(auto_ingest_router, dependencies=[Depends(verify_api_key)])
 
     # Serve frontend static files (production build)
     if FRONTEND_DIST.is_dir():

@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from shukketsu.api.routes.data import router, set_session_factory
+from shukketsu.api.routes.data.fights import router
 
 
 def _make_row(**kwargs):
@@ -20,7 +20,7 @@ def _make_row(**kwargs):
 @pytest.fixture
 def app():
     app = FastAPI()
-    app.include_router(router)
+    app.include_router(router, prefix="/api/data")
     return app
 
 
@@ -29,8 +29,15 @@ def client(app):
     return TestClient(app)
 
 
+def _mock_get_db(mock_session):
+    """Create a mock get_db dependency that yields the given session."""
+    async def _override():
+        yield mock_session
+    return _override
+
+
 class TestPhaseEndpoint:
-    def test_returns_phases_for_known_encounter(self, client):
+    def test_returns_phases_for_known_encounter(self, app, client):
         mock_rows = [
             _make_row(
                 report_code="abc123", fight_id=4,
@@ -50,8 +57,8 @@ class TestPhaseEndpoint:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        mock_factory = MagicMock(return_value=mock_session)
-        set_session_factory(mock_factory)
+        from shukketsu.api.deps import get_db
+        app.dependency_overrides[get_db] = _mock_get_db(mock_session)
 
         response = client.get("/api/data/reports/abc123/fights/4/phases")
         assert response.status_code == 200
@@ -69,7 +76,9 @@ class TestPhaseEndpoint:
         assert len(data["players"]) == 1
         assert data["players"][0]["player_name"] == "Lyro"
 
-    def test_returns_single_phase_for_unknown_encounter(self, client):
+        app.dependency_overrides.clear()
+
+    def test_returns_single_phase_for_unknown_encounter(self, app, client):
         mock_rows = [
             _make_row(
                 report_code="abc123", fight_id=1,
@@ -89,8 +98,8 @@ class TestPhaseEndpoint:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        mock_factory = MagicMock(return_value=mock_session)
-        set_session_factory(mock_factory)
+        from shukketsu.api.deps import get_db
+        app.dependency_overrides[get_db] = _mock_get_db(mock_session)
 
         response = client.get("/api/data/reports/abc123/fights/1/phases")
         assert response.status_code == 200
@@ -99,20 +108,24 @@ class TestPhaseEndpoint:
         assert len(data["phases"]) == 1
         assert data["phases"][0]["name"] == "Full Fight"
 
-    def test_returns_404_when_no_data(self, client):
+        app.dependency_overrides.clear()
+
+    def test_returns_404_when_no_data(self, app, client):
         mock_result = MagicMock()
         mock_result.fetchall.return_value = []
 
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        mock_factory = MagicMock(return_value=mock_session)
-        set_session_factory(mock_factory)
+        from shukketsu.api.deps import get_db
+        app.dependency_overrides[get_db] = _mock_get_db(mock_session)
 
         response = client.get("/api/data/reports/missing/fights/99/phases")
         assert response.status_code == 404
 
-    def test_phase_estimated_times(self, client):
+        app.dependency_overrides.clear()
+
+    def test_phase_estimated_times(self, app, client):
         """Phase start/end/duration should be estimated from fight duration."""
         mock_rows = [
             _make_row(
@@ -133,8 +146,8 @@ class TestPhaseEndpoint:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        mock_factory = MagicMock(return_value=mock_session)
-        set_session_factory(mock_factory)
+        from shukketsu.api.deps import get_db
+        app.dependency_overrides[get_db] = _mock_get_db(mock_session)
 
         response = client.get("/api/data/reports/abc123/fights/4/phases")
         data = response.json()
@@ -150,3 +163,5 @@ class TestPhaseEndpoint:
         assert p2["estimated_start_ms"] == 70000
         assert p2["estimated_end_ms"] == 200000
         assert p2["estimated_duration_ms"] == 130000
+
+        app.dependency_overrides.clear()
