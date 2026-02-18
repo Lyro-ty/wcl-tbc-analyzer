@@ -55,7 +55,12 @@ def db_tool(fn):
             return await fn(session, *args, **kwargs)
         except Exception as e:
             logger.exception("Tool error in %s", fn.__name__)
-            return f"Error retrieving data: {e}"
+            error_type = type(e).__name__
+            return (
+                f"Error retrieving data: {error_type}"
+                f" in {fn.__name__}."
+                " Please try a different query."
+            )
         finally:
             await session.close()
 

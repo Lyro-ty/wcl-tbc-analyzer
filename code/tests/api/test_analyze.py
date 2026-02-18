@@ -467,3 +467,25 @@ async def test_lifespan_skips_langfuse_when_disabled(monkeypatch):
 
     mock_set_handler.assert_not_called()
     get_settings.cache_clear()
+
+
+# --- Streaming semaphore tests ---
+
+
+class TestAnalyzeStreamSemaphore:
+    def test_stream_uses_semaphore(self):
+        """Streaming endpoint must use the same LLM semaphore as /analyze."""
+        import inspect
+
+        from shukketsu.api.routes import analyze as mod
+
+        source = inspect.getsource(mod.analyze_stream)
+        assert "_llm_semaphore" in source
+
+
+class TestStreamingBufferLimit:
+    def test_think_buffer_has_max_size(self):
+        """Streaming think-tag buffer must have a maximum size."""
+        from shukketsu.api.routes import analyze as mod
+        assert hasattr(mod, '_MAX_THINK_BUFFER')
+        assert mod._MAX_THINK_BUFFER > 0

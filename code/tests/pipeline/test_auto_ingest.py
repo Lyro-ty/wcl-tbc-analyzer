@@ -1,5 +1,6 @@
 """Tests for the auto-ingest background service."""
 
+import inspect
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from shukketsu.pipeline.auto_ingest import AutoIngestService
@@ -391,3 +392,30 @@ class TestAutoIngestTrigger:
 
         # Clean up
         svc._poll_lock.release()
+
+
+class TestAutoIngestShutdown:
+    def test_stop_cancels_trigger_task(self):
+        """stop() must cancel _trigger_task if one is running."""
+        source = inspect.getsource(AutoIngestService.stop)
+        assert "_trigger_task" in source
+
+
+class TestAutoIngestBackoff:
+    def test_poll_loop_tracks_consecutive_errors(self):
+        """Poll loop should track consecutive errors for backoff."""
+        source = inspect.getsource(AutoIngestService._poll_loop)
+        assert "_consecutive_errors" in source
+
+
+class TestAutoIngestEnrichmentLogging:
+    def test_ingest_result_captured(self):
+        """auto_ingest must capture IngestResult to log enrichment errors."""
+        source = inspect.getsource(AutoIngestService._poll_once_inner)
+        # Must capture the return value of ingest_report
+        assert "= await ingest_report(" in source or "=await ingest_report(" in source
+
+    def test_enrichment_errors_logged(self):
+        """auto_ingest must check and log enrichment_errors."""
+        source = inspect.getsource(AutoIngestService._poll_once_inner)
+        assert "enrichment_errors" in source

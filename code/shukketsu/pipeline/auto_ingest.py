@@ -27,6 +27,7 @@ class AutoIngestService:
         self._status: str = "idle"  # idle, polling, ingesting, error
         self._last_error: str | None = None
         self._stats: dict = {"polls": 0, "reports_ingested": 0, "errors": 0}
+        self._consecutive_errors: int = 0
 
     @property
     def enabled(self) -> bool:
@@ -47,6 +48,10 @@ class AutoIngestService:
 
     async def stop(self):
         """Stop the background polling loop."""
+        if self._trigger_task and not self._trigger_task.done():
+            self._trigger_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._trigger_task
         if self._task and not self._task.done():
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -55,11 +60,13 @@ class AutoIngestService:
         logger.info("Auto-ingest stopped")
 
     async def _poll_loop(self):
-        """Main polling loop."""
-        interval = self.settings.auto_ingest.poll_interval_minutes * 60
+        """Main polling loop with exponential backoff on errors."""
+        base_interval = self.settings.auto_ingest.poll_interval_minutes * 60
+        max_backoff = base_interval * 8
         while True:
             try:
                 await self._poll_once()
+                self._consecutive_errors = 0
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -67,7 +74,21 @@ class AutoIngestService:
                 self._status = "error"
                 self._last_error = str(exc)
                 self._stats["errors"] += 1
-            await asyncio.sleep(interval)
+                self._consecutive_errors += 1
+
+            if self._consecutive_errors > 0:
+                backoff = min(
+                    base_interval * (2 ** self._consecutive_errors),
+                    max_backoff,
+                )
+                logger.warning(
+                    "Auto-ingest backing off: %ds"
+                    " (consecutive errors: %d)",
+                    backoff, self._consecutive_errors,
+                )
+                await asyncio.sleep(backoff)
+            else:
+                await asyncio.sleep(base_interval)
 
     async def _poll_once(self):
         """Single poll: fetch guild reports, ingest new ones (mutex-protected)."""
@@ -160,11 +181,16 @@ class AutoIngestService:
                         self._session_factory() as session,
                         session.begin(),
                     ):
-                        await ingest_report(
+                        ingest_result = await ingest_report(
                             wcl, session, code,
                             my_character_names=my_names,
                             ingest_tables=cfg.with_tables,
                             ingest_events=cfg.with_events,
+                        )
+                    if ingest_result.enrichment_errors:
+                        logger.warning(
+                            "Enrichment errors for %s: %s",
+                            code, ingest_result.enrichment_errors,
                         )
                     # Snapshot in separate transaction after successful commit
                     try:

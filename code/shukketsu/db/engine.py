@@ -15,6 +15,11 @@ def create_db_engine(settings: Settings) -> AsyncEngine:
         pool_size=settings.db.pool_size,
         max_overflow=settings.db.max_overflow,
         pool_pre_ping=True,
+        connect_args={
+            "server_settings": {
+                "statement_timeout": str(settings.db.statement_timeout_ms),
+            },
+        },
     )
 
 

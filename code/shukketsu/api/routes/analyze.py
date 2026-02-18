@@ -13,6 +13,7 @@ from shukketsu.agent.utils import strip_think_tags as _strip_think_tags
 logger = logging.getLogger(__name__)
 
 _THINK_PATTERN = re.compile(r"^.*?</think>\s*", flags=re.DOTALL)
+_MAX_THINK_BUFFER = 32768  # 32KB max for think-tag buffering
 
 
 router = APIRouter(prefix="/api", tags=["analysis"])
@@ -110,48 +111,65 @@ async def analyze_stream(request: AnalyzeRequest):
             handler = _get_langfuse_handler()
             if handler:
                 config["callbacks"] = [handler]
-            async for chunk, metadata in graph.astream(
-                {"messages": [HumanMessage(content=request.question)]},
-                stream_mode="messages",
-                config=config,
-            ):
-                # Track query_type from state updates
-                if isinstance(metadata, dict):
-                    qt = metadata.get("query_type")
-                    if qt:
-                        query_type = qt
+            async with _llm_semaphore:
+                async for chunk, metadata in graph.astream(
+                    {"messages": [HumanMessage(content=request.question)]},
+                    stream_mode="messages",
+                    config=config,
+                ):
+                    # Track query_type from state updates
+                    if isinstance(metadata, dict):
+                        qt = metadata.get("query_type")
+                        if qt:
+                            query_type = qt
 
-                # Only stream tokens from the analyze node
-                if not isinstance(metadata, dict):
-                    continue
-                if metadata.get("langgraph_node") != "analyze":
-                    continue
+                    # Only stream tokens from the analyze node
+                    if not isinstance(metadata, dict):
+                        continue
+                    if metadata.get("langgraph_node") != "analyze":
+                        continue
 
-                if not hasattr(chunk, "content") or not chunk.content:
-                    continue
+                    if not hasattr(chunk, "content") or not chunk.content:
+                        continue
 
-                token = chunk.content
+                    token = chunk.content
 
-                if not think_done:
-                    buffer += token
-                    if "</think>" in buffer:
-                        after = _THINK_PATTERN.sub("", buffer)
-                        think_done = True
-                        buffer = ""
-                        if after.strip():
-                            yield {"data": json.dumps({"token": after})}
-                    continue
+                    if not think_done:
+                        buffer += token
+                        if len(buffer) > _MAX_THINK_BUFFER:
+                            cleaned = _strip_think_tags(buffer)
+                            if cleaned.strip():
+                                yield {
+                                    "data": json.dumps(
+                                        {"token": cleaned}
+                                    )
+                                }
+                            buffer = ""
+                            think_done = True
+                            continue
+                        if "</think>" in buffer:
+                            after = _THINK_PATTERN.sub("", buffer)
+                            think_done = True
+                            buffer = ""
+                            if after.strip():
+                                yield {"data": json.dumps({"token": after})}
+                        continue
 
-                yield {"data": json.dumps({"token": token})}
+                    yield {"data": json.dumps({"token": token})}
 
-            # If we buffered but never saw </think>, flush as content
-            if buffer and not think_done:
-                cleaned = _strip_think_tags(buffer)
-                if cleaned.strip():
-                    yield {"data": json.dumps({"token": cleaned})}
+                # If we buffered but never saw </think>, flush as content
+                if buffer and not think_done:
+                    cleaned = _strip_think_tags(buffer)
+                    if cleaned.strip():
+                        yield {"data": json.dumps({"token": cleaned})}
 
-            yield {"data": json.dumps({"done": True, "query_type": query_type})}
+                yield {"data": json.dumps({"done": True, "query_type": query_type})}
 
+        except asyncio.CancelledError:
+            logger.info(
+                "Streaming analysis cancelled (client disconnect)"
+            )
+            return
         except Exception:
             logger.exception("Streaming analysis failed")
             yield {"event": "error", "data": json.dumps({"detail": "Analysis failed"})}

@@ -26,6 +26,9 @@ def mock_session_factory():
     session = AsyncMock()
     session.execute = AsyncMock()
     session.close = AsyncMock()
+    # Support async context manager: async with factory() as session
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
     factory = MagicMock(return_value=session)
     return factory
 
@@ -174,8 +177,8 @@ async def test_health_no_deps_configured(app):
     assert body["llm"] == "not configured"
 
 
-async def test_health_db_session_always_closed(app, mock_session_factory):
-    """DB session is closed even when execute raises."""
+async def test_health_db_session_cleanup_on_error(app, mock_session_factory):
+    """DB session context manager __aexit__ is called even when execute raises."""
     mock_session_factory.return_value.execute.side_effect = Exception("DB error")
     set_health_deps(
         session_factory=mock_session_factory,
@@ -186,4 +189,19 @@ async def test_health_db_session_always_closed(app, mock_session_factory):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         await client.get("/health")
 
-    mock_session_factory.return_value.close.assert_awaited_once()
+    # With async with, __aexit__ is always called for cleanup
+    mock_session_factory.return_value.__aexit__.assert_awaited_once()
+
+
+class TestHealthSessionManagement:
+    def test_health_uses_async_context_manager(self):
+        """Health check must use 'async with' for DB session, not bare call."""
+        import inspect
+
+        from shukketsu.api.routes import health
+
+        source = inspect.getsource(health.health)
+        assert "async with _session_factory()" in source, (
+            "DB session should use 'async with _session_factory()' "
+            "instead of manual try/finally"
+        )

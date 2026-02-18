@@ -152,7 +152,7 @@ class TestGetPhaseAnalysis:
             )
 
         assert "Error" in result
-        assert "connection lost" in result
+        assert "connection lost" not in result
 
     async def test_shows_kill_status(self):
         """Tool should show kill/wipe status."""

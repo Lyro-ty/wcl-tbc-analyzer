@@ -27,15 +27,13 @@ async def health():
 
     # Check database
     if _session_factory:
-        session = _session_factory()
         try:
-            await session.execute(text("SELECT 1"))
+            async with _session_factory() as session:
+                await session.execute(text("SELECT 1"))
         except Exception as e:
             logger.warning("Health check: DB unreachable: %s", e)
             db_status = "error"
             healthy = False
-        finally:
-            await session.close()
     else:
         db_status = "not configured"
 

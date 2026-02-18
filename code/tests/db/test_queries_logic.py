@@ -17,3 +17,11 @@ class TestCompareTwoRaidsQuery:
         raid_b_section = sql.split("raid_b AS")[1].split("SELECT COALESCE")[0]
         group_by = raid_b_section.split("GROUP BY")[1].strip()
         assert "f.id" in group_by
+
+
+class TestGearChangesQuery:
+    def test_uses_min_id_not_min_fight_id(self):
+        """GEAR_CHANGES should use MIN(f2.id) for stable ordering."""
+        sql = q.GEAR_CHANGES.text
+        assert "MIN(f2.id)" in sql
+        assert "MIN(f2.fight_id)" not in sql

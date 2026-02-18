@@ -1,5 +1,6 @@
 """FastAPI dependency injection providers."""
 
+import asyncio
 import hmac
 import time
 from collections.abc import AsyncGenerator
@@ -16,6 +17,7 @@ _graph = None
 
 # Cooldown tracking for WCL-calling endpoints
 _cooldowns: dict[str, float] = {}
+_cooldown_lock = asyncio.Lock()
 
 
 def set_dependencies(session_factory, graph=None) -> None:
@@ -62,14 +64,18 @@ def cooldown(key: str, seconds: int = 300):
     """FastAPI dependency factory -- rejects calls within cooldown window."""
 
     async def _check_cooldown() -> None:
-        now = time.monotonic()
-        last = _cooldowns.get(key, 0)
-        remaining = seconds - (now - last)
-        if remaining > 0:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Please wait {int(remaining)}s before retrying",
-            )
-        _cooldowns[key] = now
+        async with _cooldown_lock:
+            now = time.monotonic()
+            last = _cooldowns.get(key, 0)
+            remaining = seconds - (now - last)
+            if remaining > 0:
+                raise HTTPException(
+                    status_code=429,
+                    detail=(
+                        f"Please wait {int(remaining)}s"
+                        " before retrying"
+                    ),
+                )
+            _cooldowns[key] = now
 
     return Depends(_check_cooldown)

@@ -16,6 +16,7 @@ class DatabaseConfig(BaseModel):
     echo: bool = False
     pool_size: int = 5
     max_overflow: int = 10
+    statement_timeout_ms: int = 30000
 
 
 class LLMConfig(BaseModel):

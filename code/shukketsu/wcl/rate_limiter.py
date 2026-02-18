@@ -8,6 +8,8 @@ logger = logging.getLogger(__name__)
 class RateLimiter:
     """Tracks WCL API rate limit points and pauses requests when near the limit."""
 
+    MAX_SLEEP_SECONDS: int = 3600
+
     def __init__(self, safety_margin: float = 0.1) -> None:
         self.safety_margin = safety_margin
         self.limit_per_hour: int = 3600
@@ -36,10 +38,13 @@ class RateLimiter:
 
     async def wait_if_needed(self) -> None:
         if not self.is_safe:
+            sleep_duration = min(self._points_reset_in, self.MAX_SLEEP_SECONDS)
             logger.warning(
-                "Rate limit near threshold (%d/%d), sleeping %ds",
+                "Rate limit near threshold (%d/%d), sleeping %ds"
+                " (raw reset_in=%ds)",
                 self._points_spent,
                 self.limit_per_hour,
+                sleep_duration,
                 self._points_reset_in,
             )
-            await asyncio.sleep(self._points_reset_in)
+            await asyncio.sleep(sleep_duration)

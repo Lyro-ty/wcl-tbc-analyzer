@@ -692,8 +692,8 @@ GEAR_CHANGES = text("""
         JOIN fights f ON gs.fight_id = f.id
         WHERE f.report_code = :report_code_old
           AND gs.player_name ILIKE :player_name
-          AND f.fight_id = (
-              SELECT MIN(f2.fight_id) FROM fights f2
+          AND f.id = (
+              SELECT MIN(f2.id) FROM fights f2
               WHERE f2.report_code = :report_code_old
           )
     ),
@@ -703,8 +703,8 @@ GEAR_CHANGES = text("""
         JOIN fights f ON gs.fight_id = f.id
         WHERE f.report_code = :report_code_new
           AND gs.player_name ILIKE :player_name
-          AND f.fight_id = (
-              SELECT MIN(f2.fight_id) FROM fights f2
+          AND f.id = (
+              SELECT MIN(f2.id) FROM fights f2
               WHERE f2.report_code = :report_code_new
           )
     )
