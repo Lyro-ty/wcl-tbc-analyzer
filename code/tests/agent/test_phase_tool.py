@@ -23,7 +23,7 @@ class TestGetPhaseAnalysis:
 
         from shukketsu.agent.tools import get_phase_analysis
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_phase_analysis.ainvoke(
                 {"report_code": "abc123", "fight_id": 4}
             )
@@ -53,7 +53,7 @@ class TestGetPhaseAnalysis:
 
         from shukketsu.agent.tools import get_phase_analysis
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_phase_analysis.ainvoke(
                 {"report_code": "abc123", "fight_id": 1}
             )
@@ -80,7 +80,7 @@ class TestGetPhaseAnalysis:
 
         from shukketsu.agent.tools import get_phase_analysis
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_phase_analysis.ainvoke(
                 {"report_code": "abc123", "fight_id": 4}
             )
@@ -111,7 +111,7 @@ class TestGetPhaseAnalysis:
 
         from shukketsu.agent.tools import get_phase_analysis
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_phase_analysis.ainvoke(
                 {"report_code": "abc123", "fight_id": 4, "player_name": "Lyro"}
             )
@@ -132,7 +132,7 @@ class TestGetPhaseAnalysis:
 
         from shukketsu.agent.tools import get_phase_analysis
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_phase_analysis.ainvoke(
                 {"report_code": "missing", "fight_id": 99}
             )
@@ -146,7 +146,7 @@ class TestGetPhaseAnalysis:
 
         from shukketsu.agent.tools import get_phase_analysis
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_phase_analysis.ainvoke(
                 {"report_code": "abc123", "fight_id": 4}
             )
@@ -173,7 +173,7 @@ class TestGetPhaseAnalysis:
 
         from shukketsu.agent.tools import get_phase_analysis
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_phase_analysis.ainvoke(
                 {"report_code": "abc123", "fight_id": 2}
             )
@@ -206,7 +206,7 @@ class TestGetPhaseAnalysis:
 
         from shukketsu.agent.tools import get_phase_analysis
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_phase_analysis.ainvoke(
                 {"report_code": "abc123", "fight_id": 4}
             )

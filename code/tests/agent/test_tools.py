@@ -68,7 +68,7 @@ class TestGetMyPerformance:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_my_performance.ainvoke(
                 {"encounter_name": "Gruul", "player_name": "TestRogue"}
             )
@@ -92,7 +92,7 @@ class TestGetTopRankings:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_top_rankings.ainvoke(
                 {"encounter_name": "Gruul", "class_name": "Rogue", "spec_name": "Combat"}
             )
@@ -116,7 +116,7 @@ class TestGetResourceUsage:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_resource_usage.ainvoke(
                 {"report_code": "abc123", "fight_id": 1,
                  "player_name": "TestWarr"}
@@ -143,7 +143,7 @@ class TestGetDeathsAndMechanics:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_deaths_and_mechanics.ainvoke(
                 {"encounter_name": "Gothik"}
             )
@@ -169,7 +169,7 @@ class TestCompareRaidToTop:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await compare_raid_to_top.ainvoke({"report_code": "abc123"})
 
         assert "Patchwerk" in result
@@ -183,7 +183,7 @@ class TestCompareRaidToTop:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await compare_raid_to_top.ainvoke({"report_code": "missing"})
 
         assert "no" in result.lower() or "not found" in result.lower()
@@ -210,7 +210,7 @@ class TestCompareTwoRaids:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await compare_two_raids.ainvoke(
                 {"report_a": "abc123", "report_b": "def456"}
             )
@@ -225,7 +225,7 @@ class TestCompareTwoRaids:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await compare_two_raids.ainvoke(
                 {"report_a": "abc123", "report_b": "def456"}
             )
@@ -251,7 +251,7 @@ class TestGetRaidExecution:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_raid_execution.ainvoke({"report_code": "abc123"})
 
         assert "Patchwerk" in result
@@ -265,7 +265,7 @@ class TestGetRaidExecution:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_raid_execution.ainvoke({"report_code": "missing"})
 
         assert "no" in result.lower() or "not found" in result.lower()
@@ -276,7 +276,7 @@ class TestToolErrorHandling:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = Exception("connection lost")
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_my_performance.ainvoke(
                 {"encounter_name": "Gruul", "player_name": "Test"}
             )
@@ -288,7 +288,7 @@ class TestToolErrorHandling:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = Exception("timeout")
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_raid_execution.ainvoke({"report_code": "abc123"})
 
         assert "Error" in result
@@ -298,7 +298,7 @@ class TestToolErrorHandling:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = Exception("connection refused")
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await compare_raid_to_top.ainvoke({"report_code": "abc123"})
 
         assert "Error" in result
@@ -326,7 +326,7 @@ class TestGetAbilityBreakdown:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_ability_breakdown.ainvoke(
                 {"report_code": "abc123", "fight_id": 1, "player_name": "TestWarr"}
             )
@@ -342,7 +342,7 @@ class TestGetAbilityBreakdown:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_ability_breakdown.ainvoke(
                 {"report_code": "abc123", "fight_id": 1, "player_name": "Nobody"}
             )
@@ -353,7 +353,7 @@ class TestGetAbilityBreakdown:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = Exception("db error")
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_ability_breakdown.ainvoke(
                 {"report_code": "abc123", "fight_id": 1, "player_name": "Test"}
             )
@@ -381,7 +381,7 @@ class TestGetBuffAnalysis:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_buff_analysis.ainvoke(
                 {"report_code": "abc123", "fight_id": 1, "player_name": "TestWarr"}
             )
@@ -413,7 +413,7 @@ class TestGetBuffAnalysis:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_buff_analysis.ainvoke(
                 {"report_code": "abc123", "fight_id": 1, "player_name": "Test"}
             )
@@ -429,7 +429,7 @@ class TestGetBuffAnalysis:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_buff_analysis.ainvoke(
                 {"report_code": "abc123", "fight_id": 1, "player_name": "Nobody"}
             )
@@ -465,7 +465,7 @@ class TestGetMyPerformanceBestsOnly:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_my_performance.ainvoke(
                 {"encounter_name": "", "player_name": "Lyro",
                  "bests_only": True}
@@ -494,7 +494,7 @@ class TestGetMyPerformanceBestsOnly:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_my_performance.ainvoke(
                 {"encounter_name": "Patchwerk", "player_name": "Lyro",
                  "bests_only": True}
@@ -514,7 +514,7 @@ class TestGetMyPerformanceBestsOnly:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_my_performance.ainvoke(
                 {"encounter_name": "", "player_name": "Nobody",
                  "bests_only": True}
@@ -526,7 +526,7 @@ class TestGetMyPerformanceBestsOnly:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = Exception("connection lost")
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_my_performance.ainvoke(
                 {"encounter_name": "", "player_name": "Test",
                  "bests_only": True}
@@ -552,7 +552,7 @@ class TestGetMyPerformanceBestsOnly:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_my_performance.ainvoke(
                 {"encounter_name": "", "player_name": "TestPlayer",
                  "bests_only": True}
@@ -589,7 +589,7 @@ class TestGetWipeProgression:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_wipe_progression.ainvoke(
                 {"report_code": "abc123", "encounter_name": "Patchwerk"}
             )
@@ -610,7 +610,7 @@ class TestGetWipeProgression:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_wipe_progression.ainvoke(
                 {"report_code": "abc123", "encounter_name": "Patchwerk"}
             )
@@ -621,7 +621,7 @@ class TestGetWipeProgression:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = Exception("connection lost")
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_wipe_progression.ainvoke(
                 {"report_code": "abc123", "encounter_name": "Patchwerk"}
             )
@@ -644,7 +644,7 @@ class TestGetWipeProgression:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_wipe_progression.ainvoke(
                 {"report_code": "xyz789", "encounter_name": "Kel'Thuzad"}
             )
@@ -684,7 +684,7 @@ class TestGetRegressions:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_regressions.ainvoke({})
 
         assert "REGRESSION" in result
@@ -717,7 +717,7 @@ class TestGetRegressions:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_regressions.ainvoke({"player_name": "Lyro"})
 
         assert "Lyro" in result
@@ -735,7 +735,7 @@ class TestGetRegressions:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_regressions.ainvoke({})
 
         assert "no significant" in result.lower() or "normal range" in result.lower()
@@ -745,7 +745,7 @@ class TestGetRegressions:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = Exception("connection lost")
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_regressions.ainvoke({})
 
         assert "Error" in result
@@ -771,7 +771,7 @@ class TestGetRegressions:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_regressions.ainvoke({})
 
         assert "REGRESSION" in result
@@ -804,7 +804,7 @@ class TestResolveMyFights:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await resolve_my_fights.ainvoke({})
 
         assert "abc123" in result
@@ -831,7 +831,7 @@ class TestResolveMyFights:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await resolve_my_fights.ainvoke(
                 {"encounter_name": "Patchwerk"}
             )
@@ -851,7 +851,7 @@ class TestResolveMyFights:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await resolve_my_fights.ainvoke({})
 
         assert "no recent kills" in result.lower()
@@ -864,7 +864,7 @@ class TestResolveMyFights:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await resolve_my_fights.ainvoke(
                 {"encounter_name": "Sapphiron"}
             )
@@ -877,7 +877,7 @@ class TestResolveMyFights:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = Exception("connection lost")
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await resolve_my_fights.ainvoke({})
 
         assert "Error" in result
@@ -898,7 +898,7 @@ class TestResolveMyFights:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await resolve_my_fights.ainvoke({})
 
         assert "N/A" in result
@@ -912,7 +912,7 @@ class TestResolveMyFights:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             await resolve_my_fights.ainvoke({"count": 3})
 
         call_args = mock_session.execute.call_args
@@ -965,7 +965,7 @@ class TestGetConsumableCheck:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = [fight_detail_result, consumable_result]
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_consumable_check.ainvoke(
                 {"report_code": "abc123", "fight_id": 4}
             )
@@ -1005,7 +1005,7 @@ class TestGetConsumableCheck:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = [fight_detail_result, consumable_result]
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_consumable_check.ainvoke(
                 {"report_code": "abc123", "fight_id": 4, "player_name": "Healbot"}
             )
@@ -1045,7 +1045,7 @@ class TestGetConsumableCheck:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = [fight_detail_result, consumable_result]
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_consumable_check.ainvoke(
                 {"report_code": "abc123", "fight_id": 4, "player_name": "Rogue"}
             )
@@ -1073,7 +1073,7 @@ class TestGetConsumableCheck:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = [fight_detail_result, consumable_result]
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_consumable_check.ainvoke(
                 {"report_code": "abc123", "fight_id": 4}
             )
@@ -1085,7 +1085,7 @@ class TestGetConsumableCheck:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = Exception("connection lost")
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_consumable_check.ainvoke(
                 {"report_code": "abc123", "fight_id": 4}
             )
@@ -1113,7 +1113,7 @@ class TestGetGearChanges:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_gear_changes.ainvoke(
                 {"player_name": "Lyro", "report_code_old": "abc123",
                  "report_code_new": "xyz789"}
@@ -1135,7 +1135,7 @@ class TestGetGearChanges:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_gear_changes.ainvoke(
                 {"player_name": "Lyro", "report_code_old": "abc123",
                  "report_code_new": "xyz789"}
@@ -1158,7 +1158,7 @@ class TestGetGearChanges:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_gear_changes.ainvoke(
                 {"player_name": "Lyro", "report_code_old": "abc123",
                  "report_code_new": "xyz789"}
@@ -1173,7 +1173,7 @@ class TestGetGearChanges:
         mock_session = AsyncMock()
         mock_session.execute.side_effect = Exception("connection lost")
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_gear_changes.ainvoke(
                 {"player_name": "Lyro", "report_code_old": "abc123",
                  "report_code_new": "xyz789"}
@@ -1191,7 +1191,7 @@ class TestNoResults:
         mock_session = AsyncMock()
         mock_session.execute.return_value = mock_result
 
-        with patch("shukketsu.agent.tools._get_session", return_value=mock_session):
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
             result = await get_my_performance.ainvoke(
                 {"encounter_name": "Gruul", "player_name": "Nobody"}
             )

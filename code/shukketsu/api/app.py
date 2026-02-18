@@ -10,7 +10,8 @@ from fastapi.staticfiles import StaticFiles
 
 from shukketsu.agent.graph import create_graph
 from shukketsu.agent.llm import create_llm
-from shukketsu.agent.tools import ALL_TOOLS, set_session_factory
+from shukketsu.agent.tool_utils import set_session_factory
+from shukketsu.agent.tools import ALL_TOOLS
 from shukketsu.api.routes.analyze import set_graph, set_langfuse_handler
 from shukketsu.api.routes.data import set_session_factory as set_data_session_factory
 from shukketsu.api.routes.health import set_health_deps
