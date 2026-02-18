@@ -3,6 +3,7 @@
 import functools
 import inspect
 import logging
+import re
 
 from langchain_core.tools import tool
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,10 +56,9 @@ def db_tool(fn):
             return await fn(session, *args, **kwargs)
         except Exception as e:
             logger.exception("Tool error in %s", fn.__name__)
-            error_type = type(e).__name__
+            msg = _sanitize_error(str(e))
             return (
-                f"Error retrieving data: {error_type}"
-                f" in {fn.__name__}."
+                f"Error in {fn.__name__}: {msg}."
                 " Please try a different query."
             )
         finally:
@@ -69,6 +69,27 @@ def db_tool(fn):
     wrapper.__signature__ = new_sig
 
     return tool(wrapper)
+
+
+_CONN_STRING_RE = re.compile(r'postgresql\+?\w*://[^\s]+')
+_SQL_DETAIL_RE = re.compile(
+    r'\[SQL:.*?\]', flags=re.DOTALL,
+)
+_SQLA_PREFIX_RE = re.compile(
+    r'\([\w.]+\)\s*', flags=re.DOTALL,
+)
+_TABLE_RE = re.compile(r'relation\s+"[^"]+"')
+
+
+def _sanitize_error(msg: str) -> str:
+    """Strip connection strings, SQL, and table names from error messages."""
+    msg = _CONN_STRING_RE.sub('[REDACTED]', msg)
+    msg = _SQL_DETAIL_RE.sub('[SQL REDACTED]', msg)
+    msg = _SQLA_PREFIX_RE.sub('', msg)
+    msg = _TABLE_RE.sub('[table REDACTED]', msg)
+    if len(msg) > 200:
+        msg = msg[:200] + "..."
+    return msg
 
 
 def _format_duration(ms: int) -> str:

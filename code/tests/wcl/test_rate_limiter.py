@@ -74,3 +74,21 @@ class TestRateLimiterSleepCap:
         })
         await rl.wait_if_needed()
         assert slept[0] == 3600  # capped, not 7200
+
+    async def test_wait_floors_at_one_second(self, monkeypatch):
+        """wait_if_needed() must sleep at least 1s to prevent busy-wait."""
+        slept = []
+
+        async def mock_sleep(duration):
+            slept.append(duration)
+
+        monkeypatch.setattr(asyncio, "sleep", mock_sleep)
+
+        rl = RateLimiter()
+        rl.update({
+            "pointsSpentThisHour": 3500,
+            "limitPerHour": 3600,
+            "pointsResetIn": 0,
+        })
+        await rl.wait_if_needed()
+        assert slept[0] == 1  # floored at 1, not 0

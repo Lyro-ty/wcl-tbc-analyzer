@@ -163,7 +163,10 @@ COMPARE_TWO_RAIDS = text("""
                SUM(fp.dispels) AS total_dispels,
                ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
                STRING_AGG(DISTINCT fp.player_spec || ' ' || fp.player_class, ', '
-                   ORDER BY fp.player_spec || ' ' || fp.player_class) AS composition
+                   ORDER BY fp.player_spec || ' ' || fp.player_class) AS composition,
+               ROW_NUMBER() OVER (
+                   PARTITION BY f.encounter_id ORDER BY f.id
+               ) AS rn
         FROM fights f
         JOIN encounters e ON f.encounter_id = e.id
         LEFT JOIN fight_performances fp ON fp.fight_id = f.id
@@ -180,7 +183,10 @@ COMPARE_TWO_RAIDS = text("""
                SUM(fp.dispels) AS total_dispels,
                ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
                STRING_AGG(DISTINCT fp.player_spec || ' ' || fp.player_class, ', '
-                   ORDER BY fp.player_spec || ' ' || fp.player_class) AS composition
+                   ORDER BY fp.player_spec || ' ' || fp.player_class) AS composition,
+               ROW_NUMBER() OVER (
+                   PARTITION BY f.encounter_id ORDER BY f.id
+               ) AS rn
         FROM fights f
         JOIN encounters e ON f.encounter_id = e.id
         LEFT JOIN fight_performances fp ON fp.fight_id = f.id
@@ -197,8 +203,9 @@ COMPARE_TWO_RAIDS = text("""
            a.player_count AS a_players, b.player_count AS b_players,
            a.composition AS a_comp, b.composition AS b_comp
     FROM raid_a a
-    FULL OUTER JOIN raid_b b ON a.encounter_id = b.encounter_id
-    ORDER BY COALESCE(a.encounter_name, b.encounter_name)
+    FULL OUTER JOIN raid_b b
+        ON a.encounter_id = b.encounter_id AND a.rn = b.rn
+    ORDER BY COALESCE(a.encounter_name, b.encounter_name), COALESCE(a.rn, b.rn)
 """)
 
 RAID_EXECUTION_SUMMARY = text("""

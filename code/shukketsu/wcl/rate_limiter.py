@@ -38,7 +38,7 @@ class RateLimiter:
 
     async def wait_if_needed(self) -> None:
         if not self.is_safe:
-            sleep_duration = min(self._points_reset_in, self.MAX_SLEEP_SECONDS)
+            sleep_duration = max(1, min(self._points_reset_in, self.MAX_SLEEP_SECONDS))
             logger.warning(
                 "Rate limit near threshold (%d/%d), sleeping %ds"
                 " (raw reset_in=%ds)",

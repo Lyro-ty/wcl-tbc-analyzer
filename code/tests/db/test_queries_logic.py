@@ -18,6 +18,14 @@ class TestCompareTwoRaidsQuery:
         group_by = raid_b_section.split("GROUP BY")[1].strip()
         assert "f.id" in group_by
 
+    def test_ctes_use_row_number_for_pairing(self):
+        """CTEs must use ROW_NUMBER to pair kills across raids, not Cartesian."""
+        sql = q.COMPARE_TWO_RAIDS.text
+        assert "ROW_NUMBER()" in sql
+        # JOIN must match on both encounter_id AND rn
+        join_section = sql.split("FROM raid_a")[1]
+        assert "a.rn = b.rn" in join_section
+
 
 class TestGearChangesQuery:
     def test_uses_min_id_not_min_fight_id(self):

@@ -78,7 +78,7 @@ class AutoIngestService:
 
             if self._consecutive_errors > 0:
                 backoff = min(
-                    base_interval * (2 ** self._consecutive_errors),
+                    base_interval * (2 ** (self._consecutive_errors - 1)),
                     max_backoff,
                 )
                 logger.warning(
@@ -236,5 +236,6 @@ class AutoIngestService:
             "guild_id": self.settings.guild.id,
             "guild_name": self.settings.guild.name,
             "poll_interval_minutes": self.settings.auto_ingest.poll_interval_minutes,
+            "consecutive_errors": self._consecutive_errors,
             "stats": dict(self._stats),
         }

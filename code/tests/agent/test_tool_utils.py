@@ -43,4 +43,5 @@ class TestDbToolErrorSanitization:
             result = await my_failing_tool.ainvoke({"x": 42})
 
         assert "my_failing_tool" in result
-        assert "some internal detail" not in result
+        # Non-sensitive details are preserved for LLM self-correction
+        assert "some internal detail" in result

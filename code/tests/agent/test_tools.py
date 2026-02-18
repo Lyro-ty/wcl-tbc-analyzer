@@ -282,7 +282,7 @@ class TestToolErrorHandling:
             )
 
         assert "Error" in result
-        assert "connection lost" not in result
+        assert "connection lost" in result
 
     async def test_db_error_on_raid_execution(self):
         mock_session = AsyncMock()
@@ -292,7 +292,7 @@ class TestToolErrorHandling:
             result = await get_raid_execution.ainvoke({"report_code": "abc123"})
 
         assert "Error" in result
-        assert "timeout" not in result
+        assert "timeout" in result
 
     async def test_db_error_on_compare_raid_to_top(self):
         mock_session = AsyncMock()
@@ -533,7 +533,7 @@ class TestGetMyPerformanceBestsOnly:
             )
 
         assert "Error" in result
-        assert "connection lost" not in result
+        assert "connection lost" in result
 
     async def test_null_parse_and_ilvl(self):
         mock_rows = [
@@ -627,7 +627,7 @@ class TestGetWipeProgression:
             )
 
         assert "Error" in result
-        assert "connection lost" not in result
+        assert "connection lost" in result
 
     async def test_fight_percentage_appears_for_wipes(self):
         """Verify fight_percentage is shown for wipe attempts."""
@@ -749,7 +749,7 @@ class TestGetRegressions:
             result = await get_regressions.ainvoke({})
 
         assert "Error" in result
-        assert "connection lost" not in result
+        assert "connection lost" in result
 
     async def test_null_dps_delta_pct(self):
         """Tool should handle None dps_delta_pct (when baseline DPS is 0)."""
@@ -881,7 +881,7 @@ class TestResolveMyFights:
             result = await resolve_my_fights.ainvoke({})
 
         assert "Error" in result
-        assert "connection lost" not in result
+        assert "connection lost" in result
 
     async def test_null_parse_percentile(self):
         """Tool should handle None parse_percentile gracefully."""
@@ -1091,7 +1091,7 @@ class TestGetConsumableCheck:
             )
 
         assert "Error" in result
-        assert "connection lost" not in result
+        assert "connection lost" in result
 
 
 class TestGetGearChanges:
@@ -1180,7 +1180,7 @@ class TestGetGearChanges:
             )
 
         assert "Error" in result
-        assert "connection lost" not in result
+        assert "connection lost" in result
 
 
 class TestNoResults:
