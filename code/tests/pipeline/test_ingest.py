@@ -247,8 +247,11 @@ class TestIngestResultSnapshots:
         assert result.snapshots == 0
 
 
-class TestAutoSnapshotAfterIngest:
-    """Verify ingest_report auto-snapshots progression for tracked characters."""
+class TestSnapshotsRemovedFromIngest:
+    """Verify ingest_report no longer calls snapshot_all_characters.
+
+    Snapshots are now the caller's responsibility (pull_my_logs, auto_ingest).
+    """
 
     REPORT_DATA = {
         "reportData": {
@@ -268,11 +271,8 @@ class TestAutoSnapshotAfterIngest:
         }
     }
 
-    @patch("shukketsu.pipeline.ingest.snapshot_all_characters")
-    async def test_calls_snapshot_all_characters(self, mock_snapshot):
-        """Verify ingest_report calls snapshot_all_characters after ingestion."""
-        mock_snapshot.return_value = 5
-
+    async def test_ingest_report_does_not_call_snapshots(self):
+        """Verify ingest_report no longer imports or calls snapshot_all_characters."""
         mock_wcl = AsyncMock()
         mock_wcl.query.return_value = self.REPORT_DATA
 
@@ -285,48 +285,19 @@ class TestAutoSnapshotAfterIngest:
 
         result = await ingest_report(mock_wcl, mock_session, "abc123")
 
-        mock_snapshot.assert_awaited_once_with(mock_session)
-        assert result.snapshots == 5
-
-    @patch("shukketsu.pipeline.ingest.snapshot_all_characters")
-    async def test_snapshots_zero_when_no_characters(self, mock_snapshot):
-        """Verify snapshots=0 when no tracked characters exist."""
-        mock_snapshot.return_value = 0
-
-        mock_wcl = AsyncMock()
-        mock_wcl.query.return_value = self.REPORT_DATA
-
-        mock_session = AsyncMock()
-        mock_session.add = MagicMock()  # session.add() is sync in SQLAlchemy
-        mock_select_result = MagicMock()
-        mock_select_result.__iter__ = MagicMock(return_value=iter([]))
-        mock_session.execute.return_value = mock_select_result
-        mock_session.flush = AsyncMock()
-
-        result = await ingest_report(mock_wcl, mock_session, "abc123")
-
-        mock_snapshot.assert_awaited_once()
-        assert result.snapshots == 0
-
-    @patch("shukketsu.pipeline.ingest.snapshot_all_characters")
-    async def test_snapshot_failure_does_not_fail_ingest(self, mock_snapshot):
-        """Verify ingest succeeds even if snapshot_all_characters raises."""
-        mock_snapshot.side_effect = Exception("DB error")
-
-        mock_wcl = AsyncMock()
-        mock_wcl.query.return_value = self.REPORT_DATA
-
-        mock_session = AsyncMock()
-        mock_session.add = MagicMock()  # session.add() is sync in SQLAlchemy
-        mock_select_result = MagicMock()
-        mock_select_result.__iter__ = MagicMock(return_value=iter([]))
-        mock_session.execute.return_value = mock_select_result
-        mock_session.flush = AsyncMock()
-
-        result = await ingest_report(mock_wcl, mock_session, "abc123")
-
+        # snapshots field defaults to 0 since ingest_report no longer runs them
         assert result.snapshots == 0
         assert result.fights == 1
+        assert result.enrichment_errors == []
+
+    async def test_enrichment_errors_returned(self):
+        """Verify enrichment_errors field is populated when enrichment fails."""
+        result = IngestResult(
+            fights=5, performances=25,
+            enrichment_errors=["combatant_info", "death_events_fight_1"],
+        )
+        assert len(result.enrichment_errors) == 2
+        assert "combatant_info" in result.enrichment_errors
 
 
 class TestIngestEventsWiring:
@@ -377,7 +348,6 @@ class TestIngestEventsWiring:
 
         return mock_wcl, mock_session
 
-    @patch("shukketsu.pipeline.ingest.snapshot_all_characters", return_value=0)
     @patch(
         "shukketsu.pipeline.resource_events.ingest_resource_data_for_fight",
         new_callable=AsyncMock, return_value=3,
@@ -395,7 +365,7 @@ class TestIngestEventsWiring:
         new_callable=AsyncMock, return_value=5,
     )
     async def test_ingest_events_calls_all_pipelines(
-        self, mock_combatant, mock_death, mock_cast, mock_resource, mock_snap,
+        self, mock_combatant, mock_death, mock_cast, mock_resource,
     ):
         """All 4 event pipelines are called when ingest_events=True."""
         mock_wcl, mock_session = self._make_mocks()
@@ -414,7 +384,6 @@ class TestIngestEventsWiring:
         # 5 (combatant) + 2 (death) + 10 (cast) + 3 (resource) = 20
         assert result.event_rows == 20
 
-    @patch("shukketsu.pipeline.ingest.snapshot_all_characters", return_value=0)
     @patch(
         "shukketsu.pipeline.resource_events.ingest_resource_data_for_fight",
         new_callable=AsyncMock, return_value=3,
@@ -432,7 +401,7 @@ class TestIngestEventsWiring:
         new_callable=AsyncMock, return_value=5,
     )
     async def test_ingest_events_builds_actor_maps(
-        self, mock_combatant, mock_death, mock_cast, mock_resource, mock_snap,
+        self, mock_combatant, mock_death, mock_cast, mock_resource,
     ):
         """Actor maps are built from masterData and passed to pipelines."""
         mock_wcl, mock_session = self._make_mocks()
@@ -456,8 +425,7 @@ class TestIngestEventsWiring:
         resource_actors = resource_call[0][4]  # 5th positional arg
         assert resource_actors == {5: "TestWarrior", 6: "TestMage"}
 
-    @patch("shukketsu.pipeline.ingest.snapshot_all_characters", return_value=0)
-    async def test_ingest_events_false_skips_pipelines(self, mock_snap):
+    async def test_ingest_events_false_skips_pipelines(self):
         """No event pipelines are called when ingest_events=False."""
         mock_wcl, mock_session = self._make_mocks()
 

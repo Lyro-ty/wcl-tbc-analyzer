@@ -6,6 +6,19 @@ from shukketsu.pipeline.ingest import IngestResult
 from shukketsu.scripts.pull_my_logs import parse_args, run
 
 
+class _AsyncCM:
+    """Simple async context manager wrapping a value."""
+
+    def __init__(self, val):
+        self._val = val
+
+    async def __aenter__(self):
+        return self._val
+
+    async def __aexit__(self, *exc):
+        pass
+
+
 def test_parse_args_report_code():
     args = parse_args(["--report-code", "abc123"])
     assert args.report_code == "abc123"
@@ -16,6 +29,8 @@ def test_parse_args_missing_report_code():
         parse_args([])
 
 
+@patch("shukketsu.pipeline.progression.snapshot_all_characters",
+       new_callable=AsyncMock, return_value=2)
 @patch("shukketsu.scripts.pull_my_logs.create_session_factory")
 @patch("shukketsu.scripts.pull_my_logs.create_db_engine")
 @patch("shukketsu.scripts.pull_my_logs.WCLClient")
@@ -23,7 +38,7 @@ def test_parse_args_missing_report_code():
 @patch("shukketsu.scripts.pull_my_logs.get_settings")
 async def test_run_creates_client_and_ingests(
     mock_get_settings, mock_ingest, mock_wcl_client_cls,
-    mock_create_engine, mock_create_factory,
+    mock_create_engine, mock_create_factory, mock_snapshot,
 ):
     # Setup settings mock
     mock_settings = MagicMock()
@@ -33,10 +48,14 @@ async def test_run_creates_client_and_ingests(
     mock_settings.db.url = "postgresql+asyncpg://test:test@localhost/test"
     mock_get_settings.return_value = mock_settings
 
-    # Setup engine/session mocks
+    # Setup engine/session mocks — session.begin() must return an async CM
     mock_engine = AsyncMock()
     mock_create_engine.return_value = mock_engine
     mock_session = AsyncMock()
+    mock_session.add = MagicMock()  # session.add() is sync in SQLAlchemy
+    # session.begin() is sync in SQLAlchemy — returns an async context manager
+    mock_session.begin = MagicMock(return_value=_AsyncCM(None))
+
     mock_factory = MagicMock()
     mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
     mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -56,5 +75,8 @@ async def test_run_creates_client_and_ingests(
         mock_wcl, mock_session, "abc123",
         ingest_tables=False, ingest_events=False,
     )
-    mock_session.commit.assert_called_once()
+    # session.commit() is no longer called directly — session.begin() handles it
+    mock_session.commit.assert_not_called()
     mock_engine.dispose.assert_called_once()
+    # snapshot_all_characters should be called in a separate transaction
+    mock_snapshot.assert_awaited_once()

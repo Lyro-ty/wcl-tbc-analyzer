@@ -1,13 +1,12 @@
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import delete, select
 
 from shukketsu.db.models import Encounter, Fight, FightPerformance, Report
 from shukketsu.pipeline.normalize import is_boss_fight
-from shukketsu.pipeline.progression import snapshot_all_characters
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +79,7 @@ class IngestResult:
     table_rows: int = 0
     event_rows: int = 0
     snapshots: int = 0
+    enrichment_errors: list[str] = field(default_factory=list)
 
 
 async def ingest_report(
@@ -192,14 +192,22 @@ async def ingest_report(
 
     # Optionally ingest table data (ability breakdowns, buff uptimes)
     table_rows = 0
+    enrichment_errors: list[str] = []
     if ingest_tables and fights:
         from shukketsu.pipeline.table_data import ingest_table_data_for_fight
 
         for fight in fights:
-            rows = await ingest_table_data_for_fight(
-                wcl, session, report_code, fight,
-            )
-            table_rows += rows
+            try:
+                rows = await ingest_table_data_for_fight(
+                    wcl, session, report_code, fight,
+                )
+                table_rows += rows
+            except Exception:
+                logger.exception(
+                    "Failed to ingest table data for fight %d in %s",
+                    fight.fight_id, report_code,
+                )
+                enrichment_errors.append(f"table_data_fight_{fight.fight_id}")
 
     # Optionally ingest event data (combatant info, deaths, casts, resources)
     event_rows = 0
@@ -217,35 +225,58 @@ async def ingest_report(
             logger.exception(
                 "Failed to ingest combatant info for %s", report_code,
             )
+            enrichment_errors.append("combatant_info")
 
         for fight in fights:
-            event_rows += await ingest_death_events_for_fight(
-                wcl, session, report_code, fight,
-            )
-            event_rows += await ingest_cast_events_for_fight(
-                wcl, session, report_code, fight,
-                actor_name_by_id, player_class_map,
-            )
-            event_rows += await ingest_resource_data_for_fight(
-                wcl, session, report_code, fight, actor_name_by_id,
-            )
+            try:
+                event_rows += await ingest_death_events_for_fight(
+                    wcl, session, report_code, fight,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to ingest death events for fight %d in %s",
+                    fight.fight_id, report_code,
+                )
+                enrichment_errors.append(
+                    f"death_events_fight_{fight.fight_id}"
+                )
 
-    # Auto-snapshot progression for tracked characters
-    try:
-        snapshot_count = await snapshot_all_characters(session)
-    except Exception:
-        logger.exception("Failed to auto-snapshot progression after ingest")
-        snapshot_count = 0
+            try:
+                event_rows += await ingest_cast_events_for_fight(
+                    wcl, session, report_code, fight,
+                    actor_name_by_id, player_class_map,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to ingest cast events for fight %d in %s",
+                    fight.fight_id, report_code,
+                )
+                enrichment_errors.append(
+                    f"cast_events_fight_{fight.fight_id}"
+                )
+
+            try:
+                event_rows += await ingest_resource_data_for_fight(
+                    wcl, session, report_code, fight, actor_name_by_id,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to ingest resource data for fight %d in %s",
+                    fight.fight_id, report_code,
+                )
+                enrichment_errors.append(
+                    f"resource_events_fight_{fight.fight_id}"
+                )
 
     logger.info(
         "Ingested report %s: %d fights, %d performances, %d table rows, "
-        "%d event rows, %d snapshots",
+        "%d event rows, %d enrichment errors",
         report_code, len(fights), total_performances, table_rows,
-        event_rows, snapshot_count,
+        event_rows, len(enrichment_errors),
     )
     return IngestResult(
         fights=len(fights), performances=total_performances,
         table_rows=table_rows,
         event_rows=event_rows,
-        snapshots=snapshot_count,
+        enrichment_errors=enrichment_errors,
     )

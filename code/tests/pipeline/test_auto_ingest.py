@@ -61,6 +61,31 @@ def _make_session_factory(session_mock):
     return factory
 
 
+def _make_transactional_session():
+    """Build a mock session that supports `async with session.begin()`.
+
+    session.begin() is MagicMock (sync, returns async CM) — in SQLAlchemy,
+    session.begin() is synchronous and returns an AsyncSessionTransaction
+    that acts as an async context manager.
+    session.add() is MagicMock (sync). Other methods are AsyncMock.
+    """
+    mock_session = AsyncMock()
+    mock_session.add = MagicMock()  # session.add() is sync in SQLAlchemy
+    mock_session.begin = MagicMock(return_value=_AsyncCM(None))
+    return mock_session
+
+
+def _make_transactional_session_factory(mock_session):
+    """Build a session factory where `async with factory() as session` works,
+    and `async with session.begin()` also works."""
+    session_factory = MagicMock()
+    session_factory.return_value.__aenter__ = AsyncMock(
+        return_value=mock_session,
+    )
+    session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+    return session_factory
+
+
 class TestAutoIngestServiceStatus:
     """Tests for status reporting."""
 
@@ -122,8 +147,12 @@ class TestAutoIngestPollOnce:
         assert svc._stats["polls"] == 1
         assert svc._status == "idle"
 
+    @patch(
+        "shukketsu.pipeline.progression.snapshot_all_characters",
+        new_callable=AsyncMock, return_value=0,
+    )
     @patch("shukketsu.pipeline.auto_ingest.ingest_report")
-    async def test_ingests_new_reports(self, mock_ingest):
+    async def test_ingests_new_reports(self, mock_ingest, mock_snap):
         """3 reports from WCL, 1 already in DB -> 2 ingested."""
         settings = _make_settings()
         wcl = AsyncMock()
@@ -139,17 +168,13 @@ class TestAutoIngestPollOnce:
             }
         }
 
-        # Mock session factory: execute returns existing code "BBB"
-        mock_session = AsyncMock()
+        # Mock session that supports async with session.begin()
+        mock_session = _make_transactional_session()
         mock_result = MagicMock()
         mock_result.__iter__ = MagicMock(return_value=iter([("BBB",)]))
         mock_session.execute.return_value = mock_result
-        mock_session.commit = AsyncMock()
 
-        session_factory = MagicMock()
-        session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-
+        session_factory = _make_transactional_session_factory(mock_session)
         mock_ingest.return_value = MagicMock(fights=5, performances=25)
 
         svc = AutoIngestService(settings, session_factory, _make_wcl_factory(wcl))
@@ -198,8 +223,12 @@ class TestAutoIngestPollOnce:
         assert svc._stats["reports_ingested"] == 0
         assert svc._status == "idle"
 
+    @patch(
+        "shukketsu.pipeline.progression.snapshot_all_characters",
+        new_callable=AsyncMock, return_value=0,
+    )
     @patch("shukketsu.pipeline.auto_ingest.ingest_report")
-    async def test_ingest_passes_config_flags(self, mock_ingest):
+    async def test_ingest_passes_config_flags(self, mock_ingest, mock_snap):
         """Verify with_tables and with_events flags are forwarded."""
         settings = _make_settings(with_tables=True, with_events=True)
         wcl = AsyncMock()
@@ -211,16 +240,12 @@ class TestAutoIngestPollOnce:
             }
         }
 
-        mock_session = AsyncMock()
+        mock_session = _make_transactional_session()
         mock_result = MagicMock()
         mock_result.__iter__ = MagicMock(return_value=iter([]))
         mock_session.execute.return_value = mock_result
-        mock_session.commit = AsyncMock()
 
-        session_factory = MagicMock()
-        session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-
+        session_factory = _make_transactional_session_factory(mock_session)
         mock_ingest.return_value = MagicMock(fights=3, performances=15)
 
         svc = AutoIngestService(settings, session_factory, _make_wcl_factory(wcl))
@@ -247,15 +272,12 @@ class TestAutoIngestPollOnce:
             }
         }
 
-        mock_session = AsyncMock()
+        mock_session = _make_transactional_session()
         mock_result = MagicMock()
         mock_result.__iter__ = MagicMock(return_value=iter([]))
         mock_session.execute.return_value = mock_result
-        mock_session.commit = AsyncMock()
 
-        session_factory = MagicMock()
-        session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+        session_factory = _make_transactional_session_factory(mock_session)
 
         mock_ingest.side_effect = [
             RuntimeError("WCL API exploded"),
@@ -268,8 +290,12 @@ class TestAutoIngestPollOnce:
         assert svc._stats["errors"] == 1
         assert svc._stats["reports_ingested"] == 1
 
+    @patch(
+        "shukketsu.pipeline.progression.snapshot_all_characters",
+        new_callable=AsyncMock, return_value=0,
+    )
     @patch("shukketsu.pipeline.auto_ingest.ingest_report")
-    async def test_poll_with_zone_ids(self, mock_ingest):
+    async def test_poll_with_zone_ids(self, mock_ingest, mock_snap):
         """When zone_ids configured, queries per zone."""
         settings = _make_settings(zone_ids=[2017, 2018])
         wcl = AsyncMock()
@@ -290,16 +316,12 @@ class TestAutoIngestPollOnce:
             },
         ]
 
-        mock_session = AsyncMock()
+        mock_session = _make_transactional_session()
         mock_result = MagicMock()
         mock_result.__iter__ = MagicMock(return_value=iter([]))
         mock_session.execute.return_value = mock_result
-        mock_session.commit = AsyncMock()
 
-        session_factory = MagicMock()
-        session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-
+        session_factory = _make_transactional_session_factory(mock_session)
         mock_ingest.return_value = MagicMock(fights=3, performances=15)
 
         svc = AutoIngestService(settings, session_factory, _make_wcl_factory(wcl))

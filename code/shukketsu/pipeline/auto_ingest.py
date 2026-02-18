@@ -144,13 +144,30 @@ class AutoIngestService:
             for report_data in new_reports:
                 code = report_data["code"]
                 try:
-                    async with self._session_factory() as session:
+                    async with (
+                        self._session_factory() as session,
+                        session.begin(),
+                    ):
                         await ingest_report(
                             wcl, session, code,
                             ingest_tables=cfg.with_tables,
                             ingest_events=cfg.with_events,
                         )
-                        await session.commit()
+                    # Snapshot in separate transaction after successful commit
+                    try:
+                        async with (
+                            self._session_factory() as session,
+                            session.begin(),
+                        ):
+                            from shukketsu.pipeline.progression import (
+                                snapshot_all_characters,
+                            )
+                            await snapshot_all_characters(session)
+                    except Exception:
+                        logger.exception(
+                            "Failed to auto-snapshot progression "
+                            "after ingest of %s", code,
+                        )
                     self._stats["reports_ingested"] += 1
                     logger.info(
                         "Auto-ingested report %s: %s",

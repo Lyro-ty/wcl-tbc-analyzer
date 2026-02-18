@@ -29,6 +29,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 async def run(
     report_code: str, *, with_tables: bool = False, with_events: bool = False,
 ) -> None:
+    from shukketsu.pipeline.progression import snapshot_all_characters
+
     settings = get_settings()
     engine = create_db_engine(settings)
     session_factory = create_session_factory(engine)
@@ -37,15 +39,29 @@ async def run(
         settings.wcl.client_secret.get_secret_value(),
         settings.wcl.oauth_url,
     )
-    async with WCLClient(auth, RateLimiter()) as wcl, session_factory() as session:
-        result = await ingest_report(
-            wcl, session, report_code,
-            ingest_tables=with_tables, ingest_events=with_events,
-        )
-        await session.commit()
+    async with WCLClient(auth, RateLimiter()) as wcl:
+        # Ingest in an atomic transaction
+        async with session_factory() as session, session.begin():
+            result = await ingest_report(
+                wcl, session, report_code,
+                ingest_tables=with_tables, ingest_events=with_events,
+            )
+
+        # Snapshot progression in a separate transaction after successful commit
+        try:
+            async with session_factory() as session, session.begin():
+                snapshot_count = await snapshot_all_characters(session)
+            logger.info("Snapshotted %d progression entries", snapshot_count)
+        except Exception:
+            logger.exception(
+                "Failed to snapshot progression after ingest of %s",
+                report_code,
+            )
+
     await engine.dispose()
     logger.info(
-        "Ingested report %s: %d fights, %d performances, %d table rows, %d event rows",
+        "Ingested report %s: %d fights, %d performances, %d table rows, "
+        "%d event rows",
         report_code, result.fights, result.performances,
         result.table_rows, result.event_rows,
     )
