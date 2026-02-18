@@ -44,9 +44,9 @@ async def fight_cast_metrics(
         if not row:
             return None
         return CastMetricResponse(**dict(row._mapping))
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get cast metrics")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -64,9 +64,9 @@ async def fight_cooldowns(
         )
         rows = result.fetchall()
         return [CooldownUsageResponse(**dict(r._mapping)) for r in rows]
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get cooldowns")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -86,9 +86,9 @@ async def fight_cancelled_casts(
         if not row:
             return None
         return CancelledCastResponse(**dict(row._mapping))
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get cancelled casts")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -111,9 +111,9 @@ async def fight_cast_timeline(
         )
         rows = result.fetchall()
         return [CastEventResponse(**dict(r._mapping)) for r in rows]
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get cast timeline")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -138,9 +138,9 @@ async def fight_resources(
         return [
             ResourceSnapshotResponse(**dict(r._mapping)) for r in rows
         ]
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get resource snapshots")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -183,9 +183,9 @@ async def fight_cooldown_windows(
                 dps_gain_pct=dps_gain,
             ))
         return entries
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get cooldown windows")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -282,9 +282,9 @@ async def fight_dot_refreshes(
         return results
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get DoT refresh analysis")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -377,9 +377,9 @@ async def fight_rotation_score(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get rotation score")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -427,9 +427,9 @@ async def fight_trinket_procs(
             ))
 
         return entries
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get trinket procs")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -534,6 +534,6 @@ async def fight_phases_player(
         return results
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get player phase metrics")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None

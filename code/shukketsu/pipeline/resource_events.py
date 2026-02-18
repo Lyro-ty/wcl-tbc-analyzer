@@ -102,7 +102,7 @@ def compute_resource_snapshots(
                     delta = fight_end - timestamps[i]
                 time_at_zero_ms += max(0, delta)
 
-        time_at_zero_pct = round(time_at_zero_ms / fight_duration_ms * 100, 1)
+        time_at_zero_pct = min(round(time_at_zero_ms / fight_duration_ms * 100, 1), 100.0)
 
         # Build samples_json: downsample to ~_TARGET_SAMPLES data points
         if len(amounts) <= _TARGET_SAMPLES:
@@ -151,43 +151,35 @@ async def ingest_resource_data_for_fight(
     Returns:
         Count of resource_snapshots rows inserted.
     """
-    try:
-        # Delete existing resource_snapshots for this fight (idempotent)
-        await session.execute(
-            delete(ResourceSnapshot).where(ResourceSnapshot.fight_id == fight.id)
-        )
+    # Delete existing resource_snapshots for this fight (idempotent)
+    await session.execute(
+        delete(ResourceSnapshot).where(ResourceSnapshot.fight_id == fight.id)
+    )
 
-        # Fetch resource events from WCL (async generator yields pages)
-        all_events: list[dict] = []
-        async for page in fetch_all_events(
-            wcl, report_code, fight.start_time, fight.end_time,
-            data_type="Resources",
-        ):
-            all_events.extend(page)
+    # Fetch resource events from WCL (async generator yields pages)
+    all_events: list[dict] = []
+    async for page in fetch_all_events(
+        wcl, report_code, fight.start_time, fight.end_time,
+        data_type="Resources",
+    ):
+        all_events.extend(page)
 
-        if not all_events:
-            return 0
-
-        fight_duration_ms = fight.end_time - fight.start_time
-
-        # Compute snapshots and insert
-        snapshots = compute_resource_snapshots(
-            all_events, fight.id, fight_duration_ms, actors,
-            fight_start_time=fight.start_time,
-        )
-        for snapshot in snapshots:
-            session.add(snapshot)
-        await session.flush()
-
-        logger.info(
-            "Ingested %d resource snapshots for fight %d (%s)",
-            len(snapshots), fight.fight_id, report_code,
-        )
-        return len(snapshots)
-
-    except Exception:
-        logger.exception(
-            "Failed to ingest resource events for fight %d in %s",
-            fight.fight_id, report_code,
-        )
+    if not all_events:
         return 0
+
+    fight_duration_ms = fight.end_time - fight.start_time
+
+    # Compute snapshots and insert
+    snapshots = compute_resource_snapshots(
+        all_events, fight.id, fight_duration_ms, actors,
+        fight_start_time=fight.start_time,
+    )
+    for snapshot in snapshots:
+        session.add(snapshot)
+    await session.flush()
+
+    logger.info(
+        "Ingested %d resource snapshots for fight %d (%s)",
+        len(snapshots), fight.fight_id, report_code,
+    )
+    return len(snapshots)

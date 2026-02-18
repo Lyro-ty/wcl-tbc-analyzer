@@ -33,9 +33,9 @@ async def compare_raids(
         return [RaidComparison(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to compare raids")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/gear/compare", response_model=list[GearChangeEntry])
@@ -71,6 +71,6 @@ async def get_gear_comparison(
                 ilvl_delta=delta,
             ))
         return entries
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to compare gear")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None

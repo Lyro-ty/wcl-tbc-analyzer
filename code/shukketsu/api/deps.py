@@ -1,5 +1,6 @@
 """FastAPI dependency injection providers."""
 
+import hmac
 import time
 from collections.abc import AsyncGenerator
 
@@ -53,7 +54,7 @@ async def verify_api_key(
     if not configured_key:
         return  # auth disabled when key not set
     provided = header_key or query_key
-    if not provided or provided != configured_key:
+    if not provided or not hmac.compare_digest(provided, configured_key):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 

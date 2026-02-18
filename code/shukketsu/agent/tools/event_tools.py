@@ -621,7 +621,7 @@ async def get_gear_changes(
             f"reports {report_code_old} and {report_code_new}. "
             f"Either gear was identical or gear snapshot data is not "
             f"available "
-            f"(use pull-my-logs --with-tables to fetch it)."
+            f"(use pull-my-logs --with-events to fetch it)."
         )
 
     lines = [

@@ -287,6 +287,7 @@ async def resolve_my_fights(
     without needing to know report codes.
     If encounter_name is provided, filters to that boss.
     Returns up to 'count' recent fights (default 5)."""
+    count = min(max(count, 1), 25)
     result = await session.execute(
         q.MY_RECENT_KILLS,
         {

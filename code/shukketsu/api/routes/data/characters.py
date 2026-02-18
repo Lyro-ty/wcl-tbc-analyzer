@@ -30,9 +30,9 @@ async def list_characters(session: AsyncSession = Depends(get_db)):
         result = await session.execute(q.CHARACTERS_LIST)
         rows = result.fetchall()
         return [CharacterInfo(**dict(r._mapping)) for r in rows]
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to list characters")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.post("/characters", response_model=CharacterInfo)
@@ -59,10 +59,10 @@ async def create_character(
             character_class=character.character_class,
             spec=character.spec,
         )
-    except Exception as e:
+    except Exception:
         await session.rollback()
         logger.exception("Failed to register character")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -85,9 +85,9 @@ async def character_reports(
         return [CharacterReportSummary(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get character reports")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -112,9 +112,9 @@ async def character_report_detail(
         return [CharacterFightSummary(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get character report detail")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -137,9 +137,9 @@ async def character_profile(
         return CharacterProfile(**dict(row._mapping))
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get character profile")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -155,9 +155,9 @@ async def character_recent_parses(
         )
         rows = result.fetchall()
         return [CharacterRecentParse(**dict(r._mapping)) for r in rows]
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get recent parses")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -190,9 +190,9 @@ async def character_personal_bests(
         return [PersonalBestEntry(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get personal bests")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/progression/{character}", response_model=list[ProgressionPoint])
@@ -227,9 +227,9 @@ async def progression(
         ]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get progression data")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/regressions", response_model=list[RegressionEntry])
@@ -248,6 +248,6 @@ async def get_regressions_endpoint(
             result = await session.execute(q.REGRESSION_CHECK)
         rows = result.fetchall()
         return [RegressionEntry(**dict(r._mapping)) for r in rows]
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get regressions")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None

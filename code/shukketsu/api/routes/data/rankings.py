@@ -24,9 +24,9 @@ async def list_encounters(session: AsyncSession = Depends(get_db)):
         result = await session.execute(q.ENCOUNTERS_LIST)
         rows = result.fetchall()
         return [EncounterInfo(**dict(r._mapping)) for r in rows]
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to list encounters")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/leaderboard/{encounter}", response_model=list[SpecLeaderboardEntry])
@@ -45,9 +45,9 @@ async def spec_leaderboard(
         return [SpecLeaderboardEntry(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get leaderboard")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.post(
@@ -106,9 +106,9 @@ async def refresh_rankings(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to refresh rankings")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.post(
@@ -166,6 +166,6 @@ async def refresh_speed_rankings(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to refresh speed rankings")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None

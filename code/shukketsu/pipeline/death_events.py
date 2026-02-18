@@ -98,38 +98,30 @@ async def ingest_death_events_for_fight(
     Returns:
         Count of death_details rows inserted.
     """
-    try:
-        # Delete existing death_details for this fight (idempotent)
-        await session.execute(
-            delete(DeathDetail).where(DeathDetail.fight_id == fight.id)
-        )
+    # Delete existing death_details for this fight (idempotent)
+    await session.execute(
+        delete(DeathDetail).where(DeathDetail.fight_id == fight.id)
+    )
 
-        # Fetch death events from WCL (async generator yields pages)
-        all_events: list[dict] = []
-        async for page in fetch_all_events(
-            wcl, report_code, fight.start_time, fight.end_time,
-            data_type="Deaths",
-        ):
-            all_events.extend(page)
+    # Fetch death events from WCL (async generator yields pages)
+    all_events: list[dict] = []
+    async for page in fetch_all_events(
+        wcl, report_code, fight.start_time, fight.end_time,
+        data_type="Deaths",
+    ):
+        all_events.extend(page)
 
-        if not all_events:
-            return 0
-
-        # Parse and insert
-        details = parse_death_events(all_events, fight.id)
-        for detail in details:
-            session.add(detail)
-        await session.flush()
-
-        logger.info(
-            "Ingested %d death details for fight %d (%s)",
-            len(details), fight.fight_id, report_code,
-        )
-        return len(details)
-
-    except Exception:
-        logger.exception(
-            "Failed to ingest death events for fight %d in %s",
-            fight.fight_id, report_code,
-        )
+    if not all_events:
         return 0
+
+    # Parse and insert
+    details = parse_death_events(all_events, fight.id)
+    for detail in details:
+        session.add(detail)
+    await session.flush()
+
+    logger.info(
+        "Ingested %d death details for fight %d (%s)",
+        len(details), fight.fight_id, report_code,
+    )
+    return len(details)

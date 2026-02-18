@@ -35,9 +35,9 @@ async def list_reports(session: AsyncSession = Depends(get_db)):
         result = await session.execute(q.REPORTS_LIST)
         rows = result.fetchall()
         return [ReportSummary(**dict(r._mapping)) for r in rows]
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to list reports")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/reports/{report_code}/summary", response_model=list[RaidSummaryFight])
@@ -52,9 +52,9 @@ async def report_summary(
         return [RaidSummaryFight(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get report summary")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/reports/{report_code}/execution", response_model=list[ExecutionBoss])
@@ -73,9 +73,9 @@ async def report_execution(
         return [ExecutionBoss(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get execution data")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/reports/{report_code}/speed", response_model=list[SpeedComparison])
@@ -94,9 +94,9 @@ async def report_speed(
         return [SpeedComparison(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get speed data")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -112,9 +112,9 @@ async def abilities_available(
         )
         row = result.fetchone()
         return AbilitiesAvailable(has_data=row.has_data if row else False)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to check abilities availability")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -131,9 +131,9 @@ async def events_available(
         )
         row = result.fetchone()
         return EventsAvailable(has_data=row.has_data if row else False)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to check events availability")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.post(
@@ -190,15 +190,16 @@ async def ingest_report_endpoint(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         await session.rollback()
         logger.exception("Failed to ingest report %s", req.report_code)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.post(
     "/reports/{report_code}/table-data",
     response_model=TableDataResponse,
+    dependencies=[cooldown("table_data", 60)],
 )
 async def fetch_table_data(
     report_code: str, session: AsyncSession = Depends(get_db),
@@ -228,15 +229,16 @@ async def fetch_table_data(
         return TableDataResponse(report_code=report_code, table_rows=rows)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         await session.rollback()
         logger.exception("Failed to fetch table data for %s", report_code)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.post(
     "/reports/{report_code}/event-data",
     response_model=EventDataResponse,
+    dependencies=[cooldown("event_data", 60)],
 )
 async def fetch_event_data(
     report_code: str, session: AsyncSession = Depends(get_db),
@@ -280,10 +282,10 @@ async def fetch_event_data(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         await session.rollback()
         logger.exception("Failed to fetch event data for %s", report_code)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -309,9 +311,9 @@ async def wipe_progression(
         return [WipeProgressionAttempt(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get wipe progression")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/reports/{report_code}/night-summary")
@@ -387,9 +389,9 @@ async def night_summary(
         return RaidNightSummary(**summary)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to generate night summary for %s", report_code)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/dashboard/stats", response_model=DashboardStats)
@@ -403,9 +405,9 @@ async def dashboard_stats(session: AsyncSession = Depends(get_db)):
                 total_characters=0, total_encounters=0,
             )
         return DashboardStats(**dict(row._mapping))
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get dashboard stats")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/dashboard/recent", response_model=list[RecentReportSummary])
@@ -414,6 +416,6 @@ async def dashboard_recent(session: AsyncSession = Depends(get_db)):
         result = await session.execute(q.RECENT_REPORTS)
         rows = result.fetchall()
         return [RecentReportSummary(**dict(r._mapping)) for r in rows]
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get recent reports")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None

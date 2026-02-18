@@ -435,7 +435,7 @@ CHARACTER_PROFILE = text("""
            ROUND(MAX(fp.parse_percentile)::numeric, 1) AS best_parse,
            ROUND(AVG(fp.item_level)::numeric, 1) AS avg_ilvl
     FROM my_characters mc
-    LEFT JOIN fight_performances fp ON fp.player_name = mc.name
+    LEFT JOIN fight_performances fp ON LOWER(fp.player_name) = LOWER(mc.name)
     LEFT JOIN fights f ON fp.fight_id = f.id
     WHERE mc.name ILIKE :character_name
     GROUP BY mc.id, mc.name, mc.server_slug, mc.server_region,
@@ -452,7 +452,7 @@ CHARACTER_RECENT_PARSES = text("""
     JOIN fights f ON fp.fight_id = f.id
     JOIN encounters e ON f.encounter_id = e.id
     JOIN reports r ON f.report_code = r.code
-    JOIN my_characters mc ON mc.name = fp.player_name
+    JOIN my_characters mc ON LOWER(mc.name) = LOWER(fp.player_name)
     WHERE mc.name ILIKE :character_name
     ORDER BY r.start_time DESC
     LIMIT 30
@@ -938,7 +938,7 @@ COOLDOWN_WINDOWS = text("""
     FROM cooldown_usage cu
     JOIN fights f ON cu.fight_id = f.id
     JOIN fight_performances fp
-        ON fp.fight_id = f.id AND fp.player_name = cu.player_name
+        ON fp.fight_id = f.id AND LOWER(fp.player_name) = LOWER(cu.player_name)
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
       AND cu.player_name ILIKE :player_name

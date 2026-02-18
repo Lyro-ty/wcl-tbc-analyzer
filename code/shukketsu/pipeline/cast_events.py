@@ -180,7 +180,10 @@ def compute_cooldown_usage(
             max_possible = math.floor(
                 fight_duration_ms / (cd.cooldown_sec * 1000)
             ) + 1
-            efficiency = (times_used / max_possible * 100) if max_possible > 0 else 0.0
+            efficiency = min(
+                (times_used / max_possible * 100) if max_possible > 0 else 0.0,
+                100.0,
+            )
 
             first_use = min(timestamps) if timestamps else None
             last_use = max(timestamps) if timestamps else None
@@ -294,67 +297,59 @@ async def ingest_cast_events_for_fight(
     Returns:
         Total count of rows inserted across all tables.
     """
-    try:
-        # Delete existing data for this fight (idempotent re-ingest)
-        for model in (CastEvent, CastMetric, CooldownUsage, CancelledCast):
-            await session.execute(
-                delete(model).where(model.fight_id == fight.id)
-            )
-
-        # Fetch cast events from WCL (async generator yields pages)
-        all_events: list[dict] = []
-        async for page in fetch_all_events(
-            wcl, report_code, fight.start_time, fight.end_time,
-            data_type="Casts",
-        ):
-            all_events.extend(page)
-
-        if not all_events:
-            return 0
-
-        # Parse raw events into CastEvent ORM objects
-        cast_event_rows = parse_cast_events(all_events, fight.id, actors)
-        for row in cast_event_rows:
-            session.add(row)
-
-        total_rows = len(cast_event_rows)
-        fight_duration_ms = fight.end_time - fight.start_time
-
-        # Compute and insert derived metrics
-        metrics = compute_cast_metrics(cast_event_rows, fight_duration_ms)
-        for metric in metrics.values():
-            metric.fight_id = fight.id
-            session.add(metric)
-        total_rows += len(metrics)
-
-        cd_usage = compute_cooldown_usage(
-            cast_event_rows, fight_duration_ms, player_class_map,
+    # Delete existing data for this fight (idempotent re-ingest)
+    for model in (CastEvent, CastMetric, CooldownUsage, CancelledCast):
+        await session.execute(
+            delete(model).where(model.fight_id == fight.id)
         )
-        for cu in cd_usage:
-            cu.fight_id = fight.id
-            session.add(cu)
-        total_rows += len(cd_usage)
 
-        cancelled = compute_cancelled_casts(cast_event_rows)
-        for cc in cancelled.values():
-            cc.fight_id = fight.id
-            session.add(cc)
-        total_rows += len(cancelled)
+    # Fetch cast events from WCL (async generator yields pages)
+    all_events: list[dict] = []
+    async for page in fetch_all_events(
+        wcl, report_code, fight.start_time, fight.end_time,
+        data_type="Casts",
+    ):
+        all_events.extend(page)
 
-        await session.flush()
-
-        logger.info(
-            "Ingested cast data for fight %d (%s): %d events, %d metrics, "
-            "%d cooldowns, %d cancelled",
-            fight.fight_id, report_code,
-            len(cast_event_rows), len(metrics),
-            len(cd_usage), len(cancelled),
-        )
-        return total_rows
-
-    except Exception:
-        logger.exception(
-            "Failed to ingest cast events for fight %d in %s",
-            fight.fight_id, report_code,
-        )
+    if not all_events:
         return 0
+
+    # Parse raw events into CastEvent ORM objects
+    cast_event_rows = parse_cast_events(all_events, fight.id, actors)
+    for row in cast_event_rows:
+        session.add(row)
+
+    total_rows = len(cast_event_rows)
+    fight_duration_ms = fight.end_time - fight.start_time
+
+    # Compute and insert derived metrics
+    metrics = compute_cast_metrics(cast_event_rows, fight_duration_ms)
+    for metric in metrics.values():
+        metric.fight_id = fight.id
+        session.add(metric)
+    total_rows += len(metrics)
+
+    cd_usage = compute_cooldown_usage(
+        cast_event_rows, fight_duration_ms, player_class_map,
+    )
+    for cu in cd_usage:
+        cu.fight_id = fight.id
+        session.add(cu)
+    total_rows += len(cd_usage)
+
+    cancelled = compute_cancelled_casts(cast_event_rows)
+    for cc in cancelled.values():
+        cc.fight_id = fight.id
+        session.add(cc)
+    total_rows += len(cancelled)
+
+    await session.flush()
+
+    logger.info(
+        "Ingested cast data for fight %d (%s): %d events, %d metrics, "
+        "%d cooldowns, %d cancelled",
+        fight.fight_id, report_code,
+        len(cast_event_rows), len(metrics),
+        len(cd_usage), len(cancelled),
+    )
+    return total_rows

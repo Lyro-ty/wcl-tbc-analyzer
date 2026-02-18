@@ -63,7 +63,7 @@ class Report(Base):
     title: Mapped[str] = mapped_column(String(200))
     guild_name: Mapped[str | None] = mapped_column(String(200))
     guild_id: Mapped[int | None] = mapped_column(Integer)
-    start_time: Mapped[int] = mapped_column(BigInteger)
+    start_time: Mapped[int] = mapped_column(BigInteger, index=True)
     end_time: Mapped[int] = mapped_column(BigInteger)
     fetched_at: Mapped[datetime] = mapped_column(default=func.now())
 
@@ -114,6 +114,10 @@ class FightPerformance(Base):
         Index("ix_fight_performances_fight_id", "fight_id"),
         Index("ix_fight_performances_player_name", "player_name"),
         Index("ix_fight_performances_class_spec", "player_class", "player_spec"),
+        Index(
+            "ix_fight_performances_my_char", "is_my_character",
+            postgresql_where="is_my_character = true",
+        ),
         CheckConstraint(
             "parse_percentile IS NULL OR "
             "(parse_percentile >= 0 AND parse_percentile <= 100)",
@@ -176,6 +180,9 @@ class TopRanking(Base):
 
 class SpeedRanking(Base):
     __tablename__ = "speed_rankings"
+    __table_args__ = (
+        Index("ix_speed_rankings_encounter_id", "encounter_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id", ondelete="CASCADE"))

@@ -50,9 +50,9 @@ async def fight_details(
         return [FightPlayer(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get fight details")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/reports/{report_code}/deaths", response_model=list[DeathEntry])
@@ -63,9 +63,9 @@ async def report_deaths(
         result = await session.execute(q.REPORT_DEATHS, {"report_code": report_code})
         rows = result.fetchall()
         return [DeathEntry(**dict(r._mapping)) for r in rows]
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get death data")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -82,9 +82,9 @@ async def fight_deaths(
         )
         rows = result.fetchall()
         return [DeathDetailResponse(**dict(r._mapping)) for r in rows]
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get fight deaths")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -108,9 +108,9 @@ async def fight_abilities(
         return [AbilityMetricResponse(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get fight abilities")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -135,9 +135,9 @@ async def player_abilities(
         return [AbilityMetricResponse(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get player abilities")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -161,9 +161,9 @@ async def fight_buffs(
         return [BuffUptimeResponse(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get fight buffs")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -188,9 +188,9 @@ async def player_buffs(
         return [BuffUptimeResponse(**dict(r._mapping)) for r in rows]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get player buffs")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -248,9 +248,9 @@ async def get_fight_consumables(
                 missing=missing,
             ))
         return entries
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get fight consumables")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -301,9 +301,9 @@ async def fight_overheal(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get overheal data")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -343,9 +343,9 @@ async def get_gear_snapshot(
         ]
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get gear snapshot")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get(
@@ -420,6 +420,6 @@ async def fight_phases(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get phase breakdown")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from None

@@ -3,6 +3,8 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from shukketsu.pipeline.death_events import (
     ingest_death_events_for_fight,
     parse_death_events,
@@ -342,8 +344,8 @@ class TestIngestDeathEventsForFight:
         session.add.assert_not_called()
         session.flush.assert_not_awaited()
 
-    async def test_exception_returns_zero(self):
-        """When fetch_all_events raises, returns 0 without propagating."""
+    async def test_exception_propagates(self):
+        """When DB raises, error propagates to caller (outer handler in ingest.py)."""
         wcl = AsyncMock()
         session = AsyncMock()
         session.execute = AsyncMock(side_effect=Exception("DB error"))
@@ -354,8 +356,7 @@ class TestIngestDeathEventsForFight:
         fight.start_time = 0
         fight.end_time = 60000
 
-        count = await ingest_death_events_for_fight(
-            wcl, session, "FAIL", fight,
-        )
-
-        assert count == 0
+        with pytest.raises(Exception, match="DB error"):
+            await ingest_death_events_for_fight(
+                wcl, session, "FAIL", fight,
+            )

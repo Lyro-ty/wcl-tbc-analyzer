@@ -2,9 +2,12 @@
 
 import functools
 import inspect
+import logging
 
 from langchain_core.tools import tool
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 # Module-level session provider, set during app startup
 _session_factory = None
@@ -51,6 +54,7 @@ def db_tool(fn):
         try:
             return await fn(session, *args, **kwargs)
         except Exception as e:
+            logger.exception("Tool error in %s", fn.__name__)
             return f"Error retrieving data: {e}"
         finally:
             await session.close()

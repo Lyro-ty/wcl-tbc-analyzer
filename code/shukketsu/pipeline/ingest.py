@@ -122,9 +122,12 @@ async def ingest_report(
     # Parse fights
     fights = parse_fights(report_info["fights"], report_code)
 
-    # Auto-insert any unknown encounters as stubs
+    # Auto-insert any unknown encounters as stubs (skip if already seeded)
     encounter_ids = {f.encounter_id for f in fights}
     for eid in encounter_ids:
+        existing = await session.get(Encounter, eid)
+        if existing is not None:
+            continue
         fight_data = next(
             fd for fd in report_info["fights"] if fd.get("encounterID") == eid
         )

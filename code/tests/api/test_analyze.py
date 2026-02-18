@@ -292,7 +292,7 @@ async def test_stream_handles_error():
 
     assert resp.status_code == 200
     body = resp.text
-    assert "LLM connection refused" in body
+    assert "Analysis failed" in body
 
 
 # --- Langfuse callback wiring tests ---
@@ -420,7 +420,6 @@ async def test_lifespan_creates_langfuse_handler_when_enabled(monkeypatch):
     ):
         mock_engine.return_value = AsyncMock()
         mock_sf.return_value = AsyncMock()
-        mock_cb_cls = mock_init_langfuse.return_value
 
         from shukketsu.api.app import create_app
         app = create_app()
@@ -433,7 +432,8 @@ async def test_lifespan_creates_langfuse_handler_when_enabled(monkeypatch):
         secret_key="sk-lf-test",
         host="http://localhost:3000",
     )
-    mock_cb_cls.assert_called_once_with()
+    # Class is stored but not instantiated during lifespan —
+    # instances are created per-request via _get_langfuse_handler()
     mock_set_handler.assert_called_once()
     get_settings.cache_clear()
 

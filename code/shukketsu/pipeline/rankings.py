@@ -208,6 +208,7 @@ async def ingest_all_rankings(
                     logger.error(
                         "[%d/%d] Error: %s", progress, total_combos, error_msg
                     )
+                    await session.rollback()
 
         # Commit after each encounter batch
         await session.commit()

@@ -117,14 +117,6 @@ async def ingest_table_data_for_fight(
     query = REPORT_TABLE.replace("RATE_LIMIT", rate_limit_frag)
     fight_duration_ms = fight.end_time - fight.start_time
 
-    # Delete existing table data for this fight
-    await session.execute(
-        delete(AbilityMetric).where(AbilityMetric.fight_id == fight.id)
-    )
-    await session.execute(
-        delete(BuffUptime).where(BuffUptime.fight_id == fight.id)
-    )
-
     total_rows = 0
 
     # Fetch 4 data types: DamageDone, Healing, Buffs, Debuffs
@@ -147,6 +139,23 @@ async def ingest_table_data_for_fight(
             )
             table_raw = raw_data["reportData"]["report"]["table"]
             top_entries = parse_table_response(table_raw)
+
+            # Delete only THIS type's rows right before insert (prevents
+            # partial data loss if a later API call fails)
+            if parse_kind == "ability":
+                await session.execute(
+                    delete(AbilityMetric).where(
+                        AbilityMetric.fight_id == fight.id,
+                        AbilityMetric.metric_type == metric_type,
+                    )
+                )
+            else:
+                await session.execute(
+                    delete(BuffUptime).where(
+                        BuffUptime.fight_id == fight.id,
+                        BuffUptime.metric_type == metric_type,
+                    )
+                )
 
             # Without sourceID, WCL returns entries grouped by source (player)
             for source_entry in top_entries:

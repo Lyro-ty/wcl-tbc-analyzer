@@ -512,7 +512,7 @@ class TestIngestCastEventsForFight:
 
     @pytest.mark.asyncio
     async def test_ingest_cast_events_for_fight_exception(self):
-        """On exception, returns 0 and logs error."""
+        """On exception, error propagates to caller (outer handler in ingest.py)."""
         wcl = AsyncMock()
         session = AsyncMock()
         session.execute = AsyncMock(side_effect=RuntimeError("DB error"))
@@ -523,8 +523,7 @@ class TestIngestCastEventsForFight:
         fight.start_time = 0
         fight.end_time = 60_000
 
-        total = await ingest_cast_events_for_fight(
-            wcl, session, "ABC", fight, {}, {},
-        )
-
-        assert total == 0
+        with pytest.raises(RuntimeError, match="DB error"):
+            await ingest_cast_events_for_fight(
+                wcl, session, "ABC", fight, {}, {},
+            )

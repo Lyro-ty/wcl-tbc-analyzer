@@ -1,20 +1,18 @@
+import asyncio
 import json
 import logging
 import re
 
 from fastapi import APIRouter, HTTPException
 from langchain_core.messages import HumanMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
+
+from shukketsu.agent.utils import strip_think_tags as _strip_think_tags
 
 logger = logging.getLogger(__name__)
 
 _THINK_PATTERN = re.compile(r"^.*?</think>\s*", flags=re.DOTALL)
-
-
-def _strip_think_tags(text: str) -> str:
-    """Strip Nemotron's leaked reasoning/think tags from output."""
-    return _THINK_PATTERN.sub("", text)
 
 
 router = APIRouter(prefix="/api", tags=["analysis"])
@@ -22,21 +20,32 @@ router = APIRouter(prefix="/api", tags=["analysis"])
 # Graph instance, set during app startup
 _compiled_graph = None
 
-# Langfuse handler, set during app startup (optional)
-_langfuse_handler = None
+# Langfuse handler class, set during app startup (optional).
+# Store the class, not an instance — create a fresh handler per request
+# to avoid interleaved/corrupt trace data across concurrent requests.
+_langfuse_handler_cls = None
 
 
-def set_langfuse_handler(handler) -> None:
-    global _langfuse_handler
-    _langfuse_handler = handler
+def set_langfuse_handler(handler_or_cls) -> None:
+    """Accept either a class (preferred) or an instance (legacy)."""
+    global _langfuse_handler_cls
+    if isinstance(handler_or_cls, type):
+        _langfuse_handler_cls = handler_or_cls
+    else:
+        # Legacy: was passed an instance; extract its class
+        _langfuse_handler_cls = type(handler_or_cls)
 
 
 def _get_langfuse_handler():
-    return _langfuse_handler
+    return _langfuse_handler_cls() if _langfuse_handler_cls else None
 
 
 class AnalyzeRequest(BaseModel):
-    question: str
+    question: str = Field(..., min_length=1, max_length=2000)
+
+
+# Limit concurrent LLM invocations
+_llm_semaphore = asyncio.Semaphore(2)
 
 
 class AnalyzeResponse(BaseModel):
@@ -60,14 +69,15 @@ async def analyze(request: AnalyzeRequest):
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
     try:
-        config = {}
-        handler = _get_langfuse_handler()
-        if handler:
-            config["callbacks"] = [handler]
-        result = await graph.ainvoke(
-            {"messages": [HumanMessage(content=request.question)]},
-            config=config,
-        )
+        async with _llm_semaphore:
+            config = {}
+            handler = _get_langfuse_handler()
+            if handler:
+                config["callbacks"] = [handler]
+            result = await graph.ainvoke(
+                {"messages": [HumanMessage(content=request.question)]},
+                config=config,
+            )
     except Exception as exc:
         logger.exception("Agent invocation failed")
         raise HTTPException(
@@ -142,8 +152,8 @@ async def analyze_stream(request: AnalyzeRequest):
 
             yield {"data": json.dumps({"done": True, "query_type": query_type})}
 
-        except Exception as exc:
+        except Exception:
             logger.exception("Streaming analysis failed")
-            yield {"event": "error", "data": json.dumps({"detail": str(exc)})}
+            yield {"event": "error", "data": json.dumps({"detail": "Analysis failed"})}
 
     return EventSourceResponse(event_generator())

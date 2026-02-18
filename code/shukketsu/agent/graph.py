@@ -17,19 +17,13 @@ from shukketsu.agent.prompts import (
     SYSTEM_PROMPT,
 )
 from shukketsu.agent.state import AnalyzerState
+from shukketsu.agent.utils import strip_think_tags as _strip_think_tags
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 2
 
 VALID_QUERY_TYPES = {"my_performance", "comparison", "trend", "rotation", "general"}
-
-_THINK_PATTERN = re.compile(r"^.*?</think>\s*", flags=re.DOTALL)
-
-
-def _strip_think_tags(text: str) -> str:
-    """Strip Nemotron's leaked reasoning/think tags from output."""
-    return _THINK_PATTERN.sub("", text)
 
 
 def _normalize_tool_args(args: dict[str, Any]) -> dict[str, Any]:
@@ -64,7 +58,11 @@ async def route_query(state: dict[str, Any], llm: Any) -> dict[str, Any]:
 async def query_database(state: dict[str, Any], llm_with_tools: Any) -> dict[str, Any]:
     """Use the LLM with tools to query the database based on the question."""
     query_type = state.get("query_type", "general")
-    user_msg = state["messages"][-1] if state["messages"] else HumanMessage(content="")
+    # Always use the original user question (not the rewrite AIMessage)
+    user_msg = next(
+        (m for m in state["messages"] if isinstance(m, HumanMessage)),
+        state["messages"][-1] if state["messages"] else HumanMessage(content=""),
+    )
 
     system_content = (
         f"{SYSTEM_PROMPT}\n\n"
@@ -94,8 +92,10 @@ async def grade_results(state: dict[str, Any], llm: Any) -> dict[str, Any]:
         logger.info("Max retries reached, proceeding to analysis")
         return {"grade": "relevant"}
 
-    # Get the last few messages for context
-    recent = state["messages"][-3:] if len(state["messages"]) > 3 else state["messages"]
+    # Always include the original user question + latest tool results
+    original = [m for m in state["messages"] if isinstance(m, HumanMessage)][:1]
+    tail = state["messages"][-3:]
+    recent = original + [m for m in tail if m not in original]
     messages = [
         SystemMessage(content=GRADER_PROMPT),
         HumanMessage(content=f"User question and retrieved data:\n{_format_messages(recent)}"),

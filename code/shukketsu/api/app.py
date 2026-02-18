@@ -67,15 +67,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     set_health_deps(session_factory=session_factory, llm_base_url=settings.llm.base_url)
 
     # Langfuse observability (optional)
-    langfuse_handler = None
+    langfuse_enabled = False
     if settings.langfuse.enabled:
         cb_handler_cls = _init_langfuse(
             public_key=settings.langfuse.public_key,
             secret_key=settings.langfuse.secret_key.get_secret_value(),
             host=settings.langfuse.host,
         )
-        langfuse_handler = cb_handler_cls()
-        set_langfuse_handler(langfuse_handler)
+        set_langfuse_handler(cb_handler_cls)
+        langfuse_enabled = True
         logger.info("Langfuse tracing enabled: %s", settings.langfuse.host)
 
     # Auto-ingest background service (optional)
@@ -101,7 +101,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # Shutdown
     await auto_ingest.stop()
-    if langfuse_handler is not None:
+    if langfuse_enabled:
         from langfuse import get_client
         get_client().flush()
     await engine.dispose()

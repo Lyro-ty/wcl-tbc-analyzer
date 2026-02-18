@@ -1,7 +1,5 @@
 """Tests for the auto-ingest background service."""
 
-import asyncio
-import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from shukketsu.pipeline.auto_ingest import AutoIngestService
@@ -380,19 +378,16 @@ class TestAutoIngestTrigger:
         assert "message" in result
 
     async def test_trigger_now_rejects_concurrent(self):
-        """Second trigger_now call returns already_running while first is active."""
+        """Second trigger_now call returns already_running while poll lock held."""
         settings = _make_settings()
         wcl = AsyncMock()
         svc = AutoIngestService(settings, AsyncMock(), _make_wcl_factory(wcl))
 
-        # Simulate an in-progress trigger task
-        never_done = asyncio.Future()
-        svc._trigger_task = asyncio.ensure_future(never_done)
+        # Simulate an in-progress poll by holding the lock
+        await svc._poll_lock.acquire()
 
         result = await svc.trigger_now()
         assert result["status"] == "already_running"
 
         # Clean up
-        never_done.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await never_done
+        svc._poll_lock.release()

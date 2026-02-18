@@ -22,6 +22,7 @@ class AutoIngestService:
         self._wcl_factory = wcl_factory  # callable returning async context manager
         self._task: asyncio.Task | None = None
         self._trigger_task: asyncio.Task | None = None
+        self._poll_lock = asyncio.Lock()
         self._last_poll: datetime | None = None
         self._status: str = "idle"  # idle, polling, ingesting, error
         self._last_error: str | None = None
@@ -69,7 +70,13 @@ class AutoIngestService:
             await asyncio.sleep(interval)
 
     async def _poll_once(self):
-        """Single poll: fetch guild reports, ingest new ones."""
+        """Single poll: fetch guild reports, ingest new ones (mutex-protected)."""
+        async with self._poll_lock:
+            await self._poll_once_inner()
+
+    async def _poll_once_inner(self):
+        """Inner poll logic (called under _poll_lock)."""
+        from shukketsu.db.models import MyCharacter
         from shukketsu.wcl.queries import GUILD_REPORTS
 
         guild_id = self.settings.guild.id
@@ -139,6 +146,11 @@ class AutoIngestService:
             logger.info("Found %d new reports to ingest", len(new_reports))
             self._status = "ingesting"
 
+            # Query registered character names for is_my_character flagging
+            async with self._session_factory() as session:
+                char_result = await session.execute(select(MyCharacter.name))
+                my_names = {row[0] for row in char_result}
+
             # Ingest each new report
             cfg = self.settings.auto_ingest
             for report_data in new_reports:
@@ -150,6 +162,7 @@ class AutoIngestService:
                     ):
                         await ingest_report(
                             wcl, session, code,
+                            my_character_names=my_names,
                             ingest_tables=cfg.with_tables,
                             ingest_events=cfg.with_events,
                         )
@@ -182,7 +195,7 @@ class AutoIngestService:
 
     async def trigger_now(self) -> dict:
         """Manual trigger, runs poll in background."""
-        if self._trigger_task and not self._trigger_task.done():
+        if self._poll_lock.locked():
             return {"status": "already_running", "message": "Poll already in progress"}
         self._trigger_task = asyncio.create_task(self._poll_once())
         return {"status": "triggered", "message": "Poll started in background"}
