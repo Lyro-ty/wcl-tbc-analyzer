@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Computed,
     Float,
     ForeignKey,
@@ -78,9 +79,9 @@ class Fight(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    report_code: Mapped[str] = mapped_column(ForeignKey("reports.code"))
+    report_code: Mapped[str] = mapped_column(ForeignKey("reports.code", ondelete="CASCADE"))
     fight_id: Mapped[int] = mapped_column(Integer)
-    encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id"))
+    encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id", ondelete="CASCADE"))
     start_time: Mapped[int] = mapped_column(BigInteger)
     end_time: Mapped[int] = mapped_column(BigInteger)
     duration_ms: Mapped[int] = mapped_column(
@@ -113,10 +114,21 @@ class FightPerformance(Base):
         Index("ix_fight_performances_fight_id", "fight_id"),
         Index("ix_fight_performances_player_name", "player_name"),
         Index("ix_fight_performances_class_spec", "player_class", "player_spec"),
+        CheckConstraint(
+            "parse_percentile IS NULL OR "
+            "(parse_percentile >= 0 AND parse_percentile <= 100)",
+            name="ck_fp_parse_pct",
+        ),
+        CheckConstraint(
+            "ilvl_parse_percentile IS NULL OR "
+            "(ilvl_parse_percentile >= 0 AND ilvl_parse_percentile <= 100)",
+            name="ck_fp_ilvl_parse_pct",
+        ),
+        CheckConstraint("dps >= 0", name="ck_fp_dps_pos"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"))
     player_name: Mapped[str] = mapped_column(String(100))
     player_class: Mapped[str] = mapped_column(String(50))
     player_spec: Mapped[str] = mapped_column(String(50))
@@ -144,7 +156,7 @@ class TopRanking(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id"))
+    encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id", ondelete="CASCADE"))
     class_: Mapped[str] = mapped_column("class", String(50))
     spec: Mapped[str] = mapped_column(String(50))
     metric: Mapped[str] = mapped_column(String(20))
@@ -166,7 +178,7 @@ class SpeedRanking(Base):
     __tablename__ = "speed_rankings"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id"))
+    encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id", ondelete="CASCADE"))
     rank_position: Mapped[int] = mapped_column(Integer)
     report_code: Mapped[str] = mapped_column(String(50))
     fight_id: Mapped[int] = mapped_column(Integer)
@@ -182,10 +194,10 @@ class ProgressionSnapshot(Base):
 
     time: Mapped[datetime] = mapped_column(primary_key=True)
     character_id: Mapped[int] = mapped_column(
-        ForeignKey("my_characters.id"), primary_key=True
+        ForeignKey("my_characters.id", ondelete="CASCADE"), primary_key=True
     )
     encounter_id: Mapped[int] = mapped_column(
-        ForeignKey("encounters.id"), primary_key=True
+        ForeignKey("encounters.id", ondelete="CASCADE"), primary_key=True
     )
     best_parse: Mapped[float | None] = mapped_column(Float)
     median_parse: Mapped[float | None] = mapped_column(Float)
@@ -206,7 +218,7 @@ class AbilityMetric(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"))
     player_name: Mapped[str] = mapped_column(String(100))
     metric_type: Mapped[str] = mapped_column(String(20))
     ability_name: Mapped[str] = mapped_column(String(200))
@@ -225,10 +237,14 @@ class BuffUptime(Base):
     __tablename__ = "buff_uptimes"
     __table_args__ = (
         Index("ix_buff_uptimes_fight_player", "fight_id", "player_name"),
+        CheckConstraint(
+            "uptime_pct >= 0 AND uptime_pct <= 100",
+            name="ck_bu_uptime_pct",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"))
     player_name: Mapped[str] = mapped_column(String(100))
     metric_type: Mapped[str] = mapped_column(String(20))
     ability_name: Mapped[str] = mapped_column(String(200))
@@ -246,7 +262,7 @@ class DeathDetail(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"))
     player_name: Mapped[str] = mapped_column(String(100))
     death_index: Mapped[int] = mapped_column(Integer)
     timestamp_ms: Mapped[int] = mapped_column(BigInteger)
@@ -262,10 +278,14 @@ class CastMetric(Base):
     __tablename__ = "cast_metrics"
     __table_args__ = (
         Index("ix_cast_metrics_fight_player", "fight_id", "player_name"),
+        CheckConstraint(
+            "gcd_uptime_pct >= 0 AND gcd_uptime_pct <= 100",
+            name="ck_cm_gcd_pct",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"))
     player_name: Mapped[str] = mapped_column(String(100))
     total_casts: Mapped[int] = mapped_column(Integer, default=0)
     casts_per_minute: Mapped[float] = mapped_column(Float, default=0.0)
@@ -284,10 +304,14 @@ class CooldownUsage(Base):
     __tablename__ = "cooldown_usage"
     __table_args__ = (
         Index("ix_cooldown_usage_fight_player", "fight_id", "player_name"),
+        CheckConstraint(
+            "efficiency_pct >= 0 AND efficiency_pct <= 100",
+            name="ck_cu_eff_pct",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"))
     player_name: Mapped[str] = mapped_column(String(100))
     spell_id: Mapped[int] = mapped_column(Integer)
     ability_name: Mapped[str] = mapped_column(String(200))
@@ -305,10 +329,14 @@ class CancelledCast(Base):
     __tablename__ = "cancelled_casts"
     __table_args__ = (
         Index("ix_cancelled_casts_fight_player", "fight_id", "player_name"),
+        CheckConstraint(
+            "cancel_pct >= 0 AND cancel_pct <= 100",
+            name="ck_cc_cancel_pct",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"))
     player_name: Mapped[str] = mapped_column(String(100))
     total_begins: Mapped[int] = mapped_column(Integer, default=0)
     total_completions: Mapped[int] = mapped_column(Integer, default=0)
@@ -326,7 +354,7 @@ class FightConsumable(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"))
     player_name: Mapped[str] = mapped_column(String(100))
     category: Mapped[str] = mapped_column(String(50))
     spell_id: Mapped[int] = mapped_column(Integer)
@@ -343,7 +371,7 @@ class GearSnapshot(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"))
     player_name: Mapped[str] = mapped_column(String(100))
     slot: Mapped[int] = mapped_column(Integer)
     item_id: Mapped[int] = mapped_column(Integer)
@@ -361,10 +389,14 @@ class ResourceSnapshot(Base):
         Index(
             "ix_resource_snapshots_fight_player", "fight_id", "player_name"
         ),
+        CheckConstraint(
+            "time_at_zero_pct >= 0 AND time_at_zero_pct <= 100",
+            name="ck_rs_zero_pct",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"))
     player_name: Mapped[str] = mapped_column(String(100))
     resource_type: Mapped[str] = mapped_column(String(50))
     min_value: Mapped[int] = mapped_column(Integer, default=0)
@@ -385,7 +417,7 @@ class CastEvent(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id"))
+    fight_id: Mapped[int] = mapped_column(ForeignKey("fights.id", ondelete="CASCADE"))
     player_name: Mapped[str] = mapped_column(String(100))
     timestamp_ms: Mapped[int] = mapped_column(BigInteger)
     spell_id: Mapped[int] = mapped_column(Integer)
