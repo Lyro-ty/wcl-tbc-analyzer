@@ -169,7 +169,7 @@ COMPARE_TWO_RAIDS = text("""
         LEFT JOIN fight_performances fp ON fp.fight_id = f.id
         WHERE f.report_code = :report_a
           AND f.kill = true
-        GROUP BY f.encounter_id, e.name, f.duration_ms, f.kill
+        GROUP BY f.id, f.encounter_id, e.name, f.duration_ms, f.kill
     ),
     raid_b AS (
         SELECT f.encounter_id, e.name AS encounter_name,
@@ -186,7 +186,7 @@ COMPARE_TWO_RAIDS = text("""
         LEFT JOIN fight_performances fp ON fp.fight_id = f.id
         WHERE f.report_code = :report_b
           AND f.kill = true
-        GROUP BY f.encounter_id, e.name, f.duration_ms, f.kill
+        GROUP BY f.id, f.encounter_id, e.name, f.duration_ms, f.kill
     )
     SELECT COALESCE(a.encounter_name, b.encounter_name) AS encounter_name,
            a.duration_ms AS a_duration_ms, b.duration_ms AS b_duration_ms,
