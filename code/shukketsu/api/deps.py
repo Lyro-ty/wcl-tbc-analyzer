@@ -52,7 +52,7 @@ async def verify_api_key(
     query_key: str | None = Depends(_query_scheme),
 ) -> None:
     """Rejects requests when API key is configured but not provided."""
-    configured_key = get_settings().app.api_key
+    configured_key = get_settings().api_key
     if not configured_key:
         return  # auth disabled when key not set
     provided = header_key or query_key

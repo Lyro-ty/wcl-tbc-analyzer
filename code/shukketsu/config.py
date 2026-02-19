@@ -29,12 +29,6 @@ class LLMConfig(BaseModel):
     num_ctx: int = 32768
 
 
-class AppConfig(BaseModel):
-    host: str = "0.0.0.0"
-    port: int = 8000
-    api_key: str = ""  # empty = auth disabled
-
-
 class LangfuseConfig(BaseModel):
     enabled: bool = False
     public_key: str = ""
@@ -66,10 +60,10 @@ class Settings(BaseSettings):
 
     debug: bool = False
     log_level: str = "INFO"
+    api_key: str = ""  # empty = auth disabled
     wcl: WCLConfig = WCLConfig()
     db: DatabaseConfig = DatabaseConfig()
     llm: LLMConfig = LLMConfig()
-    app: AppConfig = AppConfig()
     langfuse: LangfuseConfig = LangfuseConfig()
     guild: GuildConfig = GuildConfig()
     auto_ingest: AutoIngestConfig = AutoIngestConfig()

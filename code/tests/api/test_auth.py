@@ -36,7 +36,7 @@ async def test_auth_rejects_when_key_configured_no_key_provided():
     app = _make_app_with_db(session)
 
     with patch("shukketsu.api.deps.get_settings") as mock_settings:
-        mock_settings.return_value.app.api_key = "secret-key-123"
+        mock_settings.return_value.api_key = "secret-key-123"
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -53,7 +53,7 @@ async def test_auth_accepts_valid_header_key():
     app = _make_app_with_db(session)
 
     with patch("shukketsu.api.deps.get_settings") as mock_settings:
-        mock_settings.return_value.app.api_key = "secret-key-123"
+        mock_settings.return_value.api_key = "secret-key-123"
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -72,7 +72,7 @@ async def test_auth_accepts_valid_query_param():
     app = _make_app_with_db(session)
 
     with patch("shukketsu.api.deps.get_settings") as mock_settings:
-        mock_settings.return_value.app.api_key = "secret-key-123"
+        mock_settings.return_value.api_key = "secret-key-123"
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -90,7 +90,7 @@ async def test_auth_rejects_invalid_key():
     app = _make_app_with_db(session)
 
     with patch("shukketsu.api.deps.get_settings") as mock_settings:
-        mock_settings.return_value.app.api_key = "secret-key-123"
+        mock_settings.return_value.api_key = "secret-key-123"
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -109,7 +109,7 @@ async def test_auth_disabled_when_no_key_configured():
     app = _make_app_with_db(session)
 
     with patch("shukketsu.api.deps.get_settings") as mock_settings:
-        mock_settings.return_value.app.api_key = ""
+        mock_settings.return_value.api_key = ""
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -125,7 +125,7 @@ async def test_auth_header_takes_precedence_over_query():
     app = _make_app_with_db(session)
 
     with patch("shukketsu.api.deps.get_settings") as mock_settings:
-        mock_settings.return_value.app.api_key = "secret-key-123"
+        mock_settings.return_value.api_key = "secret-key-123"
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
