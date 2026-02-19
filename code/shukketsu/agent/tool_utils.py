@@ -96,3 +96,61 @@ def _format_duration(ms: int) -> str:
     """Format milliseconds as 'Xm Ys'."""
     seconds = ms // 1000
     return f"{seconds // 60}m {seconds % 60}s"
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers for agent tools
+# ---------------------------------------------------------------------------
+
+TABLE_DATA_HINT = (
+    "Table data may not have been ingested yet "
+    "(use pull-my-logs --with-tables or pull-table-data to fetch it)."
+)
+EVENT_DATA_HINT = (
+    "Event data may not have been ingested yet "
+    "(use pull-my-logs --with-events to fetch it)."
+)
+
+
+def wildcard(value: str) -> str:
+    """Wrap a value in SQL ILIKE wildcards."""
+    return f"%{value}%"
+
+
+def wildcard_or_none(value: str | None) -> str | None:
+    """Wrap in wildcards if truthy, else None (for optional ILIKE params)."""
+    if not value or not value.strip():
+        return None
+    return f"%{value}%"
+
+
+def grade_above(
+    value: float,
+    tiers: list[tuple[float, str]],
+    default: str,
+) -> str:
+    """Return the first label whose threshold value >= threshold (higher is better).
+
+    Tiers must be in descending threshold order.
+    Example: grade_above(87, [(90, "A"), (75, "B"), (60, "C")], "F") -> "B"
+    """
+    for threshold, label in tiers:
+        if value >= threshold:
+            return label
+    return default
+
+
+def grade_below(
+    value: float,
+    tiers: list[tuple[float, str]],
+    default: str,
+) -> str:
+    """Return the first label whose threshold value < threshold (lower is better).
+
+    Tiers must be in ascending threshold order.
+    Example: grade_below(7, [(5, "EXCELLENT"), (10, "GOOD")], "BAD") -> "GOOD"
+    """
+    for threshold, label in tiers:
+        if value < threshold:
+            return label
+    return default
