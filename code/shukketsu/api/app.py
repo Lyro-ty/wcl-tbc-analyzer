@@ -22,24 +22,6 @@ logger = logging.getLogger(__name__)
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
-# Lazy import — only loaded when Langfuse is enabled
-CallbackHandler = None
-
-
-def _init_langfuse(public_key, secret_key, host):
-    """Initialize Langfuse client + CallbackHandler lazily."""
-    global CallbackHandler
-    from langfuse import Langfuse
-    Langfuse(
-        public_key=public_key,
-        secret_key=secret_key,
-        base_url=host,
-    )
-    if CallbackHandler is None:
-        import langfuse.langchain
-        CallbackHandler = langfuse.langchain.CallbackHandler
-    return CallbackHandler
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
@@ -69,12 +51,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Langfuse observability (optional)
     langfuse_enabled = False
     if settings.langfuse.enabled:
-        cb_handler_cls = _init_langfuse(
+        from langfuse import Langfuse
+        from langfuse.langchain import CallbackHandler as LangfuseCB
+
+        Langfuse(
             public_key=settings.langfuse.public_key,
             secret_key=settings.langfuse.secret_key.get_secret_value(),
             host=settings.langfuse.host,
         )
-        set_langfuse_handler(cb_handler_cls)
+        set_langfuse_handler(LangfuseCB)
         langfuse_enabled = True
         logger.info("Langfuse tracing enabled: %s", settings.langfuse.host)
 

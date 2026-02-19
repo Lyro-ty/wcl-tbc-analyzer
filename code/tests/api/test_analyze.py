@@ -1,5 +1,5 @@
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -406,6 +406,9 @@ async def test_lifespan_creates_langfuse_handler_when_enabled(monkeypatch):
     from shukketsu.config import get_settings
     get_settings.cache_clear()
 
+    mock_langfuse_cls = MagicMock()
+    mock_cb_handler = MagicMock()
+
     with (
         patch("shukketsu.api.app.create_db_engine") as mock_engine,
         patch("shukketsu.api.app.create_session_factory") as mock_sf,
@@ -416,7 +419,10 @@ async def test_lifespan_creates_langfuse_handler_when_enabled(monkeypatch):
         patch("shukketsu.api.app.set_graph"),
         patch("shukketsu.api.app.set_health_deps"),
         patch("shukketsu.api.app.set_langfuse_handler") as mock_set_handler,
-        patch("shukketsu.api.app._init_langfuse") as mock_init_langfuse,
+        patch.dict("sys.modules", {
+            "langfuse": MagicMock(Langfuse=mock_langfuse_cls),
+            "langfuse.langchain": MagicMock(CallbackHandler=mock_cb_handler),
+        }),
     ):
         mock_engine.return_value = AsyncMock()
         mock_sf.return_value = AsyncMock()
@@ -427,14 +433,12 @@ async def test_lifespan_creates_langfuse_handler_when_enabled(monkeypatch):
         async with app.router.lifespan_context(app):
             pass
 
-    mock_init_langfuse.assert_called_once_with(
+    mock_langfuse_cls.assert_called_once_with(
         public_key="pk-lf-test",
         secret_key="sk-lf-test",
         host="http://localhost:3000",
     )
-    # Class is stored but not instantiated during lifespan —
-    # instances are created per-request via _get_langfuse_handler()
-    mock_set_handler.assert_called_once()
+    mock_set_handler.assert_called_once_with(mock_cb_handler)
     get_settings.cache_clear()
 
 
