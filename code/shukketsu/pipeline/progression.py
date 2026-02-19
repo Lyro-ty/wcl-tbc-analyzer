@@ -32,7 +32,7 @@ async def compute_progression_snapshot(
         .where(
             Fight.encounter_id == encounter_id,
             Fight.kill == True,  # noqa: E712
-            FightPerformance.player_name == character.name,
+            FightPerformance.player_name.ilike(character.name),
             FightPerformance.is_my_character == True,  # noqa: E712
         )
     )
@@ -96,7 +96,7 @@ async def snapshot_all_characters(
             .join(FightPerformance, FightPerformance.fight_id == Fight.id)
             .where(
                 Fight.kill == True,  # noqa: E712
-                FightPerformance.player_name == character.name,
+                FightPerformance.player_name.ilike(character.name),
                 FightPerformance.is_my_character == True,  # noqa: E712
             )
         )

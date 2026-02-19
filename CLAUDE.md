@@ -100,7 +100,7 @@ code/
 │   └── src/
 │       ├── lib/            # api.ts (API client), types.ts (TypeScript interfaces)
 │       └── pages/          # 15 page components (Dashboard, Reports, Roster, Chat, etc.)
-├── tests/                  # Test suite (509 tests, mirrors package structure)
+├── tests/                  # Test suite (713 tests, mirrors package structure)
 └── alembic/                # Database migrations (async-aware)
 ```
 
@@ -404,4 +404,4 @@ These rules prevent bugs that have occurred in this codebase. Follow them strict
 - `tenacity` for retries on external API calls.
 - Large files in `models/` or `data/` (Git LFS). Scratch data in `data/scratch/` (gitignored).
 - Never commit `.env`.
-- CORS is currently permissive (`allow_origins=["*"]`) — tighten for production.
+- CORS restricted to `localhost:5173` (dev frontend) and `localhost:8000` (API).

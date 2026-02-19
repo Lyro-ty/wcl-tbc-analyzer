@@ -211,13 +211,13 @@ async def test_wipe_progression_query(session):
 @pytest.mark.integration
 async def test_regression_check_query(session):
     """REGRESSION_CHECK query with CTEs and window functions executes."""
-    await session.execute(q.REGRESSION_CHECK)
+    await session.execute(q.REGRESSION_CHECK, {"player_name": None})
 
 
 @pytest.mark.integration
 async def test_regression_check_player_query(session):
-    """REGRESSION_CHECK_PLAYER query executes without syntax error."""
-    await session.execute(q.REGRESSION_CHECK_PLAYER, {"player_name": "%test%"})
+    """REGRESSION_CHECK query with player filter executes without syntax error."""
+    await session.execute(q.REGRESSION_CHECK, {"player_name": "%test%"})
 
 
 @pytest.mark.integration

@@ -133,6 +133,6 @@ async def ingest_combatant_info_for_report(
 
     logger.info(
         "Ingested combatant info for report %s: %d total rows across %d fights",
-        report_code, total_rows, len(list(fights)),
+        report_code, total_rows, len(fights),
     )
     return total_rows

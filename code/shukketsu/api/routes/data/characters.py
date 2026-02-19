@@ -239,13 +239,10 @@ async def get_regressions_endpoint(
 ):
     """Get performance regressions/improvements for tracked characters."""
     try:
-        if player:
-            result = await session.execute(
-                q.REGRESSION_CHECK_PLAYER,
-                {"player_name": f"%{player}%"},
-            )
-        else:
-            result = await session.execute(q.REGRESSION_CHECK)
+        result = await session.execute(
+            q.REGRESSION_CHECK,
+            {"player_name": f"%{player}%" if player else None},
+        )
         rows = result.fetchall()
         return [RegressionEntry(**dict(r._mapping)) for r in rows]
     except Exception:

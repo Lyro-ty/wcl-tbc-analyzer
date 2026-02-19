@@ -1,18 +1,17 @@
 import asyncio
 import json
 import logging
-import re
 
 from fastapi import APIRouter, HTTPException
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from shukketsu.agent.utils import THINK_PATTERN
 from shukketsu.agent.utils import strip_think_tags as _strip_think_tags
 
 logger = logging.getLogger(__name__)
 
-_THINK_PATTERN = re.compile(r"^.*?</think>\s*", flags=re.DOTALL)
 _MAX_THINK_BUFFER = 32768  # 32KB max for think-tag buffering
 
 
@@ -148,7 +147,7 @@ async def analyze_stream(request: AnalyzeRequest):
                             think_done = True
                             continue
                         if "</think>" in buffer:
-                            after = _THINK_PATTERN.sub("", buffer)
+                            after = THINK_PATTERN.sub("", buffer)
                             think_done = True
                             buffer = ""
                             if after.strip():

@@ -375,13 +375,10 @@ async def get_regressions(
     Compares recent kills (last 2) against rolling baseline (kills 3-7).
     Flags significant drops (>=15 percentile points) as regressions.
     Only tracks registered characters."""
-    if player_name:
-        result = await session.execute(
-            q.REGRESSION_CHECK_PLAYER,
-            {"player_name": wildcard(player_name)},
-        )
-    else:
-        result = await session.execute(q.REGRESSION_CHECK)
+    result = await session.execute(
+        q.REGRESSION_CHECK,
+        {"player_name": wildcard(player_name) if player_name else None},
+    )
     rows = result.fetchall()
     if not rows:
         return (

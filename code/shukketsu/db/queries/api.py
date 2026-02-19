@@ -40,6 +40,7 @@ REPORTS_LIST = text("""
     LEFT JOIN fights f ON f.report_code = r.code
     GROUP BY r.code, r.title, r.guild_name, r.start_time, r.end_time
     ORDER BY r.start_time DESC
+    LIMIT 200
 """)
 
 ENCOUNTERS_LIST = text("""
@@ -363,7 +364,7 @@ PLAYER_PARSE_DELTAS = text("""
            pp.avg_parse AS previous_parse,
            ROUND((cp.avg_parse - pp.avg_parse)::numeric, 1) AS parse_delta
     FROM current_parses cp
-    JOIN prev_parses pp ON cp.player_name = pp.player_name
+    JOIN prev_parses pp ON LOWER(cp.player_name) = LOWER(pp.player_name)
                        AND cp.encounter_name = pp.encounter_name
     ORDER BY parse_delta DESC
 """)

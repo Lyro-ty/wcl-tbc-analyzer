@@ -51,17 +51,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Langfuse observability (optional)
     langfuse_enabled = False
     if settings.langfuse.enabled:
-        from langfuse import Langfuse
-        from langfuse.langchain import CallbackHandler as LangfuseCB
-
-        Langfuse(
-            public_key=settings.langfuse.public_key,
-            secret_key=settings.langfuse.secret_key.get_secret_value(),
-            host=settings.langfuse.host,
-        )
-        set_langfuse_handler(LangfuseCB)
-        langfuse_enabled = True
-        logger.info("Langfuse tracing enabled: %s", settings.langfuse.host)
+        try:
+            from langfuse import Langfuse
+            from langfuse.langchain import CallbackHandler as LangfuseCB
+        except ImportError:
+            logger.warning(
+                "LANGFUSE__ENABLED=true but langfuse is not installed. "
+                "Install with: pip install shukketsu[langfuse]"
+            )
+        else:
+            Langfuse(
+                public_key=settings.langfuse.public_key,
+                secret_key=settings.langfuse.secret_key.get_secret_value(),
+                host=settings.langfuse.host,
+            )
+            set_langfuse_handler(LangfuseCB)
+            langfuse_enabled = True
+            logger.info("Langfuse tracing enabled: %s", settings.langfuse.host)
 
     # Auto-ingest background service (optional)
     from shukketsu.api.routes.auto_ingest import set_service as set_auto_ingest_service

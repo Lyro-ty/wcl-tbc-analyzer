@@ -4,8 +4,11 @@ import argparse
 import asyncio
 import logging
 
+from sqlalchemy import select
+
 from shukketsu.config import get_settings
 from shukketsu.db.engine import create_db_engine, create_session_factory
+from shukketsu.db.models import Encounter
 from shukketsu.pipeline.seeds import discover_and_seed_encounters, seed_encounters_from_list
 from shukketsu.wcl.auth import WCLAuth
 from shukketsu.wcl.client import WCLClient
@@ -44,10 +47,6 @@ async def run(zone_ids: list[int] | None = None, from_db: bool = False) -> None:
             await session.commit()
         logger.info("Discovered and seeded %d encounters", len(encounters))
     elif from_db:
-        from sqlalchemy import select
-
-        from shukketsu.db.models import Encounter
-
         async with session_factory() as session:
             result = await session.execute(select(Encounter))
             existing = result.scalars().all()

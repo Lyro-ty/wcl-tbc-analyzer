@@ -5,7 +5,7 @@ Import from here for backwards compatibility:
     q.MY_PERFORMANCE  # still works
 
 Domain files:
-    player.py     — Player/encounter-level queries (14)
+    player.py     — Player/encounter-level queries (13)
     raid.py       — Raid-level comparison queries (4)
     table_data.py — Table-data (--with-tables) queries (4)
     event.py      — Event-data (--with-events) queries (16)

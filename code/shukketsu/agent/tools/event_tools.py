@@ -253,9 +253,10 @@ async def get_cancelled_casts(
         if top:
             lines.append("\n  Most cancelled abilities:")
             for entry in top:
+                spell_name = entry.get("name", f"Spell-{entry['spell_id']}")
                 lines.append(
-                    f"    Spell ID {entry['spell_id']}: "
-                    f"{entry['count']} cancels"
+                    f"    {spell_name} (ID {entry['spell_id']}): "
+                    f"{entry['cancel_count']} cancels"
                 )
 
     return "\n".join(lines)

@@ -5,6 +5,7 @@ import logging
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shukketsu.api.deps import get_db
@@ -461,7 +462,6 @@ async def fight_phases_player(
         overall_dps = info_row.dps
 
         # Look up encounter name from encounters table via encounter_id
-        from sqlalchemy import text as sa_text
         enc_result = await session.execute(
             sa_text("SELECT name FROM encounters WHERE id = :enc_id"),
             {"enc_id": info_row.encounter_id},
