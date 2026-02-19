@@ -1,6 +1,6 @@
 """Table-data agent tools requiring --with-tables ingestion (4 tools)."""
 
-from shukketsu.agent.tool_utils import db_tool
+from shukketsu.agent.tool_utils import TABLE_DATA_HINT, db_tool, grade_above, wildcard
 from shukketsu.db import queries as q
 
 
@@ -15,15 +15,13 @@ async def get_ability_breakdown(
     result = await session.execute(
         q.ABILITY_BREAKDOWN,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%"},
+         "player_name": wildcard(player_name)},
     )
     rows = result.fetchall()
     if not rows:
         return (
             f"No ability data found for '{player_name}' in fight "
-            f"{fight_id} of report {report_code}. Table data may not "
-            f"have been ingested yet (use pull-my-logs --with-tables "
-            f"or pull-table-data to fetch it)."
+            f"{fight_id} of report {report_code}. {TABLE_DATA_HINT}"
         )
 
     damage_rows = [r for r in rows if r.metric_type == "damage"]
@@ -66,15 +64,13 @@ async def get_buff_analysis(
     result = await session.execute(
         q.BUFF_ANALYSIS,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%"},
+         "player_name": wildcard(player_name)},
     )
     rows = result.fetchall()
     if not rows:
         return (
             f"No buff/debuff data found for '{player_name}' in fight "
-            f"{fight_id} of report {report_code}. Table data may not "
-            f"have been ingested yet (use pull-my-logs --with-tables "
-            f"or pull-table-data to fetch it)."
+            f"{fight_id} of report {report_code}. {TABLE_DATA_HINT}"
         )
 
     buff_rows = [r for r in rows if r.metric_type == "buff"]
@@ -88,11 +84,7 @@ async def get_buff_analysis(
     if buff_rows:
         lines.append("Buffs:")
         for r in buff_rows[:15]:
-            tier = (
-                "HIGH" if r.uptime_pct >= 90
-                else "MED" if r.uptime_pct >= 50
-                else "LOW"
-            )
+            tier = grade_above(r.uptime_pct, [(90, "HIGH"), (50, "MED")], "LOW")
             lines.append(
                 f"  [{tier}] {r.ability_name} | "
                 f"Uptime: {r.uptime_pct}%"
@@ -120,15 +112,13 @@ async def get_overheal_analysis(
     result = await session.execute(
         q.OVERHEAL_ANALYSIS,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%"},
+         "player_name": wildcard(player_name)},
     )
     rows = result.fetchall()
     if not rows:
         return (
             f"No healing data found for '{player_name}' in fight "
-            f"{fight_id} of report {report_code}. Table data may not "
-            f"have been ingested yet (use pull-my-logs --with-tables "
-            f"or pull-table-data to fetch it)."
+            f"{fight_id} of report {report_code}. {TABLE_DATA_HINT}"
         )
 
     total_heal = sum(r.total for r in rows)
@@ -150,11 +140,7 @@ async def get_overheal_analysis(
     for r in rows:
         overheal_amt = r.overheal_total or 0
         oh_pct = float(r.overheal_pct) if r.overheal_pct else 0
-        flag = ""
-        if oh_pct >= 50:
-            flag = " [HIGH]"
-        elif oh_pct >= 30:
-            flag = " [MODERATE]"
+        flag = grade_above(oh_pct, [(50, " [HIGH]"), (30, " [MODERATE]")], "")
         lines.append(
             f"  {r.ability_name} | Effective: {r.total:,} | "
             f"Overheal: {overheal_amt:,} ({oh_pct:.1f}%){flag}"
@@ -175,7 +161,7 @@ async def get_trinket_performance(
     result = await session.execute(
         q.PLAYER_BUFFS_FOR_TRINKETS,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%"},
+         "player_name": wildcard(player_name)},
     )
     rows = result.fetchall()
 
@@ -188,12 +174,9 @@ async def get_trinket_performance(
         actual = float(r.uptime_pct)
         expected = trinket_def.expected_uptime_pct
 
-        if actual >= expected:
-            grade = "EXCELLENT"
-        elif actual >= expected * 0.8:
-            grade = "GOOD"
-        else:
-            grade = "POOR"
+        grade = grade_above(
+            actual, [(expected, "EXCELLENT"), (expected * 0.8, "GOOD")], "POOR",
+        )
 
         entries.append(
             f"  [{grade}] {trinket_def.name}: Uptime {actual:.1f}% "
