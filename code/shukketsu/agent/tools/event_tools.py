@@ -3,7 +3,15 @@
 import json
 from collections import defaultdict
 
-from shukketsu.agent.tool_utils import _format_duration, db_tool
+from shukketsu.agent.tool_utils import (
+    EVENT_DATA_HINT,
+    _format_duration,
+    db_tool,
+    grade_above,
+    grade_below,
+    wildcard,
+    wildcard_or_none,
+)
 from shukketsu.db import queries as q
 
 
@@ -21,14 +29,13 @@ async def get_death_analysis(
     result = await session.execute(
         q.DEATH_ANALYSIS,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%" if player_name else None},
+         "player_name": wildcard_or_none(player_name)},
     )
     rows = result.fetchall()
     if not rows:
         return (
             f"No death data found for fight {fight_id} in report "
-            f"{report_code}. Event data may not have been ingested yet "
-            f"(use pull-my-logs --with-events to fetch it)."
+            f"{report_code}. {EVENT_DATA_HINT}"
         )
 
     lines = [
@@ -75,15 +82,13 @@ async def get_activity_report(
     result = await session.execute(
         q.CAST_ACTIVITY,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%" if player_name else None},
+         "player_name": wildcard_or_none(player_name)},
     )
     rows = result.fetchall()
     if not rows:
         return (
             f"No cast activity data found for fight {fight_id} in "
-            f"report {report_code}. Event data may not have been "
-            f"ingested yet "
-            f"(use pull-my-logs --with-events to fetch it)."
+            f"report {report_code}. {EVENT_DATA_HINT}"
         )
 
     lines = [
@@ -91,14 +96,11 @@ async def get_activity_report(
         f"({report_code}#{fight_id}):\n"
     ]
     for r in rows:
-        if r.gcd_uptime_pct >= 90:
-            grade = "EXCELLENT"
-        elif r.gcd_uptime_pct >= 85:
-            grade = "GOOD"
-        elif r.gcd_uptime_pct >= 75:
-            grade = "FAIR"
-        else:
-            grade = "NEEDS WORK"
+        grade = grade_above(
+            r.gcd_uptime_pct,
+            [(90, "EXCELLENT"), (85, "GOOD"), (75, "FAIR")],
+            "NEEDS WORK",
+        )
 
         gap_str = (
             _format_duration(r.longest_gap_ms)
@@ -127,14 +129,13 @@ async def get_cooldown_efficiency(
     result = await session.execute(
         q.COOLDOWN_EFFICIENCY,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%" if player_name else None},
+         "player_name": wildcard_or_none(player_name)},
     )
     rows = result.fetchall()
     if not rows:
         return (
             f"No cooldown data found for fight {fight_id} in report "
-            f"{report_code}. Event data may not have been ingested yet "
-            f"(use pull-my-logs --with-events to fetch it)."
+            f"{report_code}. {EVENT_DATA_HINT}"
         )
 
     lines = [
@@ -148,12 +149,11 @@ async def get_cooldown_efficiency(
             current_player = r.player_name
             lines.append(f"  {r.player_name}:")
 
-        if r.efficiency_pct < 70:
-            flag = "[LOW]"
-        elif r.efficiency_pct >= 90:
-            flag = "[GOOD]"
-        else:
-            flag = "[OK]"
+        flag = grade_above(
+            r.efficiency_pct,
+            [(90, "[GOOD]"), (70, "[OK]")],
+            "[LOW]",
+        )
 
         first_use = (
             f"{r.first_use_ms / 1000:.1f}s"
@@ -178,15 +178,13 @@ async def get_cooldown_windows(
     result = await session.execute(
         q.COOLDOWN_WINDOWS,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%"},
+         "player_name": wildcard(player_name)},
     )
     rows = result.fetchall()
     if not rows:
         return (
             f"No cooldown window data found for '{player_name}' in "
-            f"fight {fight_id} of report {report_code}. Event data "
-            f"may not have been ingested yet "
-            f"(use pull-my-logs --with-events to fetch it)."
+            f"fight {fight_id} of report {report_code}. {EVENT_DATA_HINT}"
         )
 
     lines = [
@@ -226,7 +224,7 @@ async def get_cancelled_casts(
     result = await session.execute(
         q.CANCELLED_CASTS,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%"},
+         "player_name": wildcard(player_name)},
     )
     row = result.fetchone()
     if not row:
@@ -244,14 +242,11 @@ async def get_cancelled_casts(
         f"  Cancelled casts: {row.cancel_count} ({row.cancel_pct}%)",
     ]
 
-    if row.cancel_pct < 5:
-        grade = "EXCELLENT"
-    elif row.cancel_pct < 10:
-        grade = "GOOD"
-    elif row.cancel_pct < 20:
-        grade = "FAIR"
-    else:
-        grade = "NEEDS WORK"
+    grade = grade_below(
+        row.cancel_pct,
+        [(5, "EXCELLENT"), (10, "GOOD"), (20, "FAIR")],
+        "NEEDS WORK",
+    )
     lines.append(f"  Grade: [{grade}]")
 
     if row.top_cancelled_json:
@@ -290,14 +285,13 @@ async def get_consumable_check(
     result = await session.execute(
         q.CONSUMABLE_CHECK,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%" if player_name else None},
+         "player_name": wildcard_or_none(player_name)},
     )
     rows = result.fetchall()
     if not rows:
         return (
             f"No consumable data found for fight {fight_id} in report "
-            f"{report_code}. Event data may not have been ingested yet "
-            f"(use pull-my-logs --with-events to fetch it)."
+            f"{report_code}. {EVENT_DATA_HINT}"
         )
 
     # Expected categories: flask OR elixir (mutually exclusive), food
@@ -350,15 +344,13 @@ async def get_resource_usage(
     result = await session.execute(
         q.RESOURCE_USAGE,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%"},
+         "player_name": wildcard(player_name)},
     )
     rows = result.fetchall()
     if not rows:
         return (
             f"No resource data found for '{player_name}' in fight "
-            f"{fight_id} of report {report_code}. Event data may not "
-            f"have been ingested yet "
-            f"(use pull-my-logs --with-events to fetch it)."
+            f"{fight_id} of report {report_code}. {EVENT_DATA_HINT}"
         )
 
     lines = [
@@ -394,7 +386,7 @@ async def get_dot_management(
     from shukketsu.pipeline.constants import CLASSIC_DOTS, DOT_BY_SPELL_ID
 
     # Get player class
-    pn_like = f"%{player_name}%"
+    pn_like = wildcard(player_name)
     info_result = await session.execute(
         q.PLAYER_FIGHT_INFO,
         {"report_code": report_code, "fight_id": fight_id,
@@ -466,12 +458,11 @@ async def get_dot_management(
             if total_refreshes > 0 else 0.0
         )
 
-        if early_pct < 10:
-            grade = "GOOD"
-        elif early_pct < 25:
-            grade = "FAIR"
-        else:
-            grade = "NEEDS WORK"
+        grade = grade_below(
+            early_pct,
+            [(10, "GOOD"), (25, "FAIR")],
+            "NEEDS WORK",
+        )
 
         name = spell_names.get(spell_id, dot_def.name)
         lines.append(
@@ -497,7 +488,7 @@ async def get_rotation_score(
     Checks GCD uptime, cooldown efficiency, and casts per minute.
     Requires event data ingestion."""
     # Get player info
-    pn_like = f"%{player_name}%"
+    pn_like = wildcard(player_name)
     info_result = await session.execute(
         q.PLAYER_FIGHT_INFO,
         {"report_code": report_code, "fight_id": fight_id,
@@ -570,16 +561,9 @@ async def get_rotation_score(
 
     score = rules_passed / rules_checked * 100
 
-    if score >= 90:
-        grade = "A"
-    elif score >= 75:
-        grade = "B"
-    elif score >= 60:
-        grade = "C"
-    elif score >= 40:
-        grade = "D"
-    else:
-        grade = "F"
+    grade = grade_above(
+        score, [(90, "A"), (75, "B"), (60, "C"), (40, "D")], "F",
+    )
 
     lines = [
         f"Rotation score for {player_name} ({spec}) in "
@@ -610,7 +594,7 @@ async def get_gear_changes(
 
     result = await session.execute(
         q.GEAR_CHANGES,
-        {"player_name": f"%{player_name}%",
+        {"player_name": wildcard(player_name),
          "report_code_old": report_code_old,
          "report_code_new": report_code_new},
     )
@@ -665,7 +649,7 @@ async def get_phase_analysis(
     result = await session.execute(
         q.PHASE_BREAKDOWN,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%" if player_name else None},
+         "player_name": wildcard_or_none(player_name)},
     )
     rows = result.fetchall()
     if not rows:
@@ -738,7 +722,7 @@ async def get_enchant_gem_check(
     rows = (await session.execute(
         q.ENCHANT_GEM_CHECK,
         {"report_code": report_code, "fight_id": fight_id,
-         "player_name": f"%{player_name}%"},
+         "player_name": wildcard(player_name)},
     )).fetchall()
     if not rows:
         return (
