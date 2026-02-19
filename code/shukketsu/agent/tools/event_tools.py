@@ -230,8 +230,7 @@ async def get_cancelled_casts(
     if not row:
         return (
             f"No cancelled cast data found for '{player_name}' in "
-            f"fight {fight_id} of report {report_code}. Event data "
-            f"may not have been ingested yet."
+            f"fight {fight_id} of report {report_code}. {EVENT_DATA_HINT}"
         )
 
     lines = [
@@ -427,7 +426,7 @@ async def get_dot_management(
     if not casts_by_spell:
         return (
             f"No DoT casts found for '{player_name}' in fight "
-            f"{fight_id}. Event data may not have been ingested yet."
+            f"{fight_id}. {EVENT_DATA_HINT}"
         )
 
     lines = [
@@ -556,7 +555,7 @@ async def get_rotation_score(
     if rules_checked == 0:
         return (
             f"No cast/cooldown data found for '{player_name}' in "
-            f"fight {fight_id}. Event data may not have been ingested."
+            f"fight {fight_id}. {EVENT_DATA_HINT}"
         )
 
     score = rules_passed / rules_checked * 100
