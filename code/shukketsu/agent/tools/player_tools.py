@@ -1,6 +1,6 @@
 """Player and encounter-level agent tools (11 tools)."""
 
-from shukketsu.agent.tool_utils import _format_duration, db_tool
+from shukketsu.agent.tool_utils import _format_duration, db_tool, wildcard
 from shukketsu.db import queries as q
 
 
@@ -18,13 +18,13 @@ async def get_my_performance(
         if encounter_name and encounter_name.strip():
             result = await session.execute(
                 q.PERSONAL_BESTS_BY_ENCOUNTER,
-                {"player_name": f"%{player_name}%",
-                 "encounter_name": f"%{encounter_name}%"},
+                {"player_name": wildcard(player_name),
+                 "encounter_name": wildcard(encounter_name)},
             )
         else:
             result = await session.execute(
                 q.PERSONAL_BESTS,
-                {"player_name": f"%{player_name}%"},
+                {"player_name": wildcard(player_name)},
             )
         rows = result.fetchall()
         if not rows:
@@ -46,8 +46,8 @@ async def get_my_performance(
 
     result = await session.execute(
         q.MY_PERFORMANCE,
-        {"encounter_name": f"%{encounter_name}%",
-         "player_name": f"%{player_name}%"},
+        {"encounter_name": wildcard(encounter_name),
+         "player_name": wildcard(player_name)},
     )
     rows = result.fetchall()
     if not rows:
@@ -77,9 +77,9 @@ async def get_top_rankings(
     Returns the top 10 players with their DPS, guild, and item level."""
     result = await session.execute(
         q.TOP_RANKINGS,
-        {"encounter_name": f"%{encounter_name}%",
-         "class_name": f"%{class_name}%",
-         "spec_name": f"%{spec_name}%"},
+        {"encounter_name": wildcard(encounter_name),
+         "class_name": wildcard(class_name),
+         "spec_name": wildcard(spec_name)},
     )
     rows = result.fetchall()
     if not rows:
@@ -111,10 +111,10 @@ async def compare_to_top(
     Shows side-by-side metrics for the player vs top 10 average."""
     result = await session.execute(
         q.COMPARE_TO_TOP,
-        {"encounter_name": f"%{encounter_name}%",
-         "player_name": f"%{player_name}%",
-         "class_name": f"%{class_name}%",
-         "spec_name": f"%{spec_name}%"},
+        {"encounter_name": wildcard(encounter_name),
+         "player_name": wildcard(player_name),
+         "class_name": wildcard(class_name),
+         "spec_name": wildcard(spec_name)},
     )
     row = result.fetchone()
     if not row or row.dps is None:
@@ -177,8 +177,8 @@ async def get_progression(
     Shows best/median parse and DPS over time."""
     result = await session.execute(
         q.PROGRESSION,
-        {"character_name": f"%{character_name}%",
-         "encounter_name": f"%{encounter_name}%"},
+        {"character_name": wildcard(character_name),
+         "encounter_name": wildcard(encounter_name)},
     )
     rows = result.fetchall()
     if not rows:
@@ -209,7 +209,7 @@ async def get_deaths_and_mechanics(
     Shows who died, how often, and their interrupt/dispel contributions."""
     result = await session.execute(
         q.DEATHS_AND_MECHANICS,
-        {"encounter_name": f"%{encounter_name}%"},
+        {"encounter_name": wildcard(encounter_name)},
     )
     rows = result.fetchall()
     if not rows:
@@ -233,7 +233,7 @@ async def search_fights(session, encounter_name: str) -> str:
     Returns matching fights across all reports, newest first."""
     result = await session.execute(
         q.SEARCH_FIGHTS,
-        {"encounter_name": f"%{encounter_name}%"},
+        {"encounter_name": wildcard(encounter_name)},
     )
     rows = result.fetchall()
     if not rows:
@@ -257,7 +257,7 @@ async def get_spec_leaderboard(session, encounter_name: str) -> str:
     and sample size for each spec."""
     result = await session.execute(
         q.SPEC_LEADERBOARD,
-        {"encounter_name": f"%{encounter_name}%"},
+        {"encounter_name": wildcard(encounter_name)},
     )
     rows = result.fetchall()
     if not rows:
@@ -292,7 +292,7 @@ async def resolve_my_fights(
         q.MY_RECENT_KILLS,
         {
             "encounter_name": (
-                f"%{encounter_name}%" if encounter_name else None
+                wildcard(encounter_name) if encounter_name else None
             ),
             "limit": count,
         },
@@ -330,7 +330,7 @@ async def get_wipe_progression(
     result = await session.execute(
         q.WIPE_PROGRESSION,
         {"report_code": report_code,
-         "encounter_name": f"%{encounter_name}%"},
+         "encounter_name": wildcard(encounter_name)},
     )
     rows = result.fetchall()
     if not rows:
@@ -378,7 +378,7 @@ async def get_regressions(
     if player_name:
         result = await session.execute(
             q.REGRESSION_CHECK_PLAYER,
-            {"player_name": f"%{player_name}%"},
+            {"player_name": wildcard(player_name)},
         )
     else:
         result = await session.execute(q.REGRESSION_CHECK)
