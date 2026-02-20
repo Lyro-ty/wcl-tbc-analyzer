@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. **LangGraph agent** — CRAG pattern: route → query DB (via tools) → grade → analyze → END
 4. **React frontend** — TypeScript + Tailwind CSS dashboard with 15 pages (charts via Recharts)
 
-**Tech stack:** Python 3.12, FastAPI, LangGraph, langchain-openai (OpenAI-compatible ollama), PostgreSQL 16, SQLAlchemy 2.0 async, httpx, pydantic-settings v2, tenacity, structlog
+**Tech stack:** Python 3.12, FastAPI, LangGraph, langchain-openai (OpenAI-compatible ollama), PostgreSQL 16, SQLAlchemy 2.0 async, httpx, pydantic-settings v2, tenacity
 
 ## LLM serving
 
@@ -56,7 +56,12 @@ code/
 │   ├── db/                 # Database layer
 │   │   ├── engine.py       # Async engine + session factory
 │   │   ├── models.py       # SQLAlchemy ORM models (18 tables)
-│   │   └── queries.py      # Analytical SQL queries for agent tools + REST API (~50 queries)
+│   │   └── queries/        # Analytical SQL queries (~60 queries, domain-grouped)
+│   │       ├── player.py       # Player/encounter queries (13)
+│   │       ├── raid.py         # Raid comparison queries (4)
+│   │       ├── table_data.py   # Table-data queries (4)
+│   │       ├── event.py        # Event-data queries (16)
+│   │       └── api.py          # REST API queries (23)
 │   ├── pipeline/           # Data transformation (16 modules)
 │   │   ├── ingest.py       # WCL response → DB rows (delete-then-insert, supports --with-tables/--with-events)
 │   │   ├── normalize.py    # Fight normalization (DPS/HPS calc, boss detection)
@@ -76,18 +81,30 @@ code/
 │   │   └── summaries.py     # Report/raid night summary generation
 │   ├── agent/              # LangGraph agent
 │   │   ├── llm.py          # LLM client (ChatOpenAI pointing at ollama)
-│   │   ├── tools.py        # 30 SQL query tools (@tool decorated)
+│   │   ├── tool_utils.py   # @db_tool decorator, session wiring, helper functions
+│   │   ├── tools/          # 30 agent tools (domain-grouped, @db_tool decorated)
+│   │   │   ├── player_tools.py  # 11 player/encounter tools
+│   │   │   ├── raid_tools.py    # 3 raid comparison tools
+│   │   │   ├── table_tools.py   # 4 table-data tools
+│   │   │   └── event_tools.py   # 12 event-data tools
+│   │   ├── utils.py        # strip_think_tags() for Nemotron output cleanup
 │   │   ├── state.py        # AnalyzerState (extends MessagesState)
 │   │   ├── prompts.py      # System prompts and templates
 │   │   └── graph.py        # CRAG state graph (6 nodes, MAX_RETRIES=2)
-│   ├── api/                # FastAPI layer (54 endpoints across 4 route files)
+│   ├── api/                # FastAPI layer (54 endpoints across 9 route files)
 │   │   ├── app.py          # App factory + lifespan (wires DB, LLM, graph, auto-ingest)
 │   │   ├── deps.py         # Dependency injection
 │   │   └── routes/
 │   │       ├── health.py       # GET /health (DB + LLM ping)
 │   │       ├── analyze.py      # POST /api/analyze + POST /api/analyze/stream (SSE)
-│   │       ├── data.py         # 49 REST endpoints: reports, fights, characters, rankings, dashboard, etc.
-│   │       └── auto_ingest.py  # GET /status + POST /trigger for background auto-ingest service
+│   │       ├── auto_ingest.py  # GET /status + POST /trigger for background auto-ingest service
+│   │       └── data/           # 49 REST endpoints (domain-grouped)
+│   │           ├── reports.py      # Report CRUD + summaries (13 endpoints)
+│   │           ├── fights.py       # Fight details + performances (11 endpoints)
+│   │           ├── characters.py   # Character management + progression (9 endpoints)
+│   │           ├── events.py       # Event-data endpoints (10 endpoints)
+│   │           ├── rankings.py     # Rankings + leaderboards (4 endpoints)
+│   │           └── comparison.py   # Raid comparisons (2 endpoints)
 │   └── scripts/            # CLI entry points (7 total, registered in pyproject.toml)
 │       ├── pull_my_logs.py       # pull-my-logs: fetch report data from WCL
 │       ├── pull_rankings.py      # pull-rankings: fetch top rankings per encounter/spec
@@ -125,13 +142,16 @@ route → query → [tool_executor if tool_calls] → grade
 
 ## Tool ↔ DB session wiring
 
-Tools use a **module-level global** pattern — no DI framework:
+Tools use a **module-level global** pattern via `tool_utils.py` — no DI framework:
 
-1. `lifespan()` in `app.py` calls `set_session_factory(factory)` on `tools.py` module
-2. Each `@tool` function calls `_get_session()` → creates fresh session from factory
-3. Sessions are **always closed in `finally`** blocks — one session per tool invocation
-4. All tools catch `Exception` and return `"Error retrieving data: {e}"` instead of propagating tracebacks
-5. The compiled graph and its tools are also injected into the analyze route via `set_graph()`
+1. `lifespan()` in `app.py` calls `set_session_factory(factory)` from `tool_utils.py`
+2. The `@db_tool` decorator in `tool_utils.py` wraps each tool function:
+   - Strips the `session` parameter from the LLM-visible schema
+   - Creates a fresh session via `_get_session()` and passes it as first arg
+   - Catches all exceptions and returns `"Error retrieving data: {e}"`
+   - Always closes the session in a `finally` block
+3. Individual tool functions receive a `session` arg automatically — no manual session management
+4. The compiled graph and its tools are also injected into the analyze route via `set_graph()`
 
 ## Agent tools (30 total)
 
@@ -181,7 +201,7 @@ Tools use a **module-level global** pattern — no DI framework:
 | `get_phase_analysis` | Per-phase fight breakdown with player performance |
 | `get_enchant_gem_check` | Enchant/gem validation (flags missing enchants, empty gem sockets) |
 
-Tools are in `code/shukketsu/agent/tools.py`, SQL queries (raw `text()` with named params, PostgreSQL-specific) in `code/shukketsu/db/queries.py`.
+Tools are in `code/shukketsu/agent/tools/` (4 domain-grouped modules), SQL queries (raw `text()` with named params, PostgreSQL-specific) in `code/shukketsu/db/queries/` (5 domain-grouped modules).
 
 ## Database schema (18 tables)
 
@@ -310,7 +330,7 @@ curl -X POST http://localhost:8000/api/analyze \
 - **ability_metrics/buff_uptimes tables:** Only populated when `--with-tables` flag is used with `pull-my-logs` or via `pull-table-data` backfill.
 - **Event tables:** `death_details`, `cast_events`, `cast_metrics`, `cooldown_usage`, `cancelled_casts`, `resource_snapshots` only populated when `--with-events` flag is used.
 - **Rotation scoring:** Currently uses 3 universal rules (GCD uptime, CPM, CD efficiency). Spec-specific rules not yet implemented.
-- **DoT refresh analysis:** Only covers Warlock, Shadow Priest, and Balance Druid DoTs.
+- **DoT refresh analysis:** Only covers Warlock, Priest, and Druid DoTs (keyed by class name, no spec filtering).
 - **Trinket tracking:** Limited to 10 known Classic/TBC trinkets. Expand `CLASSIC_TRINKETS` for more coverage.
 - **Cooldown windows:** DPS gain during burst windows is estimated (20% boost), not computed from actual damage events.
 - **GCD fixed at 1500ms:** `cast_events.py` uses a fixed 1500ms GCD. In WoW, haste reduces GCD to as low as 1.0s for some classes.
@@ -318,14 +338,14 @@ curl -X POST http://localhost:8000/api/analyze \
 
 ## Resolved issues
 
-- **Think tags in output:** `_strip_think_tags()` in `analyze.py` strips Nemotron's leaked `<think>...</think>` reasoning from API responses via regex.
+- **Think tags in output:** `strip_think_tags()` in `agent/utils.py` strips Nemotron's leaked `<think>...</think>` reasoning from API responses via regex. Imported as `_strip_think_tags` in `analyze.py` and `graph.py`.
 - **429 rate limits:** `WCLClient.query()` has a `tenacity` retry decorator (exponential backoff, 5 attempts) for 429, 502/503/504, connection errors, and read timeouts.
 - **Auth retry:** `_request_token()` in `auth.py` retries on 5xx responses AND `ConnectError`/`ReadTimeout` network errors (matching the client's behavior).
 - **Grader blindness:** `_format_messages()` in `graph.py` now includes `ToolMessage` content so the grader can see DB query results.
 - **Ingest idempotency:** `ingest_report()` uses delete-then-insert for fights+performances, `session.merge()` for reports — safe to re-ingest the same report.
 - **Tool error handling:** All 30 agent tools catch exceptions and return friendly error strings instead of propagating tracebacks to the LLM.
 - **Missing indexes:** Migration 003 adds indexes on `fight_performances(fight_id, player_name, class+spec)`, `fights(report_code, encounter_id)`, and `top_rankings(encounter_id, class, spec)`.
-- **Think tags in agent nodes:** `_strip_think_tags()` now applied in both `route_query` and `grade_results` graph nodes, not just the API response.
+- **Think tags in agent nodes:** `strip_think_tags()` now applied in both `route_query` and `grade_results` graph nodes, not just the API response.
 - **Tool arg case normalization:** `_normalize_tool_args()` in `graph.py` converts Nemotron's PascalCase tool argument keys to snake_case.
 - **Dead respond node:** Removed the near-noop `generate_insight` node; `analyze` now flows directly to END.
 - **Deaths query:** `DEATHS_AND_MECHANICS` now includes players with `deaths=0` who have interrupt/dispel contributions.
@@ -348,6 +368,9 @@ curl -X POST http://localhost:8000/api/analyze \
 - **Timezone handling:** Staleness checks now handle both naive and timezone-aware datetimes safely.
 - **Resource time_at_zero:** `compute_resource_snapshots()` uses actual `fight_start_time` instead of approximating from first event timestamp.
 - **Unused parameter:** Removed dead `actor_name_by_id` from `ingest_table_data_for_fight()`.
+- **Monolithic queries.py:** Split `db/queries.py` into domain-grouped package `db/queries/` (player, raid, table_data, event, api — 60 queries total).
+- **Monolithic tools.py:** Split `agent/tools.py` into domain-grouped package `agent/tools/` (player_tools, raid_tools, table_tools, event_tools). Session wiring extracted to `agent/tool_utils.py` with `@db_tool` decorator.
+- **Monolithic data.py route:** Split `api/routes/data.py` into domain-grouped package `api/routes/data/` (reports, fights, characters, events, rankings, comparison).
 
 ## Coding rules
 
@@ -369,7 +392,7 @@ These rules prevent bugs that have occurred in this codebase. Follow them strict
 
 ### Game constants — single source of truth in constants.py
 - All WoW data (spell IDs, consumable names, gear slots, cooldowns, DoTs, trinkets, phase definitions) lives in `pipeline/constants.py`
-- **Never duplicate** these values in tools.py or elsewhere — import from constants
+- **Never duplicate** these values in tool modules or elsewhere — import from constants
 - When adding new spell IDs, verify names against Wowhead/WCL
 
 ### Runtime preconditions — NEVER use assert
