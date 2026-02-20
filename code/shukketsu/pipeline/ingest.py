@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import delete, select
 
 from shukketsu.db.models import Encounter, Fight, FightPerformance, Report
+from shukketsu.pipeline.constants import ROLE_BY_SPEC
 from shukketsu.pipeline.normalize import is_boss_fight
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,8 @@ def parse_rankings_to_performances(
     for r in rankings_data:
         server = r.get("server", {})
         server_name = server.get("name", "") if isinstance(server, dict) else ""
+        is_healer = ROLE_BY_SPEC.get(r["spec"]) == "healer"
+        amount = r.get("amount", 0.0)
         result.append(FightPerformance(
             fight_id=fight_id,
             player_name=r["name"],
@@ -58,9 +61,9 @@ def parse_rankings_to_performances(
             player_spec=r["spec"],
             player_server=server_name,
             total_damage=r.get("total", 0),
-            dps=r.get("amount", 0.0),
+            dps=0.0 if is_healer else amount,
             total_healing=0,
-            hps=0.0,
+            hps=amount if is_healer else 0.0,
             parse_percentile=r.get("rankPercent"),
             ilvl_parse_percentile=r.get("bracketPercent"),
             deaths=r.get("deaths", 0),

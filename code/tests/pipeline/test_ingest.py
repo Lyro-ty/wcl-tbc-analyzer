@@ -172,6 +172,99 @@ class TestParseRankingsToPerformances:
         assert all(not p.is_my_character for p in perfs)
 
 
+class TestHealerHpsRouting:
+    """Verify parse_rankings_to_performances routes HPS correctly for healers."""
+
+    def test_healer_amount_stored_as_hps(self):
+        rankings = [
+            {
+                "name": "HolyPriest",
+                "class": "Priest",
+                "spec": "Holy",
+                "server": {"name": "Whitemane"},
+                "total": 500000,
+                "amount": 1200.5,  # This is HPS for a healer
+                "rankPercent": 85.0,
+                "deaths": 0,
+                "interrupts": 0,
+                "dispels": 3,
+            }
+        ]
+        result = parse_rankings_to_performances(
+            rankings, fight_id=1, my_character_names=set(),
+        )
+        perf = result[0]
+        assert perf.hps == 1200.5, "Healer amount should go to hps"
+        assert perf.dps == 0.0, "Healer dps should be 0"
+
+    def test_dps_amount_stored_as_dps(self):
+        rankings = [
+            {
+                "name": "FuryWarrior",
+                "class": "Warrior",
+                "spec": "Fury",
+                "server": {"name": "Whitemane"},
+                "total": 1000000,
+                "amount": 2500.0,  # This is DPS
+                "rankPercent": 90.0,
+                "deaths": 0,
+                "interrupts": 0,
+                "dispels": 0,
+            }
+        ]
+        result = parse_rankings_to_performances(
+            rankings, fight_id=1, my_character_names=set(),
+        )
+        perf = result[0]
+        assert perf.dps == 2500.0, "DPS amount should go to dps"
+        assert perf.hps == 0.0, "DPS hps should be 0"
+
+    def test_tank_amount_stored_as_dps(self):
+        """Tanks are ranked by DPS on WCL, not by mitigation."""
+        rankings = [
+            {
+                "name": "ProtWarrior",
+                "class": "Warrior",
+                "spec": "Protection",
+                "server": {"name": "Whitemane"},
+                "total": 300000,
+                "amount": 800.0,
+                "rankPercent": 70.0,
+                "deaths": 0,
+                "interrupts": 0,
+                "dispels": 0,
+            }
+        ]
+        result = parse_rankings_to_performances(
+            rankings, fight_id=1, my_character_names=set(),
+        )
+        perf = result[0]
+        assert perf.dps == 800.0
+        assert perf.hps == 0.0
+
+    def test_restoration_shaman_is_healer(self):
+        rankings = [
+            {
+                "name": "RestoSham",
+                "class": "Shaman",
+                "spec": "Restoration",
+                "server": {"name": "Whitemane"},
+                "total": 600000,
+                "amount": 1500.0,
+                "rankPercent": 88.0,
+                "deaths": 0,
+                "interrupts": 0,
+                "dispels": 5,
+            }
+        ]
+        result = parse_rankings_to_performances(
+            rankings, fight_id=1, my_character_names=set(),
+        )
+        perf = result[0]
+        assert perf.hps == 1500.0
+        assert perf.dps == 0.0
+
+
 class TestReingestionIdempotency:
     """Verify that calling ingest_report twice with the same report doesn't raise."""
 
