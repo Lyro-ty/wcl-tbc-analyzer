@@ -402,38 +402,6 @@ class GearChangeEntry(BaseModel):
     ilvl_delta: int | None
 
 
-class PhaseInfo(BaseModel):
-    name: str
-    pct_start: float
-    pct_end: float
-    estimated_start_ms: int
-    estimated_end_ms: int
-    estimated_duration_ms: int
-    description: str
-
-
-class PhasePlayerPerformance(BaseModel):
-    player_name: str
-    player_class: str
-    player_spec: str
-    dps: float
-    total_damage: int
-    hps: float
-    total_healing: int
-    deaths: int
-    parse_percentile: float | None
-
-
-class PhaseAnalysis(BaseModel):
-    report_code: str
-    fight_id: int
-    encounter_name: str
-    duration_ms: int
-    kill: bool
-    phases: list[PhaseInfo]
-    players: list[PhasePlayerPerformance]
-
-
 class AutoIngestStatus(BaseModel):
     enabled: bool
     status: str

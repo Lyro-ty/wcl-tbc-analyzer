@@ -991,6 +991,8 @@ async def get_phase_analysis(
 
     # Phase timeline
     lines.append("Phase Timeline:")
+    lines.append("  (Note: phase timings are estimates based on "
+                 "typical fight progression, not actual log events)")
     for phase in phases:
         est_start = int(duration_ms * phase.pct_start)
         est_end = int(duration_ms * phase.pct_end)
