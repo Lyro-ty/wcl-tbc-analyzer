@@ -1,14 +1,8 @@
 from unittest.mock import AsyncMock, MagicMock
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from shukketsu.agent.graph import (
-    MAX_RETRIES,
-    _format_messages,
-    create_graph,
-    grade_results,
-    route_query,
-)
+from shukketsu.agent.graph import _normalize_tool_args, agent_node, create_graph
 
 
 class TestCreateGraph:
@@ -18,213 +12,94 @@ class TestCreateGraph:
         graph = create_graph(mock_llm, mock_tools)
         assert graph is not None
 
-    def test_graph_has_nodes(self):
+    def test_graph_has_agent_and_tools_nodes(self):
         mock_llm = MagicMock()
         mock_tools = []
         graph = create_graph(mock_llm, mock_tools)
         node_names = set(graph.get_graph().nodes.keys())
-        # LangGraph adds __start__ and __end__ nodes
-        assert "route" in node_names
-        assert "query" in node_names
-        assert "grade" in node_names
-        assert "analyze" in node_names
-        assert "rewrite" in node_names
+        assert "agent" in node_names
+        assert "tools" in node_names
+
+    def test_graph_does_not_have_crag_nodes(self):
+        mock_llm = MagicMock()
+        mock_tools = []
+        graph = create_graph(mock_llm, mock_tools)
+        node_names = set(graph.get_graph().nodes.keys())
+        for old_node in ("route", "query", "grade", "rewrite", "analyze"):
+            assert old_node not in node_names
 
 
-class TestRouteQuery:
-    async def test_classifies_my_performance(self):
+class TestAgentNode:
+    async def test_prepends_system_message(self):
         mock_llm = AsyncMock()
-        mock_llm.ainvoke.return_value = AIMessage(content="my_performance")
+        mock_llm.ainvoke.return_value = AIMessage(content="Analysis here.")
 
-        state = {
-            "messages": [HumanMessage(content="Why is my DPS low on Gruul?")],
-        }
-        result = await route_query(state, mock_llm)
-        assert result["query_type"] == "my_performance"
+        state = {"messages": [HumanMessage(content="How is my DPS?")]}
+        await agent_node(state, llm_with_tools=mock_llm)
 
-    async def test_classifies_comparison(self):
+        call_args = mock_llm.ainvoke.call_args[0][0]
+        assert isinstance(call_args[0], SystemMessage)
+        assert "Shukketsu" in call_args[0].content
+
+    async def test_returns_ai_message(self):
         mock_llm = AsyncMock()
-        mock_llm.ainvoke.return_value = AIMessage(content="comparison")
+        mock_llm.ainvoke.return_value = AIMessage(content="Analysis.")
 
-        state = {
-            "messages": [HumanMessage(content="How do I compare to top rogues?")],
-        }
-        result = await route_query(state, mock_llm)
-        assert result["query_type"] == "comparison"
+        state = {"messages": [HumanMessage(content="How is my DPS?")]}
+        result = await agent_node(state, llm_with_tools=mock_llm)
 
-    async def test_classifies_rotation(self):
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke.return_value = AIMessage(content="rotation")
+        assert len(result["messages"]) == 1
+        assert isinstance(result["messages"][0], AIMessage)
 
-        state = {
-            "messages": [HumanMessage(content="Am I using my cooldowns efficiently?")],
-        }
-        result = await route_query(state, mock_llm)
-        assert result["query_type"] == "rotation"
-
-    async def test_defaults_to_general(self):
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke.return_value = AIMessage(content="something_invalid")
-
-        state = {
-            "messages": [HumanMessage(content="Tell me about Gruul")],
-        }
-        result = await route_query(state, mock_llm)
-        assert result["query_type"] == "general"
-
-
-class TestGradeResults:
-    async def test_relevant_returns_analyze(self):
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke.return_value = AIMessage(content="relevant")
-
-        state = {
-            "messages": [
-                HumanMessage(content="Show my parses"),
-                AIMessage(content="Performance data: DPS 1500, Parse 95%"),
-            ],
-            "retry_count": 0,
-        }
-        result = await grade_results(state, mock_llm)
-        assert result["grade"] == "relevant"
-
-    async def test_insufficient_returns_rewrite(self):
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke.return_value = AIMessage(content="insufficient")
-
-        state = {
-            "messages": [
-                HumanMessage(content="Show my parses"),
-                AIMessage(content="No data found."),
-            ],
-            "retry_count": 0,
-        }
-        result = await grade_results(state, mock_llm)
-        assert result["grade"] == "insufficient"
-
-    async def test_max_retries_forces_relevant(self):
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke.return_value = AIMessage(content="insufficient")
-
-        state = {
-            "messages": [
-                HumanMessage(content="Show my parses"),
-                AIMessage(content="No data found."),
-            ],
-            "retry_count": MAX_RETRIES,
-        }
-        result = await grade_results(state, mock_llm)
-        # Should proceed to analyze even if insufficient, to avoid infinite loop
-        assert result["grade"] == "relevant"
-
-
-class TestFormatMessages:
-    def test_includes_tool_message(self):
-        messages = [
-            HumanMessage(content="Show my parses"),
-            AIMessage(
-                content="",
-                tool_calls=[{"name": "get_my_performance", "args": {}, "id": "1"}],
-            ),
-            ToolMessage(content="DPS: 1500, Parse: 95%", tool_call_id="1"),
+    async def test_normalizes_pascal_case_tool_args(self):
+        tool_calls = [
+            {"name": "get_my_performance", "args": {"EncounterName": "Gruul"}, "id": "1"}
         ]
-        result = _format_messages(messages)
-        assert "Tool result: DPS: 1500, Parse: 95%" in result
-
-    def test_skips_empty_ai_content(self):
-        messages = [
-            HumanMessage(content="question"),
-            AIMessage(content=""),
-        ]
-        result = _format_messages(messages)
-        assert "Assistant:" not in result
-
-    def test_includes_ai_with_content(self):
-        messages = [
-            AIMessage(content="Here is your data"),
-        ]
-        result = _format_messages(messages)
-        assert "Assistant: Here is your data" in result
-
-    def test_all_message_types(self):
-        messages = [
-            HumanMessage(content="query"),
-            AIMessage(content="", tool_calls=[{"name": "t", "args": {}, "id": "1"}]),
-            ToolMessage(content="result data", tool_call_id="1"),
-            AIMessage(content="Analysis complete"),
-        ]
-        result = _format_messages(messages)
-        assert "User: query" in result
-        assert "Tool result: result data" in result
-        assert "Assistant: Analysis complete" in result
-
-
-class TestThinkTagHandling:
-    async def test_route_strips_think_tags(self):
         mock_llm = AsyncMock()
         mock_llm.ainvoke.return_value = AIMessage(
-            content="<think>Let me analyze this query type...</think>\nmy_performance"
+            content="", tool_calls=tool_calls
         )
-        state = {
-            "messages": [HumanMessage(content="Why is my DPS low?")],
-        }
-        result = await route_query(state, mock_llm)
-        assert result["query_type"] == "my_performance"
 
-    async def test_grade_strips_think_tags(self):
+        state = {"messages": [HumanMessage(content="My DPS on Gruul?")]}
+        result = await agent_node(state, llm_with_tools=mock_llm)
+
+        actual_args = result["messages"][0].tool_calls[0]["args"]
+        assert "encounter_name" in actual_args
+        assert "EncounterName" not in actual_args
+
+    async def test_passes_full_message_history(self):
         mock_llm = AsyncMock()
-        mock_llm.ainvoke.return_value = AIMessage(
-            content="<think>The data looks complete...</think>\nrelevant"
-        )
+        mock_llm.ainvoke.return_value = AIMessage(content="Final analysis.")
+
         state = {
             "messages": [
-                HumanMessage(content="Show my parses"),
-                AIMessage(content="DPS: 1500"),
-            ],
-            "retry_count": 0,
+                HumanMessage(content="My DPS?"),
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "get_my_performance", "args": {}, "id": "1"}],
+                ),
+                ToolMessage(content="DPS: 1500", tool_call_id="1"),
+            ]
         }
-        result = await grade_results(state, mock_llm)
-        assert result["grade"] == "relevant"
+        await agent_node(state, llm_with_tools=mock_llm)
 
-    async def test_grade_strips_think_tags_insufficient(self):
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke.return_value = AIMessage(
-            content="<think>Hmm not enough data</think>  insufficient"
-        )
-        state = {
-            "messages": [
-                HumanMessage(content="Show parses"),
-                AIMessage(content="No data"),
-            ],
-            "retry_count": 0,
-        }
-        result = await grade_results(state, mock_llm)
-        assert result["grade"] == "insufficient"
+        call_args = mock_llm.ainvoke.call_args[0][0]
+        # SystemMessage + 3 state messages
+        assert len(call_args) == 4
 
 
 class TestToolArgNormalization:
     def test_normalize_converts_pascal_to_snake(self):
-        from shukketsu.agent.graph import _normalize_tool_args
-
         args = {"EncounterName": "Gruul the Dragonkiller", "PlayerName": "Lyro"}
         result = _normalize_tool_args(args)
         assert result == {"encounter_name": "Gruul the Dragonkiller", "player_name": "Lyro"}
 
     def test_normalize_preserves_snake_case(self):
-        from shukketsu.agent.graph import _normalize_tool_args
-
         args = {"encounter_name": "Gruul the Dragonkiller", "player_name": "Lyro"}
         result = _normalize_tool_args(args)
         assert result == {"encounter_name": "Gruul the Dragonkiller", "player_name": "Lyro"}
 
     def test_normalize_handles_mixed_case(self):
-        from shukketsu.agent.graph import _normalize_tool_args
-
         args = {"ClassName": "Warrior", "spec_name": "Arms"}
         result = _normalize_tool_args(args)
         assert result == {"class_name": "Warrior", "spec_name": "Arms"}
-
-
-class TestMaxRetries:
-    def test_max_retries_is_two(self):
-        assert MAX_RETRIES == 2
