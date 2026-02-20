@@ -45,12 +45,15 @@ class TestRequiredConsumables:
 
     def test_melee_dps_has_elixirs(self):
         melee = REQUIRED_CONSUMABLES["melee_dps"]
-        elixirs = [c for c in melee if c.category == "elixir"]
+        elixirs = [c for c in melee if c.category in ("battle_elixir", "guardian_elixir")]
         assert len(elixirs) > 0
 
     def test_caster_dps_has_flask_or_elixir(self):
         caster = REQUIRED_CONSUMABLES["caster_dps"]
-        flasks_elixirs = [c for c in caster if c.category in ("flask", "elixir")]
+        flasks_elixirs = [
+            c for c in caster
+            if c.category in ("flask", "battle_elixir", "guardian_elixir")
+        ]
         assert len(flasks_elixirs) > 0
 
     def test_healer_has_mana_oil(self):
@@ -64,7 +67,8 @@ class TestRequiredConsumables:
                 assert c.spell_id > 0, f"Bad spell_id for {c.name} in role {role}"
                 assert c.name, f"Empty name in role {role}"
                 assert c.category in (
-                    "flask", "elixir", "food", "weapon", "potion", "scroll"
+                    "flask", "battle_elixir", "guardian_elixir",
+                    "food", "weapon", "potion", "scroll"
                 ), f"Bad category {c.category} for {c.name}"
                 assert 0 < c.min_uptime_pct <= 100, f"Bad uptime for {c.name}"
 

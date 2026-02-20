@@ -62,7 +62,7 @@ class TestParseConsumables:
         assert len(result) == 2
         assert result[0].category == "flask"
         assert result[0].ability_name == "Flask of the Titans"
-        assert result[1].category == "elixir"
+        assert result[1].category == "battle_elixir"
         assert result[1].ability_name == "Elixir of the Mongoose"
 
     def test_missing_ability_key_defaults_to_zero(self):

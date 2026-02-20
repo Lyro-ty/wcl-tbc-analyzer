@@ -6,6 +6,7 @@ from shukketsu.pipeline.constants import (
     ALL_BOSS_NAMES,
     CLASSIC_COOLDOWNS,
     CLASSIC_DOTS,
+    CONSUMABLE_CATEGORIES,
     ENCOUNTER_CONTEXTS,
     ENCOUNTER_PHASES,
     FRESH_BOSS_NAMES,
@@ -423,3 +424,48 @@ class TestEncounterContexts:
         if ctx.melee_modifier is not None:
             assert 0.3 <= ctx.melee_modifier <= 1.0
             assert ctx.melee_modifier <= ctx.gcd_modifier
+
+
+class TestConsumableExpansion:
+    def test_tbc_flasks_in_categories(self):
+        assert 28518 in CONSUMABLE_CATEGORIES  # Flask of Fortification
+        assert 28519 in CONSUMABLE_CATEGORIES  # Flask of Mighty Restoration
+        assert 28520 in CONSUMABLE_CATEGORIES  # Flask of Relentless Assault
+        assert 28521 in CONSUMABLE_CATEGORIES  # Flask of Blinding Light
+        assert 28540 in CONSUMABLE_CATEGORIES  # Flask of Pure Death
+
+    def test_tbc_potions_in_categories(self):
+        assert 28507 in CONSUMABLE_CATEGORIES  # Haste Potion
+
+    def test_battle_guardian_elixir_distinction(self):
+        """Battle vs guardian elixirs should be distinguishable by category."""
+        # Battle elixirs
+        assert CONSUMABLE_CATEGORIES[28490][0] == "battle_elixir"  # Major Agility
+        assert CONSUMABLE_CATEGORIES[28491][0] == "battle_elixir"  # Healing Power
+        assert CONSUMABLE_CATEGORIES[28501][0] == "battle_elixir"  # Major Firepower
+        # Guardian elixirs
+        assert CONSUMABLE_CATEGORIES[28509][0] == "guardian_elixir"  # Major Defense
+        assert CONSUMABLE_CATEGORIES[28502][0] == "guardian_elixir"  # Major Mageblood
+
+    def test_flask_category(self):
+        assert CONSUMABLE_CATEGORIES[28520][0] == "flask"  # Relentless Assault
+        assert CONSUMABLE_CATEGORIES[28540][0] == "flask"  # Pure Death
+
+    def test_potion_category(self):
+        assert CONSUMABLE_CATEGORIES[28507][0] == "potion"  # Haste Potion
+
+    def test_draenic_wisdom_is_guardian(self):
+        assert 39627 in CONSUMABLE_CATEGORIES
+        assert CONSUMABLE_CATEGORIES[39627][0] == "guardian_elixir"
+
+    def test_mongoose_is_battle_elixir(self):
+        assert CONSUMABLE_CATEGORIES[11390][0] == "battle_elixir"
+
+    def test_required_consumables_battle_vs_guardian(self):
+        """REQUIRED_CONSUMABLES should use battle_elixir/guardian_elixir."""
+        for role, consumables in REQUIRED_CONSUMABLES.items():
+            for c in consumables:
+                assert c.category != "elixir", (
+                    f"Role '{role}' has generic 'elixir' for {c.name}; "
+                    f"should be 'battle_elixir' or 'guardian_elixir'"
+                )

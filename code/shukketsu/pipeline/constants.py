@@ -215,7 +215,7 @@ CLASSIC_COOLDOWNS: dict[str, list[CooldownDef]] = {
 class ConsumableDef:
     spell_id: int
     name: str
-    category: str  # "flask", "elixir", "food", "weapon", "potion", "scroll"
+    category: str  # flask, battle_elixir, guardian_elixir, food, weapon, potion, scroll
     min_uptime_pct: float  # Expected minimum uptime to count as "present"
 
 
@@ -400,32 +400,32 @@ REQUIRED_CONSUMABLES: dict[str, list[ConsumableDef]] = {
         ConsumableDef(43764, "Well Fed (AP)", "food", 80.0),
     ],
     "melee_dps": [
-        ConsumableDef(17538, "Elixir of the Mongoose", "elixir", 80.0),
-        ConsumableDef(28490, "Elixir of Major Agility", "elixir", 80.0),
-        ConsumableDef(11334, "Elixir of Greater Agility", "elixir", 80.0),
+        ConsumableDef(17538, "Elixir of the Mongoose", "battle_elixir", 80.0),
+        ConsumableDef(28490, "Elixir of Major Agility", "battle_elixir", 80.0),
+        ConsumableDef(11334, "Elixir of Greater Agility", "battle_elixir", 80.0),
         ConsumableDef(28497, "Mighty Rage Potion", "potion", 5.0),
         ConsumableDef(22730, "Scroll of Strength V", "scroll", 80.0),
     ],
     "ranged_dps": [
-        ConsumableDef(28490, "Elixir of Major Agility", "elixir", 80.0),
+        ConsumableDef(28490, "Elixir of Major Agility", "battle_elixir", 80.0),
     ],
     "caster_dps": [
         ConsumableDef(17628, "Flask of Supreme Power", "flask", 80.0),
-        ConsumableDef(28501, "Elixir of Major Firepower", "elixir", 80.0),
-        ConsumableDef(28503, "Elixir of Major Shadow Power", "elixir", 80.0),
-        ConsumableDef(28493, "Elixir of Major Frost Power", "elixir", 80.0),
+        ConsumableDef(28501, "Elixir of Major Firepower", "battle_elixir", 80.0),
+        ConsumableDef(28503, "Elixir of Major Shadow Power", "battle_elixir", 80.0),
+        ConsumableDef(28493, "Elixir of Major Frost Power", "battle_elixir", 80.0),
         ConsumableDef(25122, "Brilliant Wizard Oil", "weapon", 80.0),
     ],
     "healer": [
         ConsumableDef(17627, "Flask of Distilled Wisdom", "flask", 80.0),
-        ConsumableDef(28491, "Elixir of Healing Power", "elixir", 80.0),
+        ConsumableDef(28491, "Elixir of Healing Power", "battle_elixir", 80.0),
         ConsumableDef(25123, "Brilliant Mana Oil", "weapon", 80.0),
     ],
     "tank": [
         ConsumableDef(17546, "Flask of the Titans", "flask", 80.0),
-        ConsumableDef(28491, "Elixir of Healing Power", "elixir", 80.0),
-        ConsumableDef(28514, "Elixir of Major Fortitude", "elixir", 80.0),
-        ConsumableDef(28509, "Elixir of Major Defense", "elixir", 80.0),
+        ConsumableDef(28491, "Elixir of Healing Power", "battle_elixir", 80.0),
+        ConsumableDef(28514, "Elixir of Major Fortitude", "guardian_elixir", 80.0),
+        ConsumableDef(28509, "Elixir of Major Defense", "guardian_elixir", 80.0),
         ConsumableDef(17549, "Ironshield Potion", "potion", 5.0),
     ],
 }
@@ -446,17 +446,27 @@ CONSUMABLE_CATEGORIES: dict[int, tuple[str, str]] = {
     17626: ("flask", "Flask of the Titans"),
     17627: ("flask", "Flask of Distilled Wisdom"),
     17629: ("flask", "Flask of Chromatic Resistance"),
-    # Battle Elixirs
-    28490: ("elixir", "Elixir of Major Agility"),
-    28491: ("elixir", "Elixir of Healing Power"),
-    28493: ("elixir", "Elixir of Major Frost Power"),
-    28501: ("elixir", "Elixir of Major Firepower"),
-    28503: ("elixir", "Elixir of Major Shadow Power"),
-    11390: ("elixir", "Elixir of the Mongoose"),
-    # Guardian Elixirs
-    28502: ("elixir", "Elixir of Major Mageblood"),
-    28509: ("elixir", "Elixir of Major Defense"),
-    28514: ("elixir", "Elixir of Major Fortitude"),
+    # Flasks (TBC)
+    28518: ("flask", "Flask of Fortification"),
+    28519: ("flask", "Flask of Mighty Restoration"),
+    28520: ("flask", "Flask of Relentless Assault"),
+    28521: ("flask", "Flask of Blinding Light"),
+    28540: ("flask", "Flask of Pure Death"),
+    # Battle Elixirs (one allowed, OR flask replaces both elixir slots)
+    28490: ("battle_elixir", "Elixir of Major Agility"),
+    28491: ("battle_elixir", "Elixir of Healing Power"),
+    28493: ("battle_elixir", "Elixir of Major Frost Power"),
+    28501: ("battle_elixir", "Elixir of Major Firepower"),
+    28503: ("battle_elixir", "Elixir of Major Shadow Power"),
+    11390: ("battle_elixir", "Elixir of the Mongoose"),
+    # Guardian Elixirs (one allowed, OR flask replaces both elixir slots)
+    28502: ("guardian_elixir", "Elixir of Major Mageblood"),
+    28509: ("guardian_elixir", "Elixir of Major Defense"),
+    28514: ("guardian_elixir", "Elixir of Major Fortitude"),
+    39627: ("guardian_elixir", "Elixir of Draenic Wisdom"),
+    # Potions (TBC combat potions)
+    28507: ("potion", "Haste Potion"),
+    28508: ("potion", "Destruction Potion"),
     # Food
     33254: ("food", "Well Fed"),
     33257: ("food", "Well Fed"),

@@ -1031,7 +1031,7 @@ class TestGetConsumableCheck:
 
         consumable_rows = [
             MagicMock(
-                player_name="Rogue", category="elixir",
+                player_name="Rogue", category="battle_elixir",
                 ability_name="Elixir of the Mongoose", spell_id=17538, active=True,
             ),
             MagicMock(

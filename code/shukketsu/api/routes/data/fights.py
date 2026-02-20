@@ -231,7 +231,9 @@ async def get_fight_consumables(
                 found_categories.add(c.category)
 
             has_flask_or_elixir = (
-                "flask" in found_categories or "elixir" in found_categories
+                "flask" in found_categories
+                or "battle_elixir" in found_categories
+                or "guardian_elixir" in found_categories
             )
             missing = []
             if not has_flask_or_elixir:

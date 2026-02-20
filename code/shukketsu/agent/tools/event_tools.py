@@ -313,10 +313,11 @@ async def get_consumable_check(
             lines.append(f"    {c.category}: {c.ability_name}")
             found_categories.add(c.category)
 
-        # Flask and elixir are mutually exclusive
+        # Flask and elixirs are mutually exclusive (flask replaces both slots)
         has_flask_or_elixir = (
             "flask" in found_categories
-            or "elixir" in found_categories
+            or "battle_elixir" in found_categories
+            or "guardian_elixir" in found_categories
         )
         missing = []
         if not has_flask_or_elixir:
