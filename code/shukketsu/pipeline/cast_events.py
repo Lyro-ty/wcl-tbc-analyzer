@@ -169,7 +169,10 @@ def compute_cooldown_usage(
 
     results: list[CooldownUsage] = []
     for player_name, class_name in player_class_map.items():
-        cooldowns = CLASSIC_COOLDOWNS.get(class_name, [])
+        cooldowns = [
+            cd for cd in CLASSIC_COOLDOWNS.get(class_name, [])
+            if cd.cd_type == "throughput"
+        ]
         for cd in cooldowns:
             if cd.cooldown_sec <= 0:
                 continue
