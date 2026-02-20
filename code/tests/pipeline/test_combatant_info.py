@@ -30,7 +30,7 @@ class TestParseConsumables:
         # Weapon oil
         assert result[1].category == "weapon_oil"
         assert result[1].spell_id == 28898
-        assert result[1].ability_name == "Brilliant Wizard Oil"
+        assert result[1].ability_name == "Blessed Wizard Oil"
         # Food
         assert result[2].category == "food"
         assert result[2].spell_id == 33254
