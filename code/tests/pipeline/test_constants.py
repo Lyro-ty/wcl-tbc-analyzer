@@ -57,6 +57,12 @@ class TestClassSpecs:
         assert ("Paladin", "Holy") in spec_combos
         assert ("Warrior", "Protection") in spec_combos
 
+    def test_druid_feral_spec_name(self):
+        """Druid melee DPS spec is 'Feral', not 'Feral Combat'."""
+        druid_specs = {s.spec_name for s in TBC_SPECS if s.class_name == "Druid"}
+        assert "Feral" in druid_specs
+        assert "Feral Combat" not in druid_specs
+
     def test_class_spec_frozen(self):
         spec = ClassSpec(class_name="Test", spec_name="Test", role="dps")
         with pytest.raises(AttributeError):
