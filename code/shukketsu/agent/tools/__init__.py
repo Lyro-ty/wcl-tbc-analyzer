@@ -10,7 +10,6 @@ from shukketsu.agent.tools.event_tools import (
     get_cancelled_casts,
     get_consumable_check,
     get_cooldown_efficiency,
-    get_cooldown_windows,
     get_death_analysis,
     get_dot_management,
     get_enchant_gem_check,
@@ -66,11 +65,10 @@ ALL_TOOLS = [
     get_buff_analysis,
     get_overheal_analysis,
     get_trinket_performance,
-    # Event-data tools (12)
+    # Event-data tools (11)
     get_death_analysis,
     get_activity_report,
     get_cooldown_efficiency,
-    get_cooldown_windows,
     get_cancelled_casts,
     get_consumable_check,
     get_resource_usage,
@@ -112,7 +110,6 @@ __all__ = [
     "get_death_analysis",
     "get_activity_report",
     "get_cooldown_efficiency",
-    "get_cooldown_windows",
     "get_cancelled_casts",
     "get_consumable_check",
     "get_resource_usage",

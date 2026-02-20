@@ -316,18 +316,6 @@ export interface ResourceSnapshot {
   samples_json: string | null
 }
 
-export interface CooldownWindowEntry {
-  player_name: string
-  ability_name: string
-  spell_id: number
-  window_start_ms: number
-  window_end_ms: number
-  window_damage: number
-  window_dps: number
-  baseline_dps: number
-  dps_gain_pct: number
-}
-
 export interface PhaseMetricEntry {
   player_name: string
   phase_name: string

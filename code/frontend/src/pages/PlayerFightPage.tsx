@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, Swords, Heart, HeartCrack, Shield, Sparkles, Skull, Activity, Timer, ClipboardCheck, Ban, ListOrdered, Gauge, Zap, Layers, RotateCcw, Target, Gem } from 'lucide-react'
+import { ArrowLeft, Loader2, Swords, Heart, HeartCrack, Shield, Sparkles, Skull, Activity, Timer, ClipboardCheck, Ban, ListOrdered, Gauge, Layers, RotateCcw, Target, Gem } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   fetchCancelledCasts,
@@ -7,7 +7,6 @@ import {
   fetchCastTimeline,
   fetchConsumableCheck,
   fetchCooldownUsage,
-  fetchCooldownWindows,
   fetchDotRefreshes,
   fetchFightDeaths,
   fetchRotationScore,
@@ -25,7 +24,6 @@ import AbilityBarChart from '../components/charts/AbilityBarChart'
 import UptimeBarChart from '../components/charts/UptimeBarChart'
 import ActivityGauge from '../components/charts/ActivityGauge'
 import CooldownChart from '../components/charts/CooldownChart'
-import CooldownWindowChart from '../components/charts/CooldownWindowChart'
 import DotRefreshChart from '../components/charts/DotRefreshChart'
 import RotationScoreComponent from '../components/RotationScore'
 import PhaseBreakdown from '../components/charts/PhaseBreakdown'
@@ -113,12 +111,6 @@ export default function PlayerFightPage() {
   // Load resource usage (event data)
   const { data: resources } = useApiQuery(
     () => fetchResourceUsage(code!, fightIdNum, player!),
-    [code, fightId, player],
-  )
-
-  // Load cooldown window throughput (event data)
-  const { data: cdWindows } = useApiQuery(
-    () => fetchCooldownWindows(code!, fightIdNum, player!),
     [code, fightId, player],
   )
 
@@ -520,24 +512,6 @@ export default function PlayerFightPage() {
           <ErrorBoundary>
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
               <CooldownChart data={cooldowns} />
-            </div>
-          </ErrorBoundary>
-        </div>
-      )}
-
-      {/* Cooldown Window Throughput (event data) */}
-      {cdWindows && cdWindows.length > 0 && playerInfo && (
-        <div className="mb-8">
-          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
-            <Zap className="h-5 w-5 text-yellow-400" />
-            Cooldown Window Throughput
-          </h2>
-          <ErrorBoundary>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-              <CooldownWindowChart
-                data={cdWindows}
-                fightDurationMs={playerInfo.duration_ms}
-              />
             </div>
           </ErrorBoundary>
         </div>

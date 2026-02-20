@@ -227,4 +227,4 @@ class TestGetPhaseAnalysisInAllTools:
         """ALL_TOOLS should include the new tool."""
         from shukketsu.agent.tools import ALL_TOOLS
 
-        assert len(ALL_TOOLS) == 32
+        assert len(ALL_TOOLS) == 31

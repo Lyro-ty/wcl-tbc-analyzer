@@ -469,18 +469,6 @@ class ResourceSnapshotResponse(BaseModel):
     samples_json: str | None
 
 
-class CooldownWindowResponse(BaseModel):
-    player_name: str
-    ability_name: str
-    spell_id: int
-    window_start_ms: int
-    window_end_ms: int
-    window_damage: int
-    window_dps: float
-    baseline_dps: float
-    dps_gain_pct: float
-
-
 class DotRefreshResponse(BaseModel):
     player_name: str
     spell_id: int

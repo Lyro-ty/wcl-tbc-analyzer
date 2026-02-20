@@ -1,4 +1,4 @@
-"""Event-data agent tools requiring --with-events ingestion (12 tools)."""
+"""Event-data agent tools requiring --with-events ingestion (11 tools)."""
 
 import json
 from collections import defaultdict
@@ -171,50 +171,6 @@ async def get_cooldown_efficiency(
             f"    {flag} {r.ability_name} ({r.cooldown_sec}s CD): "
             f"{r.times_used}/{r.max_possible_uses} uses "
             f"({r.efficiency_pct}%) | First use: {first_use}"
-        )
-
-    return "\n".join(lines)
-
-
-@db_tool
-async def get_cooldown_windows(
-    session, report_code: str, fight_id: int, player_name: str,
-) -> str:
-    """Get DPS during cooldown activation windows vs baseline DPS.
-    Shows estimated DPS gain during burst windows.
-    Requires event data ingestion."""
-    result = await session.execute(
-        q.COOLDOWN_WINDOWS,
-        {"report_code": report_code, "fight_id": fight_id,
-         "player_name": wildcard(player_name)},
-    )
-    rows = result.fetchall()
-    if not rows:
-        return (
-            f"No cooldown window data found for '{player_name}' in "
-            f"fight {fight_id} of report {report_code}. {EVENT_DATA_HINT}"
-        )
-
-    lines = [
-        f"Cooldown windows for {player_name} in "
-        f"{report_code}#{fight_id}:\n"
-    ]
-    for r in rows:
-        baseline_dps = r.baseline_dps or 0
-        window_dps = baseline_dps * 1.2
-        dps_gain = 20.0
-        first_use = (
-            f"{r.first_use_ms / 1000:.1f}s"
-            if r.first_use_ms else "never"
-        )
-        lines.append(
-            f"  {r.ability_name} ({r.cooldown_sec}s CD): "
-            f"Uses: {r.times_used}/{r.max_possible_uses} "
-            f"({r.efficiency_pct}%) | "
-            f"Baseline DPS: {baseline_dps:,.1f} | "
-            f"Est. window DPS: {window_dps:,.1f} "
-            f"(+{dps_gain:.0f}%) | "
-            f"First use: {first_use}"
         )
 
     return "\n".join(lines)

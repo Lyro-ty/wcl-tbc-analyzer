@@ -35,7 +35,7 @@ class TestToolDecorators:
             assert tool.description, f"{tool.name} has no description"
 
     def test_expected_tool_count(self):
-        assert len(ALL_TOOLS) == 32
+        assert len(ALL_TOOLS) == 31
 
     def test_tool_names(self):
         names = {t.name for t in ALL_TOOLS}
@@ -49,7 +49,7 @@ class TestToolDecorators:
             "get_consumable_check", "get_overheal_analysis", "get_cancelled_casts",
             "get_wipe_progression", "get_regressions",
             "resolve_my_fights", "get_gear_changes", "get_phase_analysis",
-            "get_resource_usage", "get_cooldown_windows", "get_dot_management",
+            "get_resource_usage", "get_dot_management",
             "get_rotation_score", "get_trinket_performance",
             "get_enchant_gem_check",
             "get_encounter_benchmarks", "get_spec_benchmark",

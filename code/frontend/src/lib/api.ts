@@ -201,10 +201,6 @@ export async function fetchResourceUsage(code: string, fightId: number, player: 
   return fetchJson(`/api/data/reports/${code}/fights/${fightId}/resources/${encodeURIComponent(player)}`)
 }
 
-export async function fetchCooldownWindows(code: string, fightId: number, player: string): Promise<import('./types').CooldownWindowEntry[]> {
-  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/cooldown-windows/${encodeURIComponent(player)}`)
-}
-
 export async function fetchCancelledCasts(code: string, fightId: number, player: string): Promise<import('./types').CancelledCastSummary | null> {
   return fetchJson(`/api/data/reports/${code}/fights/${fightId}/cancelled-casts/${encodeURIComponent(player)}`)
 }

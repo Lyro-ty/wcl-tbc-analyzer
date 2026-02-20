@@ -81,9 +81,6 @@ fight pacing and which phases are critical (report_code + fight_id, optional pla
 - **get_resource_usage**: Mana/rage/energy usage analysis for a player in a fight. \
 Shows min/max/avg resource levels and time spent at zero. Useful for diagnosing \
 OOM healers or rage-starved warriors (report_code + fight_id + player_name).
-- **get_cooldown_windows**: DPS during cooldown activation windows vs baseline. \
-Shows estimated DPS gain during burst windows. Use to verify burst alignment \
-(report_code + fight_id + player_name).
 - **get_dot_management**: DoT refresh analysis for a player in a fight. \
 Shows early refresh rates, clipped ticks, and timing quality. Only applies to \
 DoT specs (Warlock, Shadow Priest, Balance Druid) (report_code + fight_id + player_name).
@@ -228,29 +225,25 @@ may indicate it was only used at pull or expired mid-fight. Skip if no consumabl
 Healers with >10% time at zero mana are going OOM and need to adjust spell selection or \
 consumables. Rogues/Ferals with frequent energy starvation may have rotation issues. \
 Warriors with rage starvation may need to adjust hit rating. Skip if no resource data available.
-10. **Cooldown Window Throughput** — If cooldown window data was retrieved, analyze DPS \
-during burst windows vs baseline. Good players should see 20-50%+ DPS gains during cooldowns. \
-Below-baseline damage during a CD indicates the player isn't aligning their strongest abilities \
-with their burst windows. Skip if no cooldown window data available.
-11. **Phase Performance** — If phase breakdown data was retrieved, compare DPS and GCD uptime \
+10. **Phase Performance** — If phase breakdown data was retrieved, compare DPS and GCD uptime \
 across phases. Downtime phases (transitions, air phases) are expected to show lower numbers. \
 Flag significant DPS drops in non-downtime phases. Skip if no phase data available.
-12. **DoT Management** — If DoT refresh data was retrieved, evaluate early refresh rates. \
+11. **DoT Management** — If DoT refresh data was retrieved, evaluate early refresh rates. \
 <10% early refresh rate is GOOD, 10-25% is FAIR, >25% NEEDS WORK. Early refreshes waste \
 GCDs and clip remaining ticks. Advise refreshing in the pandemic window (last 30% of duration). \
 Skip if no DoT data available.
-13. **Rotation Score** — If rotation score data was retrieved, present the letter grade and \
+12. **Rotation Score** — If rotation score data was retrieved, present the letter grade and \
 highlight specific rule violations. GCD uptime targets are adjusted for encounter context \
 (e.g., Gruul ~85%, Netherspite ~70%). A/B grades are strong, C needs tuning, D/F \
 indicates fundamental rotation issues. Skip if no rotation data available.
-14. **Trinket Performance** — If trinket proc data was retrieved, evaluate trinket uptime. \
+13. **Trinket Performance** — If trinket proc data was retrieved, evaluate trinket uptime. \
 Good trinket procs should have 20-35% uptime depending on the trinket. Low uptime may \
 indicate suboptimal trinket choices or bad RNG. Skip if no trinket data available.
-15. **Raid Buff Coverage** — If raid buff coverage data was retrieved (via get_buff_analysis), \
+14. **Raid Buff Coverage** — If raid buff coverage data was retrieved (via get_buff_analysis), \
 highlight buffs with low coverage (<50% of raid) or missing entirely. Key buffs like \
 Battle Shout, Mark of the Wild, and Blessings should cover the full raid. \
 Skip if no buff coverage data available.
-16. **Actionable Checklist** — Specific, prioritized improvement suggestions as checkboxes:
+15. **Actionable Checklist** — Specific, prioritized improvement suggestions as checkboxes:
    - [ ] Highest-impact improvement first
    - [ ] Second priority
    - [ ] Third priority

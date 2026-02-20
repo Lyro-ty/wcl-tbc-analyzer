@@ -1,4 +1,4 @@
-"""Event-data SQL queries for --with-events agent tools (16 queries).
+"""Event-data SQL queries for --with-events agent tools (15 queries).
 
 Used by: agent/tools/event_tools.py, api/routes/data/events.py,
          api/routes/data/fights.py, api/routes/data/comparison.py
@@ -18,7 +18,6 @@ __all__ = [
     "FIGHT_CAST_METRICS",
     "FIGHT_COOLDOWNS",
     "CAST_TIMELINE",
-    "COOLDOWN_WINDOWS",
     "CAST_EVENTS_FOR_DOT_ANALYSIS",
     "PLAYER_FIGHT_INFO",
     "CAST_EVENTS_FOR_PHASES",
@@ -176,23 +175,6 @@ CAST_TIMELINE = text("""
       AND f.fight_id = :fight_id
       AND ce.player_name ILIKE :player_name
     ORDER BY ce.timestamp_ms ASC
-""")
-
-COOLDOWN_WINDOWS = text("""
-    SELECT cu.player_name, cu.ability_name, cu.spell_id,
-           cu.cooldown_sec, cu.times_used, cu.max_possible_uses,
-           cu.first_use_ms, cu.last_use_ms, cu.efficiency_pct,
-           fp.dps AS baseline_dps, fp.total_damage,
-           (f.end_time - f.start_time) AS fight_duration_ms
-    FROM cooldown_usage cu
-    JOIN fights f ON cu.fight_id = f.id
-    JOIN fight_performances fp
-        ON fp.fight_id = f.id AND LOWER(fp.player_name) = LOWER(cu.player_name)
-    WHERE f.report_code = :report_code
-      AND f.fight_id = :fight_id
-      AND cu.player_name ILIKE :player_name
-      AND cu.times_used > 0
-    ORDER BY cu.first_use_ms ASC NULLS LAST
 """)
 
 CAST_EVENTS_FOR_DOT_ANALYSIS = text("""

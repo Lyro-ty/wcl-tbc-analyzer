@@ -198,46 +198,6 @@ async def test_resources_empty(client, mock_session):
 
 
 # ---------------------------------------------------------------------------
-# GET /api/data/reports/{code}/fights/{id}/cooldown-windows/{player}
-# ---------------------------------------------------------------------------
-
-async def test_cooldown_windows_ok(client, mock_session):
-    """Returns cooldown window DPS estimates."""
-    mock_row = make_row(
-        player_name="Lyro", ability_name="Recklessness", spell_id=1719,
-        cooldown_sec=10, first_use_ms=5000, baseline_dps=2000.0,
-    )
-    mock_result = MagicMock()
-    mock_result.fetchall.return_value = [mock_row]
-    mock_session.execute = AsyncMock(return_value=mock_result)
-
-    resp = await client.get(
-        "/api/data/reports/abc123/fights/1/cooldown-windows/Lyro"
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data) == 1
-    assert data[0]["ability_name"] == "Recklessness"
-    assert data[0]["dps_gain_pct"] == 20.0
-    # window_dps should be baseline * 1.2
-    assert data[0]["window_dps"] == 2400.0
-    assert data[0]["baseline_dps"] == 2000.0
-
-
-async def test_cooldown_windows_empty(client, mock_session):
-    """Returns empty list when no cooldown windows."""
-    mock_result = MagicMock()
-    mock_result.fetchall.return_value = []
-    mock_session.execute = AsyncMock(return_value=mock_result)
-
-    resp = await client.get(
-        "/api/data/reports/abc123/fights/1/cooldown-windows/Lyro"
-    )
-    assert resp.status_code == 200
-    assert resp.json() == []
-
-
-# ---------------------------------------------------------------------------
 # GET /api/data/reports/{code}/fights/{id}/rotation/{player}
 # ---------------------------------------------------------------------------
 

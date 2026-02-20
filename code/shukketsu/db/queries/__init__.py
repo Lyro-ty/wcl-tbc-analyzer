@@ -8,7 +8,7 @@ Domain files:
     player.py     — Player/encounter-level queries (13)
     raid.py       — Raid-level comparison queries (4)
     table_data.py — Table-data (--with-tables) queries (4)
-    event.py      — Event-data (--with-events) queries (16)
+    event.py      — Event-data (--with-events) queries (15)
     api.py        — REST API-only queries (23)
     benchmark.py  — Benchmark pipeline queries (12)
 """

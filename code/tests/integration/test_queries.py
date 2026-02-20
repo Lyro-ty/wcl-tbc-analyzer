@@ -308,15 +308,6 @@ async def test_cast_timeline_query(session):
 
 
 @pytest.mark.integration
-async def test_cooldown_windows_query(session):
-    """COOLDOWN_WINDOWS query with multi-table JOIN executes."""
-    await session.execute(
-        q.COOLDOWN_WINDOWS,
-        {"report_code": "test", "fight_id": 0, "player_name": "%test%"},
-    )
-
-
-@pytest.mark.integration
 async def test_enchant_gem_check_query(session):
     """ENCHANT_GEM_CHECK query executes without syntax error."""
     await session.execute(
