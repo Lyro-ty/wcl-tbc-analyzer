@@ -840,7 +840,7 @@ async def _score_dps(
         ability_names = {r.ability_name for r in ab_rows}
         for key_ab in rules.key_abilities:
             rules_checked += 1
-            if key_ab in ability_names:
+            if any(key_ab.lower() in name.lower() for name in ability_names):
                 rules_passed += 1
             else:
                 violations.append(
