@@ -1,4 +1,5 @@
 import asyncio
+import time
 from unittest.mock import AsyncMock, patch
 
 from shukketsu.wcl.rate_limiter import RateLimiter
@@ -92,3 +93,97 @@ class TestRateLimiterSleepCap:
         })
         await rl.wait_if_needed()
         assert slept[0] == 1  # floored at 1, not 0
+
+
+class TestMarkThrottled:
+    def test_mark_throttled_with_retry_after(self):
+        """mark_throttled uses Retry-After value when provided."""
+        rl = RateLimiter()
+        before = time.monotonic()
+        rl.mark_throttled(retry_after=120)
+        assert rl._throttled_until >= before + 119  # allow 1s tolerance
+
+    def test_mark_throttled_falls_back_to_reset_in(self):
+        """mark_throttled uses _points_reset_in when no Retry-After."""
+        rl = RateLimiter()
+        rl.update({
+            "pointsSpentThisHour": 3500,
+            "limitPerHour": 3600,
+            "pointsResetIn": 300,
+        })
+        before = time.monotonic()
+        rl.mark_throttled(retry_after=None)
+        assert rl._throttled_until >= before + 299
+
+    def test_mark_throttled_fallback_60s(self):
+        """mark_throttled uses 60s fallback when no data available."""
+        rl = RateLimiter()
+        before = time.monotonic()
+        rl.mark_throttled(retry_after=None)
+        assert rl._throttled_until >= before + 59
+
+    def test_mark_throttled_capped_at_max(self):
+        """mark_throttled caps sleep at MAX_SLEEP_SECONDS."""
+        rl = RateLimiter()
+        before = time.monotonic()
+        rl.mark_throttled(retry_after=9999)
+        assert rl._throttled_until <= before + 3601
+
+    async def test_wait_if_needed_honours_throttle(self, monkeypatch):
+        """wait_if_needed sleeps when mark_throttled was called."""
+        slept = []
+
+        async def mock_sleep(duration):
+            slept.append(duration)
+
+        monkeypatch.setattr(asyncio, "sleep", mock_sleep)
+
+        rl = RateLimiter()
+        # Set throttle to 10s in the future
+        rl._throttled_until = time.monotonic() + 10
+        await rl.wait_if_needed()
+        assert len(slept) == 1
+        assert 9 <= slept[0] <= 11  # ~10s
+        assert rl._throttled_until == 0.0  # cleared after wait
+
+    async def test_throttle_takes_priority_over_points(self, monkeypatch):
+        """Throttle wait takes priority over points-based wait."""
+        slept = []
+
+        async def mock_sleep(duration):
+            slept.append(duration)
+
+        monkeypatch.setattr(asyncio, "sleep", mock_sleep)
+
+        rl = RateLimiter()
+        rl.update({
+            "pointsSpentThisHour": 3500,
+            "limitPerHour": 3600,
+            "pointsResetIn": 300,
+        })
+        # Set throttle to 5s in the future
+        rl._throttled_until = time.monotonic() + 5
+
+        await rl.wait_if_needed()
+        # Should sleep for throttle (~5s), not points (300s)
+        assert len(slept) == 1
+        assert slept[0] < 10
+
+    async def test_expired_throttle_ignored(self, monkeypatch):
+        """Expired throttle is ignored — falls through to points check."""
+        slept = []
+
+        async def mock_sleep(duration):
+            slept.append(duration)
+
+        monkeypatch.setattr(asyncio, "sleep", mock_sleep)
+
+        rl = RateLimiter()
+        rl._throttled_until = time.monotonic() - 10  # already expired
+        rl.update({
+            "pointsSpentThisHour": 100,
+            "limitPerHour": 3600,
+            "pointsResetIn": 3500,
+        })
+        await rl.wait_if_needed()
+        assert len(slept) == 0  # safe, no sleep

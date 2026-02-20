@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ class RateLimiter:
         self.limit_per_hour: int = 3600
         self._points_spent: int = 0
         self._points_reset_in: int = 0
+        self._throttled_until: float = 0.0  # monotonic time
 
     @property
     def points_remaining(self) -> int:
@@ -36,7 +38,33 @@ class RateLimiter:
             self._points_reset_in,
         )
 
+    def mark_throttled(self, retry_after: int | None = None) -> None:
+        """Record a 429 throttle so the next wait_if_needed() sleeps."""
+        if retry_after is not None:
+            wait = retry_after
+        elif self._points_reset_in > 0:
+            wait = self._points_reset_in
+        else:
+            wait = 60  # conservative fallback
+        wait = max(1, min(wait, self.MAX_SLEEP_SECONDS))
+        self._throttled_until = time.monotonic() + wait
+        logger.warning(
+            "Rate limited (429), will wait %ds before next request", wait,
+        )
+
     async def wait_if_needed(self) -> None:
+        # Honour 429 throttle first
+        now = time.monotonic()
+        if self._throttled_until > now:
+            sleep_duration = self._throttled_until - now
+            logger.warning(
+                "Waiting %.0fs for rate limit reset (429 throttle)",
+                sleep_duration,
+            )
+            await asyncio.sleep(sleep_duration)
+            self._throttled_until = 0.0
+            return
+
         if not self.is_safe:
             sleep_duration = max(1, min(self._points_reset_in, self.MAX_SLEEP_SECONDS))
             logger.warning(

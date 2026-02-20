@@ -1,13 +1,15 @@
+from unittest.mock import AsyncMock, patch
+
 import httpx
 import pytest
 import respx
 
 from shukketsu.wcl.auth import WCLAuth
-from shukketsu.wcl.client import WCLAPIError, WCLClient, _is_retryable
+from shukketsu.wcl.client import WCLAPIError, WCLClient, _parse_retry_after
 from shukketsu.wcl.rate_limiter import RateLimiter
 
-API_URL = "https://www.warcraftlogs.com/api/v2/client"
-OAUTH_URL = "https://www.warcraftlogs.com/oauth/token"
+API_URL = "https://fresh.warcraftlogs.com/api/v2/client"
+OAUTH_URL = "https://fresh.warcraftlogs.com/oauth/token"
 
 RATE_LIMIT_DATA = {
     "pointsSpentThisHour": 50,
@@ -119,39 +121,9 @@ async def test_query_passes_variables(auth, limiter):
     assert body["variables"] == {"code": "abc123"}
 
 
-class TestIsRetryable:
-    def test_429_is_retryable(self):
-        resp = httpx.Response(429)
-        req = httpx.Request("POST", API_URL)
-        exc = httpx.HTTPStatusError("rate limited", request=req, response=resp)
-        assert _is_retryable(exc) is True
-
-    def test_502_is_retryable(self):
-        resp = httpx.Response(502)
-        req = httpx.Request("POST", API_URL)
-        exc = httpx.HTTPStatusError("bad gateway", request=req, response=resp)
-        assert _is_retryable(exc) is True
-
-    def test_400_is_not_retryable(self):
-        resp = httpx.Response(400)
-        req = httpx.Request("POST", API_URL)
-        exc = httpx.HTTPStatusError("bad request", request=req, response=resp)
-        assert _is_retryable(exc) is False
-
-    def test_connect_error_is_retryable(self):
-        exc = httpx.ConnectError("Connection refused")
-        assert _is_retryable(exc) is True
-
-    def test_read_timeout_is_retryable(self):
-        exc = httpx.ReadTimeout("Read timed out")
-        assert _is_retryable(exc) is True
-
-    def test_generic_exception_not_retryable(self):
-        assert _is_retryable(ValueError("nope")) is False
-
-
 @respx.mock
 async def test_query_retries_on_429(auth, limiter):
+    """429 responses trigger mark_throttled and retry via wait_if_needed."""
     _mock_oauth()
     call_count = 0
 
@@ -159,7 +131,7 @@ async def test_query_retries_on_429(auth, limiter):
         nonlocal call_count
         call_count += 1
         if call_count <= 2:
-            return httpx.Response(429)
+            return httpx.Response(429, headers={"Retry-After": "0"})
         return httpx.Response(200, json={
             "data": {"test": True},
             "extensions": {"rateLimitData": RATE_LIMIT_DATA},
@@ -167,8 +139,142 @@ async def test_query_retries_on_429(auth, limiter):
 
     respx.post(API_URL).mock(side_effect=side_effect)
 
-    async with WCLClient(auth, limiter, api_url=API_URL) as client:
-        data = await client.query("query { test }")
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        async with WCLClient(auth, limiter, api_url=API_URL) as client:
+            data = await client.query("query { test }")
 
     assert data == {"test": True}
     assert call_count == 3
+
+
+@respx.mock
+async def test_query_retries_on_502(auth, limiter):
+    """502/503/504 responses use exponential backoff."""
+    _mock_oauth()
+    call_count = 0
+
+    def side_effect(request):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return httpx.Response(502)
+        return httpx.Response(200, json={
+            "data": {"ok": True},
+            "extensions": {"rateLimitData": RATE_LIMIT_DATA},
+        })
+
+    respx.post(API_URL).mock(side_effect=side_effect)
+
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        async with WCLClient(auth, limiter, api_url=API_URL) as client:
+            data = await client.query("query { ok }")
+
+    assert data == {"ok": True}
+    assert call_count == 2
+
+
+@respx.mock
+async def test_query_raises_400_immediately(auth, limiter):
+    """Non-retryable HTTP errors are raised without retry."""
+    _mock_oauth()
+    respx.post(API_URL).mock(return_value=httpx.Response(400))
+
+    async with WCLClient(auth, limiter, api_url=API_URL) as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.query("query { test }")
+
+
+@respx.mock
+async def test_429_marks_throttled_with_retry_after(auth, limiter):
+    """429 with Retry-After header passes the value to rate limiter."""
+    _mock_oauth()
+    call_count = 0
+
+    def side_effect(request):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return httpx.Response(429, headers={"Retry-After": "0"})
+        return httpx.Response(200, json={
+            "data": {"test": True},
+            "extensions": {"rateLimitData": RATE_LIMIT_DATA},
+        })
+
+    respx.post(API_URL).mock(side_effect=side_effect)
+
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        async with WCLClient(auth, limiter, api_url=API_URL) as client:
+            await client.query("query { test }")
+
+    # After the successful response, throttle should be cleared
+    assert limiter._throttled_until == 0.0
+
+
+@respx.mock
+async def test_429_exhausts_retries_raises(auth, limiter):
+    """If all retries return 429, the final one raises HTTPStatusError."""
+    _mock_oauth()
+    respx.post(API_URL).mock(
+        return_value=httpx.Response(429, headers={"Retry-After": "0"})
+    )
+
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        async with WCLClient(auth, limiter, api_url=API_URL) as client:
+            with pytest.raises(httpx.HTTPStatusError) as exc_info:
+                await client.query("query { test }")
+            assert exc_info.value.response.status_code == 429
+
+
+@respx.mock
+async def test_429_without_retry_after_uses_rate_limiter(auth, limiter):
+    """429 without Retry-After header falls back to rate limiter data."""
+    _mock_oauth()
+    # Pre-populate rate limiter with reset info
+    limiter.update({
+        "pointsSpentThisHour": 3500,
+        "limitPerHour": 3600,
+        "pointsResetIn": 300,
+    })
+    call_count = 0
+
+    def side_effect(request):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return httpx.Response(429)  # No Retry-After header
+        return httpx.Response(200, json={
+            "data": {"test": True},
+            "extensions": {"rateLimitData": RATE_LIMIT_DATA},
+        })
+
+    respx.post(API_URL).mock(side_effect=side_effect)
+
+    with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        async with WCLClient(auth, limiter, api_url=API_URL) as client:
+            data = await client.query("query { test }")
+
+    assert data == {"test": True}
+    # wait_if_needed should have been called with a sleep
+    # (the throttle uses _points_reset_in=300)
+    sleep_calls = [c.args[0] for c in mock_sleep.call_args_list]
+    assert any(s >= 290 for s in sleep_calls), (
+        f"Expected a sleep >= 290s from rate limiter fallback, got {sleep_calls}"
+    )
+
+
+class TestParseRetryAfter:
+    def test_valid_integer(self):
+        resp = httpx.Response(429, headers={"Retry-After": "120"})
+        assert _parse_retry_after(resp) == 120
+
+    def test_no_header(self):
+        resp = httpx.Response(429)
+        assert _parse_retry_after(resp) is None
+
+    def test_non_numeric(self):
+        resp = httpx.Response(429, headers={"Retry-After": "Wed, 21 Oct 2025"})
+        assert _parse_retry_after(resp) is None
+
+    def test_zero(self):
+        resp = httpx.Response(429, headers={"Retry-After": "0"})
+        assert _parse_retry_after(resp) == 0
