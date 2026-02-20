@@ -1315,6 +1315,102 @@ def _rotation_mocks(
     return mock_session
 
 
+def _healer_mocks(
+    *,
+    player_class="Paladin",
+    player_spec="Holy",
+    encounter_name="Gruul the Dragonkiller",
+    overheal_pct=20.0,
+    time_at_zero_pct=3.0,
+    overheal_rows=None,
+    resource_rows=None,
+    ability_rows=None,
+):
+    """Build mock execute results for get_rotation_score -> _score_healer.
+
+    Returns a mock_session with side_effect for:
+      1. PLAYER_FIGHT_INFO
+      2. OVERHEAL_ANALYSIS
+      3. RESOURCE_USAGE
+      4. ABILITY_BREAKDOWN (if spec has key_abilities)
+    """
+    # 1. PLAYER_FIGHT_INFO
+    info_row = MagicMock(
+        player_class=player_class,
+        player_spec=player_spec,
+        dps=50.0,
+        total_damage=9000,
+        fight_duration_ms=180000,
+        encounter_id=201101,
+        encounter_name=encounter_name,
+    )
+    info_result = MagicMock()
+    info_result.fetchone.return_value = info_row
+
+    # 2. OVERHEAL_ANALYSIS
+    if overheal_rows is None:
+        # Compute total/overheal_total from desired pct:
+        # oh_pct = overheal_total / (total + overheal_total) * 100
+        # With total_raw=100000, overheal_total = total_raw * oh_pct / 100
+        total_raw = 100000
+        oh_total = int(total_raw * overheal_pct / 100)
+        eff_heal = total_raw - oh_total
+        overheal_rows = [
+            MagicMock(
+                player_name="TestPlayer",
+                ability_name="Flash of Light",
+                spell_id=19750,
+                total=eff_heal,
+                overheal_total=oh_total,
+                overheal_pct=overheal_pct,
+            ),
+        ]
+    oh_result = MagicMock()
+    oh_result.fetchall.return_value = overheal_rows
+
+    # 3. RESOURCE_USAGE
+    if resource_rows is None:
+        resource_rows = [
+            MagicMock(
+                player_name="TestPlayer",
+                resource_type="Mana",
+                min_value=0,
+                max_value=10000,
+                avg_value=6500.0,
+                time_at_zero_ms=int(180000 * time_at_zero_pct / 100),
+                time_at_zero_pct=time_at_zero_pct,
+                samples_json=None,
+            ),
+        ]
+    res_result = MagicMock()
+    res_result.fetchall.return_value = resource_rows
+
+    # 4. ABILITY_BREAKDOWN
+    if ability_rows is None:
+        ability_rows = [
+            MagicMock(
+                player_name="TestPlayer", metric_type="healing",
+                ability_name="Flash of Light", spell_id=19750,
+                total=60000, hit_count=40, crit_count=10,
+                crit_pct=25.0, pct_of_total=60.0,
+            ),
+            MagicMock(
+                player_name="TestPlayer", metric_type="healing",
+                ability_name="Holy Light", spell_id=635,
+                total=40000, hit_count=15, crit_count=5,
+                crit_pct=33.3, pct_of_total=40.0,
+            ),
+        ]
+    ab_result = MagicMock()
+    ab_result.fetchall.return_value = ability_rows
+
+    mock_session = AsyncMock()
+    mock_session.execute.side_effect = [
+        info_result, oh_result, res_result, ab_result,
+    ]
+    return mock_session
+
+
 class TestDpsRotationScorer:
     async def test_fury_warrior_patchwerk_high_gcd(self):
         """90% GCD on Gruul (modifier 1.0) should score well."""
@@ -1549,11 +1645,12 @@ class TestDpsRotationScorer:
         # Should show adjusted target based on melee_modifier
         assert "58.5" in result
 
-    async def test_healer_routes_to_stub(self):
-        """Holy Paladin should get healer stub message."""
-        mock_session = _rotation_mocks(
+    async def test_healer_routes_to_healer_scorer(self):
+        """Holy Paladin should get healer score, not DPS score."""
+        mock_session = _healer_mocks(
             player_class="Paladin", player_spec="Holy",
             encounter_name="Gruul the Dragonkiller",
+            overheal_pct=18.0,
         )
         with patch(
             "shukketsu.agent.tool_utils._get_session",
@@ -1564,8 +1661,8 @@ class TestDpsRotationScorer:
                  "player_name": "TestPlayer"}
             )
 
-        assert "healer" in result.lower() or "Healer" in result
-        assert "get_overheal_analysis" in result
+        assert "Healer score" in result
+        assert "Rotation score" not in result
 
     async def test_tank_routes_to_stub(self):
         """Protection Warrior should get tank stub message."""
@@ -1652,6 +1749,239 @@ class TestDpsRotationScorer:
 
         # All rules should pass -> 100% -> S grade
         assert "S" in result
+
+
+class TestHealerScorer:
+    """Tests for the healer scoring path in get_rotation_score."""
+
+    async def test_holy_paladin_low_overheal_passes(self):
+        """18% overheal for Holy Paladin (target 20%) should pass."""
+        mock_session = _healer_mocks(
+            player_class="Paladin", player_spec="Holy",
+            encounter_name="Gruul the Dragonkiller",
+            overheal_pct=18.0,
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "Healer score" in result
+        assert "Paladin Holy" in result
+        assert "18.0%" in result
+        assert "OK" in result
+
+    async def test_resto_druid_42_overheal_passes(self):
+        """42% overheal for Resto Druid (target 45%) should pass."""
+        mock_session = _healer_mocks(
+            player_class="Druid", player_spec="Restoration",
+            encounter_name="Gruul the Dragonkiller",
+            overheal_pct=42.0,
+            ability_rows=[
+                MagicMock(
+                    player_name="TestPlayer", metric_type="healing",
+                    ability_name="Lifebloom", spell_id=33763,
+                    total=40000, hit_count=100, crit_count=0,
+                    crit_pct=0.0, pct_of_total=40.0,
+                ),
+                MagicMock(
+                    player_name="TestPlayer", metric_type="healing",
+                    ability_name="Rejuvenation", spell_id=774,
+                    total=35000, hit_count=50, crit_count=0,
+                    crit_pct=0.0, pct_of_total=35.0,
+                ),
+                MagicMock(
+                    player_name="TestPlayer", metric_type="healing",
+                    ability_name="Healing Touch", spell_id=5185,
+                    total=25000, hit_count=10, crit_count=3,
+                    crit_pct=30.0, pct_of_total=25.0,
+                ),
+            ],
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "Healer score" in result
+        assert "Druid Restoration" in result
+        assert "42.0%" in result
+        assert "OK" in result
+
+    async def test_holy_priest_35_overheal_fails(self):
+        """35% overheal for Holy Priest (target 30%) should flag."""
+        mock_session = _healer_mocks(
+            player_class="Priest", player_spec="Holy",
+            encounter_name="Gruul the Dragonkiller",
+            overheal_pct=35.0,
+            ability_rows=[
+                MagicMock(
+                    player_name="TestPlayer", metric_type="healing",
+                    ability_name="Circle of Healing", spell_id=34861,
+                    total=50000, hit_count=30, crit_count=10,
+                    crit_pct=33.3, pct_of_total=50.0,
+                ),
+                MagicMock(
+                    player_name="TestPlayer", metric_type="healing",
+                    ability_name="Prayer of Healing", spell_id=596,
+                    total=30000, hit_count=10, crit_count=3,
+                    crit_pct=30.0, pct_of_total=30.0,
+                ),
+                MagicMock(
+                    player_name="TestPlayer", metric_type="healing",
+                    ability_name="Flash Heal", spell_id=2061,
+                    total=20000, hit_count=15, crit_count=5,
+                    crit_pct=33.3, pct_of_total=20.0,
+                ),
+            ],
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "Healer score" in result
+        assert "OVER" in result
+        assert "35.0%" in result
+
+    async def test_healer_oom_flagged(self):
+        """Healer with >10% time at zero mana should be flagged."""
+        mock_session = _healer_mocks(
+            player_class="Paladin", player_spec="Holy",
+            encounter_name="Gruul the Dragonkiller",
+            overheal_pct=15.0,
+            time_at_zero_pct=18.5,
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "OOM risk" in result
+        assert "18.5%" in result
+
+    async def test_healer_output_format(self):
+        """Output should be healer-specific, not DPS format."""
+        mock_session = _healer_mocks(
+            player_class="Paladin", player_spec="Holy",
+            encounter_name="Gruul the Dragonkiller",
+            overheal_pct=18.0,
+            time_at_zero_pct=2.0,
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "Healer score" in result
+        assert "Rotation score" not in result
+        assert "Grade:" in result
+        assert "Weighted score" in result
+
+    async def test_healer_mana_caution_zone(self):
+        """Healer with 5-10% time at zero should show caution."""
+        mock_session = _healer_mocks(
+            player_class="Paladin", player_spec="Holy",
+            encounter_name="Gruul the Dragonkiller",
+            overheal_pct=18.0,
+            time_at_zero_pct=8.0,
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "caution" in result
+        assert "8.0%" in result
+
+    async def test_healer_missing_key_ability(self):
+        """Healer missing a key ability should flag it."""
+        # Holy Paladin key abilities: Flash of Light, Holy Light
+        # Provide only Flash of Light -> Holy Light missing
+        mock_session = _healer_mocks(
+            player_class="Paladin", player_spec="Holy",
+            encounter_name="Gruul the Dragonkiller",
+            overheal_pct=18.0,
+            ability_rows=[
+                MagicMock(
+                    player_name="TestPlayer", metric_type="healing",
+                    ability_name="Flash of Light", spell_id=19750,
+                    total=80000, hit_count=50, crit_count=15,
+                    crit_pct=30.0, pct_of_total=100.0,
+                ),
+            ],
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "Holy Light" in result
+        assert "missing" in result.lower()
+
+    async def test_healer_no_data_hint(self):
+        """Healer with no data and fallback rules (no key_abilities) should
+        hint about --with-events/--with-tables."""
+        # Use class+spec pair NOT in SPEC_ROTATION_RULES but whose spec IS
+        # in ROLE_BY_SPEC as "healer".  ("Warrior", "Holy") triggers the
+        # role-default fallback which has empty key_abilities.  With empty
+        # overheal + resource data, total_weight stays 0.
+        info_row = MagicMock(
+            player_class="Warrior", player_spec="Holy",
+            dps=50.0, total_damage=9000, fight_duration_ms=180000,
+            encounter_id=201101, encounter_name="Gruul the Dragonkiller",
+        )
+        info_result = MagicMock()
+        info_result.fetchone.return_value = info_row
+
+        empty_result_1 = MagicMock()
+        empty_result_1.fetchall.return_value = []
+        empty_result_2 = MagicMock()
+        empty_result_2.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = [
+            info_result, empty_result_1, empty_result_2,
+        ]
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "No healer data" in result
+        assert "--with-events" in result
 
 
 class TestRoleAwareToolDisplay:

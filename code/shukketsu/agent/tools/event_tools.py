@@ -13,7 +13,7 @@ from shukketsu.agent.tool_utils import (
     wildcard_or_none,
 )
 from shukketsu.db import queries as q
-from shukketsu.db.queries.table_data import ABILITY_BREAKDOWN
+from shukketsu.db.queries.table_data import ABILITY_BREAKDOWN, OVERHEAL_ANALYSIS
 from shukketsu.pipeline.constants import (
     ENCOUNTER_CONTEXTS,
     ROLE_BY_SPEC,
@@ -500,12 +500,125 @@ def _letter_grade(score: float) -> str:
     )
 
 
-def _score_healer(player_name: str, spec: str) -> str:
-    """Stub: healer rotation scoring not yet implemented."""
-    return (
-        f"Healer scoring for {player_name} ({spec}) is coming soon. "
-        f"Use get_overheal_analysis for healer evaluation."
+async def _score_healer(session, report_code, fight_id, player_name, info, rules):
+    """Score a healer on overheal efficiency, mana management, and spell mix."""
+    pn_like = wildcard(player_name)
+    encounter_name = info.encounter_name
+    total_weight = 0.0
+    weighted_score = 0.0
+    details = []
+
+    # 1. Overheal % (30% weight)
+    overheal_result = await session.execute(
+        OVERHEAL_ANALYSIS,
+        {"report_code": report_code, "fight_id": fight_id,
+         "player_name": pn_like},
     )
+    overheal_rows = overheal_result.fetchall()
+    if overheal_rows:
+        total_oh = sum(getattr(r, "overheal_total", 0) or 0
+                       for r in overheal_rows)
+        total_raw = sum(
+            (getattr(r, "total", 0) or 0)
+            + (getattr(r, "overheal_total", 0) or 0)
+            for r in overheal_rows
+        )
+        oh_pct = (total_oh / total_raw * 100) if total_raw > 0 else 0
+        target = rules.healer_overheal_target
+        if oh_pct <= target:
+            weighted_score += 30.0
+            details.append(
+                f"  Overheal: {oh_pct:.1f}% "
+                f"(target <={target:.0f}%) \u2014 OK"
+            )
+        else:
+            ratio = max(0, 1 - (oh_pct - target) / target)
+            weighted_score += 30.0 * ratio
+            details.append(
+                f"  Overheal: {oh_pct:.1f}% "
+                f"(target <={target:.0f}%) \u2014 OVER"
+            )
+        total_weight += 30.0
+
+    # 2. Mana management (25% weight)
+    resource_result = await session.execute(
+        q.RESOURCE_USAGE,
+        {"report_code": report_code, "fight_id": fight_id,
+         "player_name": pn_like},
+    )
+    resource_rows = resource_result.fetchall()
+    # Find the mana row (healers use mana)
+    mana_row = None
+    for rr in resource_rows:
+        rtype = (getattr(rr, "resource_type", "") or "").lower()
+        if rtype == "mana":
+            mana_row = rr
+            break
+    # Fall back to first row if no explicit mana type found
+    if mana_row is None and resource_rows:
+        mana_row = resource_rows[0]
+
+    if mana_row and hasattr(mana_row, "time_at_zero_pct"):
+        tzp = mana_row.time_at_zero_pct or 0
+        if tzp <= 5:
+            weighted_score += 25.0
+            details.append(
+                f"  Mana: {tzp:.1f}% time at zero \u2014 OK"
+            )
+        elif tzp <= 10:
+            weighted_score += 15.0
+            details.append(
+                f"  Mana: {tzp:.1f}% time at zero \u2014 caution"
+            )
+        else:
+            details.append(
+                f"  Mana: {tzp:.1f}% time at zero \u2014 OOM risk"
+            )
+        total_weight += 25.0
+
+    # 3. Key abilities (15% weight)
+    if rules.key_abilities:
+        ability_result = await session.execute(
+            ABILITY_BREAKDOWN,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": pn_like},
+        )
+        ab_rows = ability_result.fetchall()
+        found = {r.ability_name for r in ab_rows}
+        present = sum(
+            1 for a in rules.key_abilities
+            if any(a.lower() in f.lower() for f in found)
+        )
+        ratio = present / len(rules.key_abilities)
+        weighted_score += 15.0 * ratio
+        total_weight += 15.0
+        missing = [
+            a for a in rules.key_abilities
+            if not any(a.lower() in f.lower() for f in found)
+        ]
+        if missing:
+            details.append(
+                f"  Spell mix: missing {', '.join(missing)}"
+            )
+        else:
+            details.append("  Spell mix: all present \u2014 OK")
+
+    if total_weight == 0:
+        return (
+            f"No healer data for {player_name}. "
+            f"Were --with-events and --with-tables used?"
+        )
+
+    score = (weighted_score / total_weight) * 100
+    grade = _letter_grade(score)
+
+    lines = [
+        f"Healer score for {player_name} "
+        f"({info.player_class} {info.player_spec}) "
+        f"on {encounter_name}:",
+        f"  Grade: {grade} ({score:.0f}%) | Weighted score",
+    ] + details
+    return "\n".join(lines)
 
 
 def _score_tank(player_name: str, spec: str) -> str:
@@ -707,7 +820,9 @@ async def get_rotation_score(
 
     # Route by role
     if rules.role == "healer":
-        return _score_healer(player_name, spec)
+        return await _score_healer(
+            session, report_code, fight_id, player_name, info_row, rules,
+        )
     if rules.role == "tank":
         return _score_tank(player_name, spec)
 
