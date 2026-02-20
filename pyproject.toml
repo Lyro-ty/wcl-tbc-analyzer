@@ -43,6 +43,8 @@ seed-encounters = "shukketsu.scripts.seed_encounters:main"
 pull-speed-rankings = "shukketsu.scripts.pull_speed_rankings:main"
 snapshot-progression = "shukketsu.scripts.snapshot_progression:main"
 pull-table-data = "shukketsu.scripts.pull_table_data:main"
+pull-benchmarks = "shukketsu.scripts.pull_benchmarks:main"
+manage-watched-guilds = "shukketsu.scripts.manage_watched_guilds:main"
 
 [tool.setuptools.packages.find]
 where = ["code"]
