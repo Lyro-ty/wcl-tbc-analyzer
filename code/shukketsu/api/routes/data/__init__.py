@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from shukketsu.api.routes.data.benchmarks import router as benchmarks_router
 from shukketsu.api.routes.data.characters import router as characters_router
 from shukketsu.api.routes.data.comparison import router as comparison_router
 from shukketsu.api.routes.data.events import router as events_router
@@ -16,3 +17,4 @@ router.include_router(characters_router)
 router.include_router(rankings_router)
 router.include_router(comparison_router)
 router.include_router(events_router)
+router.include_router(benchmarks_router)
