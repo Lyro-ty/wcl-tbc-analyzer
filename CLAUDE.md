@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-**Shukketsu Raid Analyzer** — an agentic AI tool that collects Warcraft Logs (WCL) data for World of Warcraft Classic Fresh and provides raid improvement analysis via a LangGraph CRAG agent powered by Nemotron 3 Nano 30B (served via ollama).
+**Shukketsu Raid Analyzer** — an agentic AI tool that collects Warcraft Logs (WCL) data for World of Warcraft TBC Classic (The Burning Crusade) and provides raid improvement analysis via a LangGraph CRAG agent powered by Nemotron 3 Nano 30B (served via ollama).
 
-**Game context:** WoW Classic Fresh. WCL zone IDs for Fresh are in the 2000+ range (e.g., zone 2017 = Fresh Naxxramas, encounter IDs 201107-201121). Reports may contain fights from multiple zones/raids.
+**Game context:** WoW TBC Classic (The Burning Crusade). TBC zone IDs: Karazhan (1047), Gruul's Lair/Magtheridon (1048), SSC (1049), TK (1050), Hyjal (1051), BT (1052), Sunwell (1053). Reports may contain fights from multiple zones/raids.
 
 **Architecture:** Three-layer monolith:
 1. **Data pipeline** — Python scripts + pipeline modules pull from WCL GraphQL API v2 into PostgreSQL
@@ -291,10 +291,10 @@ pull-my-logs --report-code <CODE>
 pull-my-logs --report-code <CODE> --with-tables   # Also fetch ability/buff data
 pull-my-logs --report-code <CODE> --with-events   # Also fetch event-level data
 pull-table-data --report-code <CODE>              # Backfill ability/buff for existing report
-pull-rankings --encounter "Patchwerk" --zone-id 2017
-pull-speed-rankings --zone-id 2017 --force
+pull-rankings --encounter "Gruul the Dragonkiller" --zone-id 1048
+pull-speed-rankings --zone-id 1047 --force
 register-character --name Lyro --server Whitemane --region US --class-name Warrior --spec Arms
-seed-encounters --zone-ids 2017
+seed-encounters --zone-ids 1047,1048
 snapshot-progression --character Lyro
 
 # Test the agent
@@ -320,7 +320,7 @@ curl -X POST http://localhost:8000/api/analyze \
 - Rate limited by points per hour; every response includes `rateLimitData`
 - Rankings API returns `{"data": [{"fightID": N, "roles": {...}}]}` — a list with fightID fields, not a dict keyed by fight ID
 - **GraphQL JSON scalar:** `characterRankings`, `fightRankings`, and report `rankings` may return JSON string OR dict. All parsers handle both via `json.loads()` guard: `if isinstance(data, str): data = json.loads(data)`
-- Fresh Classic zones are in the 2000+ ID range (zone 2017 = Fresh Naxxramas)
+- TBC zone IDs: Karazhan (1047), Gruul's Lair/Magtheridon (1048), and higher tiers (1049+)
 - Reports may contain fights from other raids — the ingest pipeline auto-inserts unknown encounters as stubs via `session.merge()`
 
 ## Known issues

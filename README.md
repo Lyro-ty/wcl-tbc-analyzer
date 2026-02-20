@@ -1,6 +1,6 @@
 # Shukketsu Raid Analyzer
 
-An agentic AI tool that pulls data from Warcraft Logs, stores it in PostgreSQL, and provides raid performance analysis through a conversational AI agent and a web dashboard. Built for WoW Classic Fresh (Naxxramas) with support for TBC content.
+An agentic AI tool that pulls data from Warcraft Logs, stores it in PostgreSQL, and provides raid performance analysis through a conversational AI agent and a web dashboard. Built for WoW TBC Classic (The Burning Crusade).
 
 ## How it works
 
@@ -90,7 +90,7 @@ ollama pull nemotron-3-nano:30b
 
 ```bash
 # Bootstrap encounter definitions from WCL
-seed-encounters --zone-ids 2017
+seed-encounters --zone-ids 1047,1048
 
 # Register your character(s) so they get flagged in performance data
 register-character --name Lyro --server Whitemane --region US --class-name Warrior --spec Arms
@@ -99,10 +99,10 @@ register-character --name Lyro --server Whitemane --region US --class-name Warri
 pull-my-logs --report-code ABC123xyz
 
 # Pull top rankings for comparison (optional)
-pull-rankings --encounter "Patchwerk" --zone-id 2017
+pull-rankings --encounter "Gruul the Dragonkiller" --zone-id 1048
 
 # Pull speed rankings for kill time comparisons (optional)
-pull-speed-rankings --zone-id 2017
+pull-speed-rankings --zone-id 1047
 
 # Snapshot progression data for a character (optional)
 snapshot-progression --character Lyro
