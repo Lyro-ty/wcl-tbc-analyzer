@@ -46,12 +46,7 @@ export default function ChatPage() {
             ),
           )
         },
-        (queryType) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId ? { ...m, queryType } : m,
-            ),
-          )
+        () => {
           setStreaming(false)
         },
         (error) => {

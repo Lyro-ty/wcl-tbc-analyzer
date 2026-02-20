@@ -2,13 +2,11 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
-  queryType?: string | null
   timestamp: number
 }
 
 export interface AnalyzeResponse {
   answer: string
-  query_type: string | null
 }
 
 export interface ReportSummary {

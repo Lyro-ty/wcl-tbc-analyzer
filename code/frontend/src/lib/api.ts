@@ -42,7 +42,7 @@ export async function postAnalyze(question: string): Promise<AnalyzeResponse> {
 export function postAnalyzeStream(
   question: string,
   onToken: (token: string) => void,
-  onDone: (queryType: string | null) => void,
+  onDone: () => void,
   onError: (message: string) => void,
 ): AbortController {
   const controller = new AbortController()
@@ -84,7 +84,7 @@ export function postAnalyzeStream(
             if (event.token) {
               onToken(event.token)
             } else if (event.done) {
-              onDone(event.query_type ?? null)
+              onDone()
             } else if (event.detail) {
               onError(event.detail)
             }

@@ -21,11 +21,6 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
             <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
           </div>
         )}
-        {message.queryType && (
-          <span className="mt-2 inline-block rounded bg-zinc-700/50 px-2 py-0.5 text-xs text-zinc-400">
-            {message.queryType}
-          </span>
-        )}
       </div>
     </div>
   )
