@@ -284,8 +284,8 @@ async def test_fight_consumables_ok(client, mock_session):
     assert len(data) == 1
     assert data[0]["player_name"] == "Lyro"
     assert len(data[0]["consumables"]) == 2
-    # weapon_oil is nice-to-have and missing
-    assert "weapon_oil" in data[0]["missing"]
+    # weapon oil/stone is nice-to-have and missing
+    assert "weapon oil/stone" in data[0]["missing"]
 
 
 async def test_fight_consumables_empty(client, mock_session):

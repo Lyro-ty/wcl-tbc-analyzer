@@ -132,7 +132,7 @@ class CooldownDef:
     cd_type: str = "throughput"  # "throughput", "interrupt", "defensive", "utility"
 
 
-# Classic Fresh / TBC major throughput cooldowns per class.
+# Classic / TBC major throughput cooldowns per class.
 # spell_id values are WCL abilityGameID (WoW spell IDs).
 CLASSIC_COOLDOWNS: dict[str, list[CooldownDef]] = {
     "Warrior": [
@@ -429,7 +429,7 @@ def get_expected_consumables(spec: str) -> list[ConsumableDef]:
 # Maps known WCL CombatantInfo aura spell IDs to (category, display_name).
 # Used by combatant_info.py to classify auras from CombatantInfo events.
 CONSUMABLE_CATEGORIES: dict[int, tuple[str, str]] = {
-    # Flasks (Classic Fresh)
+    # Flasks (Classic — still valid in TBC CombatantInfo)
     17628: ("flask", "Flask of Supreme Power"),
     17626: ("flask", "Flask of the Titans"),
     17627: ("flask", "Flask of Distilled Wisdom"),

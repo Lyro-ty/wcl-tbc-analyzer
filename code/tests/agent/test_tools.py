@@ -1029,7 +1029,7 @@ class TestGetConsumableCheck:
         assert "Healbot" in result
         assert "MISSING" in result
         assert "flask/elixir" in result
-        assert "weapon_oil" in result
+        assert "weapon oil/stone" in result
 
     async def test_elixir_satisfies_flask_requirement(self):
         """Having an elixir should not flag missing flask/elixir."""

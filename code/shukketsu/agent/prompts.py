@@ -230,7 +230,7 @@ GCDs and clip remaining ticks. Advise refreshing in the pandemic window (last 30
 Skip if no DoT data available.
 13. **Rotation Score** — If rotation score data was retrieved, present the letter grade and \
 highlight specific rule violations. GCD uptime targets are adjusted for encounter context \
-(e.g., Patchwerk ~100%, Sapphiron ~70%). A/B grades are strong, C needs tuning, D/F \
+(e.g., Brutallus ~100%, Netherspite ~70%). A/B grades are strong, C needs tuning, D/F \
 indicates fundamental rotation issues. Skip if no rotation data available.
 14. **Trinket Performance** — If trinket proc data was retrieved, evaluate trinket uptime. \
 Good trinket procs should have 20-35% uptime depending on the trinket. Low uptime may \

@@ -304,7 +304,7 @@ async def get_consumable_check(
 
     # Expected categories: flask OR elixir (mutually exclusive), food
     required_categories = {"flask", "food"}
-    nice_to_have = {"weapon_oil"}
+    weapon_enhancements = {"weapon_oil", "weapon_stone"}
 
     # Group by player
     players: dict[str, list] = defaultdict(list)
@@ -333,8 +333,8 @@ async def get_consumable_check(
         for cat in sorted(required_categories - {"flask"}):
             if cat not in found_categories:
                 missing.append(cat)
-        for cat in sorted(nice_to_have - found_categories):
-            missing.append(cat)
+        if not (found_categories & weapon_enhancements):
+            missing.append("weapon oil/stone")
 
         if missing:
             lines.append(f"    [MISSING: {', '.join(missing)}]")
