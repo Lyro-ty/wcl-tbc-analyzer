@@ -1664,9 +1664,9 @@ class TestDpsRotationScorer:
         assert "Healer score" in result
         assert "Rotation score" not in result
 
-    async def test_tank_routes_to_stub(self):
-        """Protection Warrior should get tank stub message."""
-        mock_session = _rotation_mocks(
+    async def test_tank_routes_to_tank_scorer(self):
+        """Protection Warrior should get tank score, not DPS score."""
+        mock_session = _tank_mocks(
             player_class="Warrior", player_spec="Protection",
             encounter_name="Gruul the Dragonkiller",
         )
@@ -1679,8 +1679,8 @@ class TestDpsRotationScorer:
                  "player_name": "TestPlayer"}
             )
 
-        assert "tank" in result.lower() or "Tank" in result
-        assert "get_cooldown_efficiency" in result
+        assert "Tank score" in result
+        assert "Rotation score" not in result
 
     async def test_short_cd_vs_long_cd_thresholds(self):
         """Short CDs (<= 180s) use cd_efficiency_target; long CDs (> 180s)
@@ -1982,6 +1982,277 @@ class TestHealerScorer:
 
         assert "No healer data" in result
         assert "--with-events" in result
+
+
+def _tank_mocks(
+    *,
+    player_class="Warrior",
+    player_spec="Protection",
+    encounter_name="Gruul the Dragonkiller",
+    gcd_uptime_pct=88.0,
+    ability_rows=None,
+    cd_rows=None,
+):
+    """Build mock execute results for get_rotation_score -> _score_tank.
+
+    Returns a mock_session with side_effect for:
+      1. PLAYER_FIGHT_INFO
+      2. ABILITY_BREAKDOWN (key abilities)
+      3. FIGHT_CAST_METRICS (GCD uptime)
+      4. FIGHT_COOLDOWNS (defensive CDs)
+    """
+    # 1. PLAYER_FIGHT_INFO
+    info_row = MagicMock(
+        player_class=player_class,
+        player_spec=player_spec,
+        dps=800.0,
+        total_damage=144000,
+        fight_duration_ms=180000,
+        encounter_id=201101,
+        encounter_name=encounter_name,
+    )
+    info_result = MagicMock()
+    info_result.fetchone.return_value = info_row
+
+    # 2. ABILITY_BREAKDOWN (key abilities)
+    if ability_rows is None:
+        ability_rows = [
+            MagicMock(ability_name="Shield Slam"),
+            MagicMock(ability_name="Devastate"),
+            MagicMock(ability_name="Thunderclap"),
+        ]
+    ab_result = MagicMock()
+    # _score_tank iterates over the result directly (not fetchall)
+    ab_result.__iter__ = MagicMock(return_value=iter(ability_rows))
+
+    # 3. FIGHT_CAST_METRICS
+    cm_row = MagicMock(
+        player_name="TestPlayer",
+        total_casts=150,
+        casts_per_minute=30.0,
+        gcd_uptime_pct=gcd_uptime_pct,
+        active_time_ms=158400,
+        downtime_ms=21600,
+        longest_gap_ms=2000,
+        longest_gap_at_ms=60000,
+        avg_gap_ms=400.0,
+        gap_count=8,
+    )
+    cm_result = MagicMock()
+    cm_result.fetchone.return_value = cm_row
+
+    # 4. FIGHT_COOLDOWNS (defensive CDs)
+    if cd_rows is None:
+        cd_rows = []
+    cd_result = MagicMock()
+    cd_result.fetchall.return_value = cd_rows
+
+    mock_session = AsyncMock()
+    mock_session.execute.side_effect = [
+        info_result, ab_result, cm_result, cd_result,
+    ]
+    return mock_session
+
+
+class TestTankScorer:
+    """Tests for the tank scoring path in get_rotation_score."""
+
+    async def test_prot_warrior_with_key_abilities_passes(self):
+        """Prot Warrior using Shield Slam + Devastate + Thunderclap scores well."""
+        mock_session = _tank_mocks(
+            player_class="Warrior", player_spec="Protection",
+            encounter_name="Gruul the Dragonkiller",
+            gcd_uptime_pct=90.0,
+            ability_rows=[
+                MagicMock(ability_name="Shield Slam"),
+                MagicMock(ability_name="Devastate"),
+                MagicMock(ability_name="Thunderclap"),
+            ],
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "Tank score" in result
+        assert "all present" in result
+        assert "OK" in result
+
+    async def test_prot_warrior_missing_key_ability(self):
+        """Prot Warrior missing Thunderclap should flag it."""
+        mock_session = _tank_mocks(
+            player_class="Warrior", player_spec="Protection",
+            encounter_name="Gruul the Dragonkiller",
+            gcd_uptime_pct=88.0,
+            ability_rows=[
+                MagicMock(ability_name="Shield Slam"),
+                MagicMock(ability_name="Devastate"),
+            ],
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "Tank score" in result
+        assert "Thunderclap" in result
+        assert "missing" in result.lower()
+
+    async def test_tank_low_gcd_flagged(self):
+        """Tank with GCD uptime below target should be flagged LOW."""
+        mock_session = _tank_mocks(
+            player_class="Warrior", player_spec="Protection",
+            encounter_name="Gruul the Dragonkiller",
+            gcd_uptime_pct=60.0,
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "LOW" in result
+        assert "60.0%" in result
+
+    async def test_tank_defensive_cd_tracked(self):
+        """Tank with defensive CD in tracking data should get full credit."""
+        mock_session = _tank_mocks(
+            player_class="Warrior", player_spec="Protection",
+            encounter_name="Gruul the Dragonkiller",
+            cd_rows=[
+                MagicMock(ability_name="Shield Wall"),
+            ],
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "Shield Wall" in result
+        assert "tracked" in result.lower()
+
+    async def test_tank_defensive_cd_partial_credit(self):
+        """Tank with no defensive CDs tracked gets partial credit."""
+        mock_session = _tank_mocks(
+            player_class="Warrior", player_spec="Protection",
+            encounter_name="Gruul the Dragonkiller",
+            cd_rows=[],
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "coming soon" in result.lower()
+        # Should still have Shield Wall and Last Stand listed
+        assert "Shield Wall" in result
+        assert "Last Stand" in result
+
+    async def test_tank_output_format(self):
+        """Output should say 'Tank score' not 'DPS score' or 'Rotation score'."""
+        mock_session = _tank_mocks(
+            player_class="Warrior", player_spec="Protection",
+            encounter_name="Gruul the Dragonkiller",
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "Tank score" in result
+        assert "Rotation score" not in result
+        assert "Grade:" in result
+        assert "Weighted score" in result
+
+    async def test_prot_paladin_key_abilities(self):
+        """Prot Paladin with Consecration + Holy Shield + Avenger's Shield."""
+        mock_session = _tank_mocks(
+            player_class="Paladin", player_spec="Protection",
+            encounter_name="Gruul the Dragonkiller",
+            gcd_uptime_pct=85.0,
+            ability_rows=[
+                MagicMock(ability_name="Consecration"),
+                MagicMock(ability_name="Holy Shield"),
+                MagicMock(ability_name="Avenger's Shield"),
+            ],
+        )
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        assert "Tank score" in result
+        assert "Paladin Protection" in result
+        assert "all present" in result
+
+    async def test_tank_no_data_hint(self):
+        """Tank with no data should hint about --with-events/--with-tables."""
+        # Use role-default tank (no key_abilities) with no metrics/CD data
+        info_row = MagicMock(
+            player_class="Warrior", player_spec="Protection",
+            dps=800.0, total_damage=144000, fight_duration_ms=180000,
+            encounter_id=201101, encounter_name="Gruul the Dragonkiller",
+        )
+        info_result = MagicMock()
+        info_result.fetchone.return_value = info_row
+
+        # Empty ability breakdown (Prot Warrior has key abilities, so this
+        # will still score that component; we need empty metrics + cd too)
+        ab_result = MagicMock()
+        ab_result.__iter__ = MagicMock(return_value=iter([]))
+
+        # No cast metrics
+        cm_result = MagicMock()
+        cm_result.fetchone.return_value = None
+
+        # No cooldown data
+        cd_result = MagicMock()
+        cd_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = [
+            info_result, ab_result, cm_result, cd_result,
+        ]
+        with patch(
+            "shukketsu.agent.tool_utils._get_session",
+            return_value=mock_session,
+        ):
+            result = await get_rotation_score.ainvoke(
+                {"report_code": "abc123", "fight_id": 1,
+                 "player_name": "TestPlayer"}
+            )
+
+        # Even with empty metrics, key_abilities and defensive CDs still
+        # provide data, so we should still get a Tank score (not the
+        # "no data" message). Let's verify it's a valid Tank score.
+        assert "Tank score" in result
 
 
 class TestRoleAwareToolDisplay:

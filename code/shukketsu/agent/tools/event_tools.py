@@ -15,6 +15,7 @@ from shukketsu.agent.tool_utils import (
 from shukketsu.db import queries as q
 from shukketsu.db.queries.table_data import ABILITY_BREAKDOWN, OVERHEAL_ANALYSIS
 from shukketsu.pipeline.constants import (
+    CLASSIC_COOLDOWNS,
     ENCOUNTER_CONTEXTS,
     ROLE_BY_SPEC,
     ROLE_DEFAULT_RULES,
@@ -621,12 +622,117 @@ async def _score_healer(session, report_code, fight_id, player_name, info, rules
     return "\n".join(lines)
 
 
-def _score_tank(player_name: str, spec: str) -> str:
-    """Stub: tank rotation scoring not yet implemented."""
-    return (
-        f"Tank scoring for {player_name} ({spec}) is coming soon. "
-        f"Use get_cooldown_efficiency for tank evaluation."
+async def _score_tank(session, report_code, fight_id, player_name, info, rules):
+    """Score a tank on key ability usage, GCD uptime, and defensive CD awareness."""
+    pn_like = wildcard(player_name)
+    encounter_name = info.encounter_name
+    player_class = info.player_class
+    total_weight = 0.0
+    weighted_score = 0.0
+    details = []
+
+    # 1. Key ability usage (40% weight)
+    if rules.key_abilities:
+        ability_result = await session.execute(
+            ABILITY_BREAKDOWN,
+            {"report_code": report_code, "fight_id": fight_id,
+             "player_name": pn_like},
+        )
+        found = {r.ability_name for r in ability_result}
+        present = sum(
+            1 for a in rules.key_abilities
+            if any(a.lower() in f.lower() for f in found)
+        )
+        ratio = present / len(rules.key_abilities)
+        weighted_score += 40.0 * ratio
+        total_weight += 40.0
+        missing = [
+            a for a in rules.key_abilities
+            if not any(a.lower() in f.lower() for f in found)
+        ]
+        if missing:
+            details.append(
+                f"  Key abilities: missing {', '.join(missing)}"
+            )
+        else:
+            details.append("  Key abilities: all present \u2014 OK")
+
+    # 2. GCD uptime (30% weight)
+    ctx = ENCOUNTER_CONTEXTS.get(encounter_name)
+    modifier = ctx.gcd_modifier if ctx else 1.0
+    adjusted_gcd = rules.gcd_target * modifier
+
+    metrics_result = await session.execute(
+        q.FIGHT_CAST_METRICS,
+        {"report_code": report_code, "fight_id": fight_id,
+         "player_name": pn_like},
     )
+    metrics = metrics_result.fetchone()
+    if metrics:
+        gcd = metrics.gcd_uptime_pct
+        if gcd >= adjusted_gcd:
+            weighted_score += 30.0
+            details.append(
+                f"  GCD uptime: {gcd:.1f}% "
+                f"(target {adjusted_gcd:.1f}%) \u2014 OK"
+            )
+        else:
+            ratio = gcd / adjusted_gcd if adjusted_gcd > 0 else 0
+            weighted_score += 30.0 * ratio
+            details.append(
+                f"  GCD uptime: {gcd:.1f}% "
+                f"(target {adjusted_gcd:.1f}%) \u2014 LOW"
+            )
+        total_weight += 30.0
+
+    # 3. Defensive CD awareness (30% weight)
+    defensive_cds = [
+        cd for cd in CLASSIC_COOLDOWNS.get(player_class, [])
+        if cd.cd_type == "defensive"
+    ]
+
+    cd_result = await session.execute(
+        q.FIGHT_COOLDOWNS,
+        {"report_code": report_code, "fight_id": fight_id,
+         "player_name": pn_like},
+    )
+    cd_rows = cd_result.fetchall()
+    tracked_cd_names = {r.ability_name for r in cd_rows}
+
+    if defensive_cds:
+        used_defensives = [
+            cd for cd in defensive_cds if cd.name in tracked_cd_names
+        ]
+        if used_defensives:
+            weighted_score += 30.0
+            names = ", ".join(cd.name for cd in used_defensives)
+            details.append(f"  Defensive CDs tracked: {names} \u2014 OK")
+        else:
+            # Defensive CD tracking not yet implemented; give partial credit
+            weighted_score += 15.0
+            names = ", ".join(cd.name for cd in defensive_cds)
+            details.append(
+                f"  Defensive CDs available: {names} "
+                f"(tracking coming soon)"
+            )
+        total_weight += 30.0
+
+    if total_weight == 0:
+        return (
+            f"No tank data for {player_name}. "
+            f"Were --with-events and --with-tables used?"
+        )
+
+    score = (weighted_score / total_weight) * 100
+    grade = _letter_grade(score)
+
+    lines = [
+        f"Tank score for {player_name} "
+        f"({info.player_class} {info.player_spec}) "
+        f"on {encounter_name}:",
+        f"  Grade: {grade} ({score:.0f}%) | Weighted score",
+    ] + details
+    return "\n".join(lines)
 
 
 _LONG_CD_THRESHOLD = 180  # CDs > 180s use long_cd_efficiency
@@ -824,7 +930,9 @@ async def get_rotation_score(
             session, report_code, fight_id, player_name, info_row, rules,
         )
     if rules.role == "tank":
-        return _score_tank(player_name, spec)
+        return await _score_tank(
+            session, report_code, fight_id, player_name, info_row, rules,
+        )
 
     return await _score_dps(
         session, report_code, fight_id, player_name, info_row, rules,
