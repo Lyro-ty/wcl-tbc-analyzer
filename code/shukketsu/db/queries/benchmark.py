@@ -25,7 +25,7 @@ __all__ = [
 SPEED_RANKING_REPORT_CODES = text("""
     SELECT DISTINCT sr.report_code, sr.encounter_id, sr.guild_name
     FROM speed_rankings sr
-    WHERE (:encounter_id IS NULL OR sr.encounter_id = :encounter_id)
+    WHERE (CAST(:encounter_id AS integer) IS NULL OR sr.encounter_id = :encounter_id)
     ORDER BY sr.encounter_id, sr.report_code
 """)
 
@@ -45,7 +45,7 @@ BENCHMARK_KILL_STATS = text("""
     FROM fights f
     JOIN benchmark_reports br ON br.report_code = f.report_code
     WHERE f.kill = true
-      AND (:encounter_id IS NULL OR f.encounter_id = :encounter_id)
+      AND (CAST(:encounter_id AS integer) IS NULL OR f.encounter_id = :encounter_id)
     GROUP BY f.encounter_id
 """)
 
@@ -60,7 +60,7 @@ BENCHMARK_DEATHS = text("""
     JOIN fights f ON fp.fight_id = f.id
     JOIN benchmark_reports br ON br.report_code = f.report_code
     WHERE f.kill = true
-      AND (:encounter_id IS NULL OR f.encounter_id = :encounter_id)
+      AND (CAST(:encounter_id AS integer) IS NULL OR f.encounter_id = :encounter_id)
     GROUP BY f.encounter_id
 """)
 
@@ -82,7 +82,7 @@ BENCHMARK_SPEC_DPS = text("""
     JOIN fights f ON fp.fight_id = f.id
     JOIN benchmark_reports br ON br.report_code = f.report_code
     WHERE f.kill = true
-      AND (:encounter_id IS NULL OR f.encounter_id = :encounter_id)
+      AND (CAST(:encounter_id AS integer) IS NULL OR f.encounter_id = :encounter_id)
     GROUP BY f.encounter_id, fp.player_class, fp.player_spec
     HAVING COUNT(*) >= 2
 """)
@@ -98,7 +98,7 @@ BENCHMARK_SPEC_GCD = text("""
         ON fp.fight_id = f.id AND fp.player_name = cm.player_name
     JOIN benchmark_reports br ON br.report_code = f.report_code
     WHERE f.kill = true
-      AND (:encounter_id IS NULL OR f.encounter_id = :encounter_id)
+      AND (CAST(:encounter_id AS integer) IS NULL OR f.encounter_id = :encounter_id)
     GROUP BY f.encounter_id, fp.player_class, fp.player_spec
 """)
 
@@ -111,7 +111,7 @@ BENCHMARK_SPEC_ABILITIES = text("""
         JOIN benchmark_reports br ON br.report_code = f.report_code
         WHERE f.kill = true
           AND am.metric_type = 'damage'
-          AND (:encounter_id IS NULL OR f.encounter_id = :encounter_id)
+          AND (CAST(:encounter_id AS integer) IS NULL OR f.encounter_id = :encounter_id)
         GROUP BY am.fight_id, am.player_name
     )
     SELECT f.encounter_id,
@@ -131,7 +131,7 @@ BENCHMARK_SPEC_ABILITIES = text("""
         ON ft.fight_id = am.fight_id AND ft.player_name = am.player_name
     WHERE f.kill = true
       AND am.metric_type = 'damage'
-      AND (:encounter_id IS NULL OR f.encounter_id = :encounter_id)
+      AND (CAST(:encounter_id AS integer) IS NULL OR f.encounter_id = :encounter_id)
     GROUP BY f.encounter_id, fp.player_class, fp.player_spec, am.ability_name
     HAVING ROUND(AVG(
         CASE WHEN ft.player_total > 0
@@ -152,7 +152,7 @@ BENCHMARK_SPEC_BUFFS = text("""
         ON fp.fight_id = f.id AND fp.player_name = bu.player_name
     JOIN benchmark_reports br ON br.report_code = f.report_code
     WHERE f.kill = true
-      AND (:encounter_id IS NULL OR f.encounter_id = :encounter_id)
+      AND (CAST(:encounter_id AS integer) IS NULL OR f.encounter_id = :encounter_id)
     GROUP BY f.encounter_id, fp.player_class, fp.player_spec, bu.ability_name
     HAVING ROUND(AVG(bu.uptime_pct)::numeric, 1) >= 20
     ORDER BY f.encounter_id, fp.player_class, fp.player_spec, avg_uptime DESC
@@ -170,7 +170,7 @@ BENCHMARK_SPEC_COOLDOWNS = text("""
         ON fp.fight_id = f.id AND fp.player_name = cu.player_name
     JOIN benchmark_reports br ON br.report_code = f.report_code
     WHERE f.kill = true
-      AND (:encounter_id IS NULL OR f.encounter_id = :encounter_id)
+      AND (CAST(:encounter_id AS integer) IS NULL OR f.encounter_id = :encounter_id)
     GROUP BY f.encounter_id, fp.player_class, fp.player_spec, cu.ability_name
     ORDER BY f.encounter_id, fp.player_class, fp.player_spec, avg_efficiency DESC
 """)
@@ -182,7 +182,7 @@ BENCHMARK_CONSUMABLE_RATES = text("""
         JOIN fights f ON fp.fight_id = f.id
         JOIN benchmark_reports br ON br.report_code = f.report_code
         WHERE f.kill = true
-          AND (:encounter_id IS NULL OR f.encounter_id = :encounter_id)
+          AND (CAST(:encounter_id AS integer) IS NULL OR f.encounter_id = :encounter_id)
     ),
     consumable_counts AS (
         SELECT fc.category,
@@ -192,7 +192,7 @@ BENCHMARK_CONSUMABLE_RATES = text("""
         JOIN player_fights pf
             ON pf.fight_id = f.id AND pf.player_name = fc.player_name
         JOIN benchmark_reports br ON br.report_code = f.report_code
-        WHERE (:encounter_id IS NULL OR f.encounter_id = :encounter_id)
+        WHERE (CAST(:encounter_id AS integer) IS NULL OR f.encounter_id = :encounter_id)
         GROUP BY fc.category
     )
     SELECT cc.category,
@@ -220,7 +220,7 @@ BENCHMARK_COMPOSITION = text("""
         JOIN fights f ON fp.fight_id = f.id
         JOIN benchmark_reports br ON br.report_code = f.report_code
         WHERE f.kill = true
-          AND (:encounter_id IS NULL OR f.encounter_id = :encounter_id)
+          AND (CAST(:encounter_id AS integer) IS NULL OR f.encounter_id = :encounter_id)
         GROUP BY f.encounter_id, fp.player_class, fp.player_spec, f.id
     )
     SELECT encounter_id, player_class, player_spec,
