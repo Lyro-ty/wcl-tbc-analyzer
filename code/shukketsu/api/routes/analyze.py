@@ -50,7 +50,6 @@ _llm_semaphore = asyncio.Semaphore(2)
 
 class AnalyzeResponse(BaseModel):
     answer: str
-    query_type: str | None = None
 
 
 def set_graph(graph) -> None:
@@ -88,10 +87,7 @@ async def analyze(request: AnalyzeRequest):
     raw = messages[-1].content if messages else "No response generated."
     answer = _strip_think_tags(raw)
 
-    return AnalyzeResponse(
-        answer=answer,
-        query_type=result.get("query_type"),
-    )
+    return AnalyzeResponse(answer=answer)
 
 
 @router.post("/analyze/stream")
@@ -103,7 +99,6 @@ async def analyze_stream(request: AnalyzeRequest):
     async def event_generator():
         buffer = ""
         think_done = False
-        query_type = None
 
         try:
             config = {}
@@ -116,19 +111,25 @@ async def analyze_stream(request: AnalyzeRequest):
                     stream_mode="messages",
                     config=config,
                 ):
-                    # Track query_type from state updates
-                    if isinstance(metadata, dict):
-                        qt = metadata.get("query_type")
-                        if qt:
-                            query_type = qt
+                    node = (
+                        metadata.get("langgraph_node")
+                        if isinstance(metadata, dict) else None
+                    )
 
-                    # Only stream tokens from the analyze node
-                    if not isinstance(metadata, dict):
+                    # Reset think-tag buffer between agent turns
+                    if node == "tools":
+                        buffer = ""
+                        think_done = False
                         continue
-                    if metadata.get("langgraph_node") != "analyze":
+
+                    if node != "agent":
                         continue
 
                     if not hasattr(chunk, "content") or not chunk.content:
+                        continue
+
+                    # Skip tool call chunks (intermediate turns)
+                    if getattr(chunk, "tool_call_chunks", None):
                         continue
 
                     token = chunk.content
@@ -162,7 +163,7 @@ async def analyze_stream(request: AnalyzeRequest):
                     if cleaned.strip():
                         yield {"data": json.dumps({"token": cleaned})}
 
-                yield {"data": json.dumps({"done": True, "query_type": query_type})}
+                yield {"data": json.dumps({"done": True})}
 
         except asyncio.CancelledError:
             logger.info(

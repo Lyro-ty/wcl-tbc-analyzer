@@ -15,7 +15,6 @@ def mock_graph():
         "messages": [
             AIMessage(content="Your DPS on Gruul is 1500, a 95th percentile parse."),
         ],
-        "query_type": "my_performance",
     }
     return graph
 
@@ -57,7 +56,6 @@ async def test_analyze_returns_analysis(app, mock_graph):
     body = resp.json()
     assert "answer" in body
     assert "1500" in body["answer"]
-    assert body["query_type"] == "my_performance"
 
 
 async def test_analyze_handles_llm_unavailable():
@@ -109,7 +107,6 @@ async def test_analyze_strips_think_tags():
         "messages": [
             AIMessage(content="<think>reasoning</think>Your DPS is 1500."),
         ],
-        "query_type": "my_performance",
     }
 
     with patch("shukketsu.api.routes.analyze._get_graph", return_value=graph):
@@ -131,7 +128,6 @@ async def test_analyze_handles_no_data():
     empty_graph = AsyncMock()
     empty_graph.ainvoke.return_value = {
         "messages": [AIMessage(content="No performance data found for your character.")],
-        "query_type": "my_performance",
     }
 
     with patch("shukketsu.api.routes.analyze._get_graph", return_value=empty_graph):
@@ -157,7 +153,7 @@ async def test_stream_returns_sse_events():
     async def fake_astream(input, stream_mode=None, config=None):
         yield (
             AIMessageChunk(content="Your DPS is 1500."),
-            {"langgraph_node": "analyze"},
+            {"langgraph_node": "agent"},
         )
 
     mock_graph.astream = fake_astream
@@ -198,11 +194,11 @@ async def test_stream_strips_think_tags():
     async def fake_astream(input, stream_mode=None, config=None):
         yield (
             AIMessageChunk(content="<think>reasoning"),
-            {"langgraph_node": "analyze"},
+            {"langgraph_node": "agent"},
         )
         yield (
             AIMessageChunk(content="</think>Clean answer."),
-            {"langgraph_node": "analyze"},
+            {"langgraph_node": "agent"},
         )
 
     mock_graph.astream = fake_astream
@@ -231,17 +227,17 @@ async def test_stream_strips_think_tags():
     assert "Clean answer." in all_tokens
 
 
-async def test_stream_skips_non_analyze_nodes():
+async def test_stream_skips_non_agent_nodes():
     mock_graph = AsyncMock()
 
     async def fake_astream(input, stream_mode=None, config=None):
         yield (
-            AIMessageChunk(content="Routing to performance query"),
-            {"langgraph_node": "route"},
+            AIMessageChunk(content="Tool result data"),
+            {"langgraph_node": "tools"},
         )
         yield (
             AIMessageChunk(content="Your parse is 95th percentile."),
-            {"langgraph_node": "analyze"},
+            {"langgraph_node": "agent"},
         )
 
     mock_graph.astream = fake_astream
@@ -267,7 +263,7 @@ async def test_stream_skips_non_analyze_nodes():
     all_tokens = "".join(evt["token"] for evt in token_events)
 
     assert "95th percentile" in all_tokens
-    assert "Routing" not in all_tokens
+    assert "Tool result" not in all_tokens
 
 
 async def test_stream_handles_error():
@@ -304,7 +300,6 @@ async def test_analyze_passes_langfuse_callbacks():
     graph = AsyncMock()
     graph.ainvoke.return_value = {
         "messages": [AIMessage(content="Analysis result.")],
-        "query_type": "general",
     }
 
     with (
@@ -334,7 +329,6 @@ async def test_analyze_no_callbacks_without_handler():
     graph = AsyncMock()
     graph.ainvoke.return_value = {
         "messages": [AIMessage(content="Analysis result.")],
-        "query_type": "general",
     }
 
     with (
@@ -369,7 +363,7 @@ async def test_stream_passes_langfuse_callbacks():
         astream_config_capture["config"] = config or {}
         yield (
             AIMessageChunk(content="Streamed result."),
-            {"langgraph_node": "analyze"},
+            {"langgraph_node": "agent"},
         )
 
     mock_graph.astream = fake_astream
@@ -493,3 +487,101 @@ class TestStreamingBufferLimit:
         from shukketsu.api.routes import analyze as mod
         assert hasattr(mod, '_MAX_THINK_BUFFER')
         assert mod._MAX_THINK_BUFFER > 0
+
+
+async def test_stream_resets_buffer_between_agent_turns():
+    """Think-tag buffer must reset when tools node fires between agent calls."""
+    mock_graph = AsyncMock()
+
+    async def fake_astream(input, stream_mode=None, config=None):
+        # First agent turn: think tags (intermediate)
+        yield (
+            AIMessageChunk(content="<think>Let me look that up</think>"),
+            {"langgraph_node": "agent"},
+        )
+        # Tools node fires (resets buffer)
+        yield (
+            AIMessageChunk(content="DPS: 1500"),
+            {"langgraph_node": "tools"},
+        )
+        # Second agent turn: think tags + final response
+        yield (
+            AIMessageChunk(content="<think>Now I can analyze</think>"),
+            {"langgraph_node": "agent"},
+        )
+        yield (
+            AIMessageChunk(content="Your DPS of 1500 is excellent."),
+            {"langgraph_node": "agent"},
+        )
+
+    mock_graph.astream = fake_astream
+
+    with patch("shukketsu.api.routes.analyze._get_graph", return_value=mock_graph):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/analyze/stream",
+                json={"question": "How is my DPS?"},
+            )
+
+    body = resp.text
+    data_lines = [
+        line.removeprefix("data: ")
+        for line in body.splitlines()
+        if line.startswith("data:")
+    ]
+
+    token_events = [json.loads(d) for d in data_lines if "token" in d]
+    all_tokens = "".join(evt["token"] for evt in token_events)
+
+    assert "<think>" not in all_tokens
+    assert "Let me look that up" not in all_tokens
+    assert "1500 is excellent" in all_tokens
+
+
+async def test_stream_skips_tool_call_chunks():
+    """Chunks with tool_call_chunks should not be streamed."""
+    mock_graph = AsyncMock()
+
+    async def fake_astream(input, stream_mode=None, config=None):
+        # Agent produces a tool call chunk (intermediate)
+        chunk = AIMessageChunk(content="")
+        chunk.tool_call_chunks = [
+            {"name": "get_my_performance", "args": '{"encounter_name": "Gruul"}',
+             "id": "1", "index": 0}
+        ]
+        yield (chunk, {"langgraph_node": "agent"})
+        # Tools node
+        yield (AIMessageChunk(content="DPS: 1500"), {"langgraph_node": "tools"})
+        # Final agent response
+        yield (
+            AIMessageChunk(content="Your DPS is great."),
+            {"langgraph_node": "agent"},
+        )
+
+    mock_graph.astream = fake_astream
+
+    with patch("shukketsu.api.routes.analyze._get_graph", return_value=mock_graph):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/analyze/stream",
+                json={"question": "How is my DPS?"},
+            )
+
+    body = resp.text
+    data_lines = [
+        line.removeprefix("data: ")
+        for line in body.splitlines()
+        if line.startswith("data:")
+    ]
+
+    token_events = [json.loads(d) for d in data_lines if "token" in d]
+    all_tokens = "".join(evt["token"] for evt in token_events)
+
+    assert "DPS is great" in all_tokens
+    assert "get_my_performance" not in all_tokens
