@@ -202,17 +202,19 @@ async def test_resources_empty(client, mock_session):
 # ---------------------------------------------------------------------------
 
 async def test_rotation_score_ok(client, mock_session):
-    """Returns rotation score for a player."""
+    """Returns rotation score using spec-aware thresholds from constants."""
     # The endpoint makes 3 queries:
     # 1. PLAYER_FIGHT_INFO
     # 2. FIGHT_CAST_METRICS
     # 3. FIGHT_COOLDOWNS
+    # Arms Warrior thresholds: GCD 88%, CPM 28, CD eff 85% (short) / 60% (long)
     info_row = make_row(
         player_name="Lyro", player_class="Warrior", player_spec="Arms",
         dps=2500.0, encounter_id=50650, fight_duration_ms=120000,
+        encounter_name="High King Maulgar",
     )
     cm_row = make_row(
-        player_name="Lyro", total_casts=150, casts_per_minute=25.0,
+        player_name="Lyro", total_casts=150, casts_per_minute=30.0,
         gcd_uptime_pct=92.5, active_time_ms=108000, downtime_ms=12000,
         longest_gap_ms=5000, longest_gap_at_ms=45000,
         avg_gap_ms=800.0, gap_count=15,
@@ -241,7 +243,8 @@ async def test_rotation_score_ok(client, mock_session):
     data = resp.json()
     assert data["player_name"] == "Lyro"
     assert data["spec"] == "Arms"
-    # 3 rules: GCD > 85% (pass), CPM > 20 (pass), CD >= 60% (pass)
+    # Arms Warrior (no encounter modifier): GCD >= 88% (92.5 pass),
+    # CPM >= 28 (30.0 pass), Recklessness 300s > 180s long_cd=60% (80.0 pass)
     assert data["rules_checked"] == 3
     assert data["rules_passed"] == 3
     assert data["score_pct"] == 100.0
@@ -260,10 +263,12 @@ async def test_rotation_score_404(client, mock_session):
 
 
 async def test_rotation_score_violations(client, mock_session):
-    """Reports violations when rules fail."""
+    """Reports violations using spec-aware thresholds."""
+    # Arms Warrior thresholds (no encounter context): GCD 88%, CPM 28
     info_row = make_row(
         player_name="Lyro", player_class="Warrior", player_spec="Arms",
         dps=1500.0, encounter_id=50650, fight_duration_ms=120000,
+        encounter_name="High King Maulgar",
     )
     cm_row = make_row(
         player_name="Lyro", total_casts=60, casts_per_minute=10.0,
@@ -292,7 +297,10 @@ async def test_rotation_score_violations(client, mock_session):
     assert data["rules_passed"] == 0
     assert data["score_pct"] == 0.0
     assert data["violations_json"] is not None
+    # Violations should reference spec-aware thresholds, not hardcoded 85%/20
     assert "GCD uptime" in data["violations_json"]
+    assert "88%" in data["violations_json"]  # Arms GCD target
     assert "CPM" in data["violations_json"]
+    assert "28" in data["violations_json"]  # Arms CPM target
 
 

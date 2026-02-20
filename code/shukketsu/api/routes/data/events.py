@@ -250,8 +250,14 @@ async def fight_rotation_score(
     session: AsyncSession = Depends(get_db),
 ):
     """Rule-based rotation scoring for a player in a fight."""
+    from shukketsu.pipeline.constants import (
+        ENCOUNTER_CONTEXTS,
+        ROLE_BY_SPEC,
+        ROLE_DEFAULT_RULES,
+        SPEC_ROTATION_RULES,
+    )
+
     try:
-        # Get player info (class + spec)
         info_result = await session.execute(
             q.PLAYER_FIGHT_INFO,
             {"report_code": report_code, "fight_id": fight_id,
@@ -265,8 +271,28 @@ async def fight_rotation_score(
             )
 
         spec = info_row.player_spec
+        player_class = info_row.player_class
+        encounter_name = info_row.encounter_name
 
-        # Get cast metrics (GCD uptime, CPM)
+        # Look up spec-aware thresholds (same logic as agent tool)
+        rules = SPEC_ROTATION_RULES.get((player_class, spec))
+        if not rules:
+            role = ROLE_BY_SPEC.get(spec, "melee_dps")
+            rules = ROLE_DEFAULT_RULES.get(role, ROLE_DEFAULT_RULES["melee_dps"])
+
+        # Apply encounter context modifier (match agent tool's _score_dps logic)
+        ctx = ENCOUNTER_CONTEXTS.get(encounter_name)
+        modifier = 1.0
+        if ctx:
+            is_melee = rules.role == "melee_dps"
+            modifier = (
+                ctx.melee_modifier
+                if is_melee and ctx.melee_modifier is not None
+                else ctx.gcd_modifier
+            )
+        gcd_target = rules.gcd_target * modifier
+        cpm_target = rules.cpm_target * modifier
+
         cm_result = await session.execute(
             q.FIGHT_CAST_METRICS,
             {"report_code": report_code, "fight_id": fight_id,
@@ -274,7 +300,6 @@ async def fight_rotation_score(
         )
         cm_row = cm_result.fetchone()
 
-        # Get cooldown usage
         cd_result = await session.execute(
             q.FIGHT_COOLDOWNS,
             {"report_code": report_code, "fight_id": fight_id,
@@ -286,34 +311,42 @@ async def fight_rotation_score(
         rules_passed = 0
         violations = []
 
-        # Rule 1: GCD uptime > 85%
         if cm_row:
+            # Rule 1: GCD uptime vs spec target
             rules_checked += 1
-            if cm_row.gcd_uptime_pct >= 85.0:
+            if cm_row.gcd_uptime_pct >= gcd_target:
                 rules_passed += 1
             else:
                 violations.append(
-                    f"GCD uptime {cm_row.gcd_uptime_pct:.1f}% < 85%"
+                    f"GCD uptime {cm_row.gcd_uptime_pct:.1f}% "
+                    f"< {gcd_target:.0f}%"
                 )
 
-            # Rule 2: CPM > 20
+            # Rule 2: CPM vs spec target
             rules_checked += 1
-            if cm_row.casts_per_minute >= 20.0:
+            if cm_row.casts_per_minute >= cpm_target:
                 rules_passed += 1
             else:
                 violations.append(
-                    f"CPM {cm_row.casts_per_minute:.1f} < 20"
+                    f"CPM {cm_row.casts_per_minute:.1f} "
+                    f"< {cpm_target:.0f}"
                 )
 
-        # Rule 3: No cooldown efficiency below 60%
+        # Rule 3: CD efficiency vs spec target (short/long split)
+        long_cd_threshold = 180
         for cd in cd_rows:
             rules_checked += 1
-            if cd.efficiency_pct >= 60.0:
+            target = (
+                rules.long_cd_efficiency
+                if cd.cooldown_sec > long_cd_threshold
+                else rules.cd_efficiency_target
+            )
+            if cd.efficiency_pct >= target:
                 rules_passed += 1
             else:
                 violations.append(
                     f"{cd.ability_name} efficiency "
-                    f"{cd.efficiency_pct:.1f}% < 60%"
+                    f"{cd.efficiency_pct:.1f}% < {target:.0f}%"
                 )
 
         score = (
