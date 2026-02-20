@@ -10,6 +10,8 @@ from shukketsu.pipeline.constants import (
     FRESH_BOSS_NAMES,
     FRESH_ZONES,
     REQUIRED_CONSUMABLES,
+    ROLE_DEFAULT_RULES,
+    SPEC_ROTATION_RULES,
     TBC_BOSS_NAMES,
     TBC_DPS_SPECS,
     TBC_HEALER_SPECS,
@@ -18,6 +20,7 @@ from shukketsu.pipeline.constants import (
     TBC_ZONES,
     ClassSpec,
     CooldownDef,
+    SpecRules,
 )
 
 
@@ -294,3 +297,86 @@ class TestDotExpansion:
         assert rip.spell_id == 27008
         assert rip.duration_ms == 12000
         assert rip.tick_interval_ms == 2000
+
+
+class TestSpecRules:
+    def test_spec_rules_dataclass_exists(self):
+        assert hasattr(SpecRules, "__dataclass_fields__")
+        fields = set(SpecRules.__dataclass_fields__.keys())
+        assert "gcd_target" in fields
+        assert "cpm_target" in fields
+        assert "cd_efficiency_target" in fields
+        assert "long_cd_efficiency" in fields
+        assert "key_abilities" in fields
+        assert "role" in fields
+        assert "healer_overheal_target" in fields
+
+    def test_spec_rotation_rules_dict_exists(self):
+        assert isinstance(SPEC_ROTATION_RULES, dict)
+
+    @pytest.mark.parametrize(
+        "class_name,spec_name",
+        [(s.class_name, s.spec_name) for s in TBC_SPECS],
+    )
+    def test_every_spec_has_rules(self, class_name, spec_name):
+        key = (class_name, spec_name)
+        assert key in SPEC_ROTATION_RULES, f"Missing rules for {key}"
+
+    @pytest.mark.parametrize(
+        "class_name,spec_name",
+        [(s.class_name, s.spec_name) for s in TBC_SPECS],
+    )
+    def test_spec_rules_sane_values(self, class_name, spec_name):
+        rules = SPEC_ROTATION_RULES[(class_name, spec_name)]
+        assert 50 <= rules.gcd_target <= 95
+        assert rules.cpm_target > 0
+        assert 60 <= rules.cd_efficiency_target <= 95
+        assert 40 <= rules.long_cd_efficiency <= 70
+        assert len(rules.key_abilities) > 0
+        assert rules.role in {
+            "melee_dps", "caster_dps", "ranged_dps", "healer", "tank"
+        }
+
+    def test_healer_specs_have_overheal_targets(self):
+        healer_keys = [
+            ("Paladin", "Holy"),
+            ("Priest", "Discipline"),
+            ("Priest", "Holy"),
+            ("Shaman", "Restoration"),
+            ("Druid", "Restoration"),
+        ]
+        for key in healer_keys:
+            rules = SPEC_ROTATION_RULES[key]
+            assert rules.role == "healer"
+            assert 15 <= rules.healer_overheal_target <= 50
+
+    def test_holy_paladin_low_overheal_target(self):
+        rules = SPEC_ROTATION_RULES[("Paladin", "Holy")]
+        assert rules.healer_overheal_target <= 25  # Reactive single-target
+
+    def test_resto_druid_high_overheal_target(self):
+        rules = SPEC_ROTATION_RULES[("Druid", "Restoration")]
+        assert rules.healer_overheal_target >= 40  # HoTs get sniped
+
+    def test_spec_rules_frozen(self):
+        rules = SPEC_ROTATION_RULES[("Warrior", "Fury")]
+        with pytest.raises(AttributeError):
+            rules.gcd_target = 50.0
+
+    def test_key_abilities_are_tuples(self):
+        """key_abilities should be tuples for true immutability on frozen dataclass."""
+        for key, rules in SPEC_ROTATION_RULES.items():
+            assert isinstance(rules.key_abilities, tuple), (
+                f"{key}: key_abilities should be tuple, got {type(rules.key_abilities)}"
+            )
+
+    def test_role_default_rules_covers_all_roles(self):
+        expected = {"melee_dps", "caster_dps", "ranged_dps", "healer", "tank"}
+        assert set(ROLE_DEFAULT_RULES.keys()) == expected
+
+    def test_role_default_rules_have_empty_abilities(self):
+        for role, rules in ROLE_DEFAULT_RULES.items():
+            assert len(rules.key_abilities) == 0, (
+                f"Fallback for {role} should have empty key_abilities"
+            )
+            assert rules.role == role

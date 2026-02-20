@@ -242,6 +242,151 @@ ROLE_BY_SPEC: dict[str, str] = {
     "Protection": "tank",
 }
 
+# --- Per-spec rotation rules ---
+# Used by the rotation scorer to set spec-appropriate thresholds instead of
+# universal defaults.  gcd_target and cd_efficiency_target are percentages;
+# cpm_target is casts per minute.  key_abilities lists the core rotation
+# spells whose usage the scorer should check.
+
+
+@dataclass(frozen=True)
+class SpecRules:
+    gcd_target: float
+    cpm_target: float
+    cd_efficiency_target: float
+    long_cd_efficiency: float
+    key_abilities: tuple[str, ...]
+    role: str
+    healer_overheal_target: float = 35.0
+
+
+SPEC_ROTATION_RULES: dict[tuple[str, str], SpecRules] = {
+    # --- Melee DPS ---
+    ("Warrior", "Arms"): SpecRules(
+        88, 28, 85, 60,
+        ("Mortal Strike", "Whirlwind", "Slam"), "melee_dps",
+    ),
+    ("Warrior", "Fury"): SpecRules(
+        90, 32, 85, 60,
+        ("Bloodthirst", "Whirlwind", "Heroic Strike"), "melee_dps",
+    ),
+    ("Paladin", "Retribution"): SpecRules(
+        85, 25, 80, 60,
+        ("Crusader Strike", "Seal of Command", "Judgement"), "melee_dps",
+    ),
+    ("Rogue", "Assassination"): SpecRules(
+        88, 30, 85, 65,
+        ("Mutilate", "Envenom", "Slice and Dice"), "melee_dps",
+    ),
+    ("Rogue", "Combat"): SpecRules(
+        90, 32, 85, 65,
+        ("Sinister Strike", "Slice and Dice", "Blade Flurry"), "melee_dps",
+    ),
+    ("Rogue", "Subtlety"): SpecRules(
+        85, 28, 80, 60,
+        ("Hemorrhage", "Slice and Dice"), "melee_dps",
+    ),
+    ("Shaman", "Enhancement"): SpecRules(
+        85, 25, 80, 60,
+        ("Stormstrike", "Earth Shock", "Windfury"), "melee_dps",
+    ),
+    ("Druid", "Feral"): SpecRules(
+        88, 30, 85, 60,
+        ("Shred", "Mangle", "Rip"), "melee_dps",
+    ),
+    # --- Ranged DPS ---
+    ("Hunter", "Beast Mastery"): SpecRules(
+        82, 22, 85, 60,
+        ("Steady Shot", "Auto Shot", "Kill Command"), "ranged_dps",
+    ),
+    ("Hunter", "Marksmanship"): SpecRules(
+        82, 22, 85, 60,
+        ("Steady Shot", "Auto Shot", "Arcane Shot"), "ranged_dps",
+    ),
+    ("Hunter", "Survival"): SpecRules(
+        82, 22, 85, 60,
+        ("Steady Shot", "Auto Shot", "Raptor Strike"), "ranged_dps",
+    ),
+    # --- Caster DPS ---
+    ("Priest", "Shadow"): SpecRules(
+        88, 25, 80, 60,
+        ("Shadow Word: Pain", "Mind Blast", "Mind Flay"), "caster_dps",
+    ),
+    ("Shaman", "Elemental"): SpecRules(
+        85, 25, 80, 60,
+        ("Lightning Bolt", "Chain Lightning"), "caster_dps",
+    ),
+    ("Mage", "Arcane"): SpecRules(
+        90, 28, 85, 60,
+        ("Arcane Blast", "Arcane Missiles"), "caster_dps",
+    ),
+    ("Mage", "Fire"): SpecRules(
+        85, 22, 85, 60,
+        ("Fireball", "Scorch", "Fire Blast"), "caster_dps",
+    ),
+    ("Mage", "Frost"): SpecRules(
+        85, 22, 85, 60,
+        ("Frostbolt", "Ice Lance"), "caster_dps",
+    ),
+    ("Warlock", "Affliction"): SpecRules(
+        85, 22, 80, 60,
+        ("Corruption", "Unstable Affliction", "Shadow Bolt"), "caster_dps",
+    ),
+    ("Warlock", "Demonology"): SpecRules(
+        85, 22, 80, 60,
+        ("Shadow Bolt", "Incinerate"), "caster_dps",
+    ),
+    ("Warlock", "Destruction"): SpecRules(
+        88, 24, 85, 60,
+        ("Shadow Bolt", "Incinerate", "Immolate"), "caster_dps",
+    ),
+    ("Druid", "Balance"): SpecRules(
+        85, 22, 80, 60,
+        ("Starfire", "Wrath", "Moonfire"), "caster_dps",
+    ),
+    # --- Healers ---
+    ("Paladin", "Holy"): SpecRules(
+        55, 18, 70, 50,
+        ("Flash of Light", "Holy Light"), "healer", 20,
+    ),
+    ("Priest", "Discipline"): SpecRules(
+        60, 20, 75, 55,
+        ("Power Word: Shield", "Flash Heal", "Prayer of Mending"), "healer", 25,
+    ),
+    ("Priest", "Holy"): SpecRules(
+        65, 22, 75, 55,
+        ("Circle of Healing", "Prayer of Healing", "Flash Heal"), "healer", 30,
+    ),
+    ("Shaman", "Restoration"): SpecRules(
+        60, 20, 75, 55,
+        ("Chain Heal", "Lesser Healing Wave"), "healer", 30,
+    ),
+    ("Druid", "Restoration"): SpecRules(
+        65, 22, 70, 50,
+        ("Lifebloom", "Rejuvenation", "Healing Touch"), "healer", 45,
+    ),
+    # --- Tanks ---
+    ("Warrior", "Protection"): SpecRules(
+        88, 30, 85, 50,
+        ("Shield Slam", "Devastate", "Thunderclap"), "tank",
+    ),
+    ("Paladin", "Protection"): SpecRules(
+        85, 26, 80, 50,
+        ("Consecration", "Holy Shield", "Avenger's Shield"), "tank",
+    ),
+}
+
+
+# Role-based fallback for unknown specs
+ROLE_DEFAULT_RULES: dict[str, SpecRules] = {
+    "melee_dps": SpecRules(85, 28, 80, 60, (), "melee_dps"),
+    "caster_dps": SpecRules(85, 22, 80, 60, (), "caster_dps"),
+    "ranged_dps": SpecRules(80, 20, 80, 60, (), "ranged_dps"),
+    "healer": SpecRules(60, 20, 70, 50, (), "healer", 35),
+    "tank": SpecRules(85, 28, 80, 50, (), "tank"),
+}
+
+
 # Consumables expected per role. spell_id values are WCL buff IDs.
 REQUIRED_CONSUMABLES: dict[str, list[ConsumableDef]] = {
     "all": [
