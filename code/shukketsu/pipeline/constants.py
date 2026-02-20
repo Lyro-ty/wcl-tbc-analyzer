@@ -120,21 +120,7 @@ TBC_BOSS_NAMES: frozenset[str] = frozenset(
     boss for bosses in TBC_ZONES.values() for boss in bosses
 )
 
-FRESH_ZONES: dict[str, list[str]] = {
-    "Naxxramas": [
-        "Anub'Rekhan", "Grand Widow Faerlina", "Maexxna",
-        "Noth the Plaguebringer", "Heigan the Unclean", "Loatheb",
-        "Instructor Razuvious", "Gothik the Harvester", "The Four Horsemen",
-        "Patchwerk", "Grobbulus", "Gluth", "Thaddius",
-        "Sapphiron", "Kel'Thuzad",
-    ],
-}
-
-FRESH_BOSS_NAMES: frozenset[str] = frozenset(
-    boss for bosses in FRESH_ZONES.values() for boss in bosses
-)
-
-ALL_BOSS_NAMES: frozenset[str] = TBC_BOSS_NAMES | FRESH_BOSS_NAMES
+ALL_BOSS_NAMES: frozenset[str] = TBC_BOSS_NAMES
 
 
 @dataclass(frozen=True)
@@ -410,19 +396,20 @@ REQUIRED_CONSUMABLES: dict[str, list[ConsumableDef]] = {
         ConsumableDef(28490, "Elixir of Major Agility", "battle_elixir", 80.0),
     ],
     "caster_dps": [
-        ConsumableDef(17628, "Flask of Supreme Power", "flask", 80.0),
+        ConsumableDef(28521, "Flask of Blinding Light", "flask", 80.0),
+        ConsumableDef(28540, "Flask of Pure Death", "flask", 80.0),
         ConsumableDef(28501, "Elixir of Major Firepower", "battle_elixir", 80.0),
         ConsumableDef(28503, "Elixir of Major Shadow Power", "battle_elixir", 80.0),
         ConsumableDef(28493, "Elixir of Major Frost Power", "battle_elixir", 80.0),
         ConsumableDef(25122, "Brilliant Wizard Oil", "weapon", 80.0),
     ],
     "healer": [
-        ConsumableDef(17627, "Flask of Distilled Wisdom", "flask", 80.0),
+        ConsumableDef(28519, "Flask of Mighty Restoration", "flask", 80.0),
         ConsumableDef(28491, "Elixir of Healing Power", "battle_elixir", 80.0),
         ConsumableDef(25123, "Brilliant Mana Oil", "weapon", 80.0),
     ],
     "tank": [
-        ConsumableDef(17546, "Flask of the Titans", "flask", 80.0),
+        ConsumableDef(28518, "Flask of Fortification", "flask", 80.0),
         ConsumableDef(28491, "Elixir of Healing Power", "battle_elixir", 80.0),
         ConsumableDef(28514, "Elixir of Major Fortitude", "guardian_elixir", 80.0),
         ConsumableDef(28509, "Elixir of Major Defense", "guardian_elixir", 80.0),
@@ -495,11 +482,6 @@ class PhaseDef:
     pct_end: float     # Approximate % of fight when this phase ends (1.0 = end)
     description: str = ""
 
-
-# Phase definitions for Fresh Naxxramas encounters.
-# These are approximate time-based splits for MVP phase annotation.
-# Actual phase transitions depend on boss HP or scripted events, but
-# these percentages give a useful estimate when we lack event-level data.
 @dataclass(frozen=True)
 class DotDef:
     spell_id: int
@@ -636,70 +618,6 @@ ENCOUNTER_PHASES: dict[str, list[PhaseDef]] = {
         PhaseDef("P2 - Magtheridon", 0.3, 1.0,
                  "Click cubes for Banish, dodge Blast Nova, burn boss"),
     ],
-    # --- Classic Fresh: Naxxramas ---
-    "Patchwerk": [
-        PhaseDef("Full Fight", 0.0, 1.0, "Single phase DPS race"),
-    ],
-    "Grobbulus": [
-        PhaseDef("Full Fight", 0.0, 1.0, "Kite and kill, poison clouds"),
-    ],
-    "Gluth": [
-        PhaseDef("P1 - DPS", 0.0, 0.7, "DPS boss while kiting zombies"),
-        PhaseDef("P2 - Decimate", 0.7, 1.0, "Zombies decimated, burn phase"),
-    ],
-    "Thaddius": [
-        PhaseDef("P1 - Stalagg & Feugen", 0.0, 0.35,
-                 "Kill both adds within 5 seconds"),
-        PhaseDef("P2 - Thaddius", 0.35, 1.0,
-                 "DPS with polarity shifts"),
-    ],
-    "Noth the Plaguebringer": [
-        PhaseDef("P1 - Ground", 0.0, 0.5, "DPS boss on ground"),
-        PhaseDef("P2 - Balcony", 0.5, 1.0,
-                 "Add waves while boss is immune"),
-    ],
-    "Heigan the Unclean": [
-        PhaseDef("P1 - Platform", 0.0, 0.55, "DPS on platform phase"),
-        PhaseDef("P2 - Dance", 0.55, 1.0, "Safety dance, limited DPS"),
-    ],
-    "Loatheb": [
-        PhaseDef("Full Fight", 0.0, 1.0, "Single phase, timed heals"),
-    ],
-    "Anub'Rekhan": [
-        PhaseDef("Full Fight", 0.0, 1.0,
-                 "Single phase with locust swarm kiting"),
-    ],
-    "Grand Widow Faerlina": [
-        PhaseDef("Full Fight", 0.0, 1.0,
-                 "Single phase, manage enrage"),
-    ],
-    "Maexxna": [
-        PhaseDef("P1 - Above 30%", 0.0, 0.7,
-                 "Normal DPS with web wraps"),
-        PhaseDef("P2 - Enrage", 0.7, 1.0, "Below 30%, burn phase"),
-    ],
-    "Instructor Razuvious": [
-        PhaseDef("Full Fight", 0.0, 1.0, "Mind control tanking"),
-    ],
-    "Gothik the Harvester": [
-        PhaseDef("P1 - Waves", 0.0, 0.55,
-                 "Add waves, live/dead side"),
-        PhaseDef("P2 - Gothik", 0.55, 1.0, "Boss comes down, burn"),
-    ],
-    "The Four Horsemen": [
-        PhaseDef("Full Fight", 0.0, 1.0, "Tank rotation with marks"),
-    ],
-    "Sapphiron": [
-        PhaseDef("P1 - Ground", 0.0, 0.6, "DPS on ground"),
-        PhaseDef("P2 - Air", 0.6, 1.0, "Ice block phase, blizzard"),
-    ],
-    "Kel'Thuzad": [
-        PhaseDef("P1 - Adds", 0.0, 0.2,
-                 "Kill add waves, no boss DPS"),
-        PhaseDef("P2 - Active", 0.2, 0.7, "Main DPS phase"),
-        PhaseDef("P3 - Ice Tombs", 0.7, 1.0,
-                 "Ice blocks and guardians"),
-    ],
 }
 
 
@@ -718,48 +636,6 @@ class EncounterContext:
 
 
 ENCOUNTER_CONTEXTS: dict[str, EncounterContext] = {
-    # --- Naxxramas ---
-    "Patchwerk": EncounterContext("Patchwerk", 1.0, notes="Pure tank-and-spank"),
-    "Grobbulus": EncounterContext(
-        "Grobbulus", 0.90, 0.85, "Kiting, injection positioning",
-    ),
-    "Gluth": EncounterContext("Gluth", 0.85, notes="Zombie kiting, Decimate"),
-    "Thaddius": EncounterContext(
-        "Thaddius", 0.80, notes="P1 adds (no boss), polarity movement",
-    ),
-    "Anub'Rekhan": EncounterContext(
-        "Anub'Rekhan", 0.90, 0.85, "Locust Swarm kiting",
-    ),
-    "Grand Widow Faerlina": EncounterContext(
-        "Grand Widow Faerlina", 0.95, notes="Mostly single-phase",
-    ),
-    "Maexxna": EncounterContext(
-        "Maexxna", 0.90, notes="Web Wrap stuns, Web Spray",
-    ),
-    "Noth the Plaguebringer": EncounterContext(
-        "Noth the Plaguebringer", 0.70, notes="Boss immune during Balcony phases",
-    ),
-    "Heigan the Unclean": EncounterContext(
-        "Heigan the Unclean", 0.60, 0.55, "Dance phase = minimal DPS",
-    ),
-    "Loatheb": EncounterContext(
-        "Loatheb", 0.95, notes="Single-phase, predictable",
-    ),
-    "Instructor Razuvious": EncounterContext(
-        "Instructor Razuvious", 0.90, notes="MC tanking",
-    ),
-    "Gothik the Harvester": EncounterContext(
-        "Gothik the Harvester", 0.75, notes="P1 adds only",
-    ),
-    "The Four Horsemen": EncounterContext(
-        "The Four Horsemen", 0.85, 0.80, "Tank rotation movement",
-    ),
-    "Sapphiron": EncounterContext(
-        "Sapphiron", 0.70, 0.65, "Cyclic air phases, no boss DPS ~30%",
-    ),
-    "Kel'Thuzad": EncounterContext(
-        "Kel'Thuzad", 0.65, 0.60, "P1 adds ~20%, P3 ice blocks",
-    ),
     # --- TBC: Karazhan ---
     "Shade of Aran": EncounterContext(
         "Shade of Aran", 0.85, 0.80, "Flame Wreath, Blizzard dodge",
