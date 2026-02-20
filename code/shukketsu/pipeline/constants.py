@@ -58,7 +58,7 @@ TBC_ZONES: dict[str, list[str]] = {
         "Attumen the Huntsman",
         "Moroes",
         "Maiden of Virtue",
-        "Opera Event",
+        "Opera Hall",
         "The Curator",
         "Shade of Aran",
         "Terestian Illhoof",
@@ -568,7 +568,7 @@ ENCOUNTER_PHASES: dict[str, list[PhaseDef]] = {
         PhaseDef("Full Fight", 0.0, 1.0,
                  "Single phase, Repentance every 30s"),
     ],
-    "Opera Event": [
+    "Opera Hall": [
         PhaseDef("Full Fight", 0.0, 1.0,
                  "Varies by week: Oz, Romulo & Julianne, Big Bad Wolf"),
     ],
@@ -690,4 +690,107 @@ ENCOUNTER_PHASES: dict[str, list[PhaseDef]] = {
         PhaseDef("P3 - Ice Tombs", 0.7, 1.0,
                  "Ice blocks and guardians"),
     ],
+}
+
+
+# --- Encounter-specific GCD modifiers ---
+# Pre-computed modifier per boss to account for downtime phases, movement,
+# and untargetable windows.  Used by the rotation scorer to adjust GCD
+# uptime expectations.  melee_modifier overrides gcd_modifier for melee
+# specs when the fight punishes melee more than ranged.
+
+@dataclass(frozen=True)
+class EncounterContext:
+    name: str
+    gcd_modifier: float = 1.0
+    melee_modifier: float | None = None  # Override for melee if different
+    notes: str = ""
+
+
+ENCOUNTER_CONTEXTS: dict[str, EncounterContext] = {
+    # --- Naxxramas ---
+    "Patchwerk": EncounterContext("Patchwerk", 1.0, notes="Pure tank-and-spank"),
+    "Grobbulus": EncounterContext(
+        "Grobbulus", 0.90, 0.85, "Kiting, injection positioning",
+    ),
+    "Gluth": EncounterContext("Gluth", 0.85, notes="Zombie kiting, Decimate"),
+    "Thaddius": EncounterContext(
+        "Thaddius", 0.80, notes="P1 adds (no boss), polarity movement",
+    ),
+    "Anub'Rekhan": EncounterContext(
+        "Anub'Rekhan", 0.90, 0.85, "Locust Swarm kiting",
+    ),
+    "Grand Widow Faerlina": EncounterContext(
+        "Grand Widow Faerlina", 0.95, notes="Mostly single-phase",
+    ),
+    "Maexxna": EncounterContext(
+        "Maexxna", 0.90, notes="Web Wrap stuns, Web Spray",
+    ),
+    "Noth the Plaguebringer": EncounterContext(
+        "Noth the Plaguebringer", 0.70, notes="Boss immune during Balcony phases",
+    ),
+    "Heigan the Unclean": EncounterContext(
+        "Heigan the Unclean", 0.60, 0.55, "Dance phase = minimal DPS",
+    ),
+    "Loatheb": EncounterContext(
+        "Loatheb", 0.95, notes="Single-phase, predictable",
+    ),
+    "Instructor Razuvious": EncounterContext(
+        "Instructor Razuvious", 0.90, notes="MC tanking",
+    ),
+    "Gothik the Harvester": EncounterContext(
+        "Gothik the Harvester", 0.75, notes="P1 adds only",
+    ),
+    "The Four Horsemen": EncounterContext(
+        "The Four Horsemen", 0.85, 0.80, "Tank rotation movement",
+    ),
+    "Sapphiron": EncounterContext(
+        "Sapphiron", 0.70, 0.65, "Cyclic air phases, no boss DPS ~30%",
+    ),
+    "Kel'Thuzad": EncounterContext(
+        "Kel'Thuzad", 0.65, 0.60, "P1 adds ~20%, P3 ice blocks",
+    ),
+    # --- TBC: Karazhan ---
+    "Shade of Aran": EncounterContext(
+        "Shade of Aran", 0.85, 0.80, "Flame Wreath, Blizzard dodge",
+    ),
+    "Netherspite": EncounterContext(
+        "Netherspite", 0.70, 0.65, "Banish phase ~33% = no DPS",
+    ),
+    "Prince Malchezaar": EncounterContext(
+        "Prince Malchezaar", 0.85, 0.80, "Infernal dodging, Enfeeble",
+    ),
+    # --- TBC: Gruul's Lair ---
+    "Gruul the Dragonkiller": EncounterContext(
+        "Gruul the Dragonkiller", 0.85, 0.80, "Shatter knockback",
+    ),
+    # --- TBC: Serpentshrine Cavern ---
+    "Leotheras the Blind": EncounterContext(
+        "Leotheras the Blind", 0.80, 0.75, "Demon Form untargetable",
+    ),
+    "Lady Vashj": EncounterContext(
+        "Lady Vashj", 0.65, 0.60, "P2 shield = no boss DPS",
+    ),
+    # --- TBC: Tempest Keep ---
+    "Kael'thas Sunstrider": EncounterContext(
+        "Kael'thas Sunstrider", 0.55, 0.50, "P1-P3 no Kael DPS ~50%",
+    ),
+    # --- TBC: Hyjal Summit ---
+    "Archimonde": EncounterContext(
+        "Archimonde", 0.80, notes="Air Burst movement, fire",
+    ),
+    # --- TBC: Black Temple ---
+    "Illidan Stormrage": EncounterContext(
+        "Illidan Stormrage", 0.70, 0.60, "P2 boss airborne, transitions",
+    ),
+    # --- TBC: Sunwell Plateau ---
+    "M'uru": EncounterContext(
+        "M'uru", 0.80, 0.75, "Heavy add management P1",
+    ),
+    "Kil'jaeden": EncounterContext(
+        "Kil'jaeden", 0.70, 0.65, "Multiple transition phases",
+    ),
+    "Brutallus": EncounterContext(
+        "Brutallus", 1.0, notes="Pure DPS race",
+    ),
 }

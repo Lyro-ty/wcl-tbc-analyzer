@@ -6,6 +6,7 @@ from shukketsu.pipeline.constants import (
     ALL_BOSS_NAMES,
     CLASSIC_COOLDOWNS,
     CLASSIC_DOTS,
+    ENCOUNTER_CONTEXTS,
     ENCOUNTER_PHASES,
     FRESH_BOSS_NAMES,
     FRESH_ZONES,
@@ -20,6 +21,7 @@ from shukketsu.pipeline.constants import (
     TBC_ZONES,
     ClassSpec,
     CooldownDef,
+    EncounterContext,
     SpecRules,
 )
 
@@ -212,7 +214,7 @@ class TestCooldownTypes:
 
 TBC_P1_BOSSES = [
     # Karazhan
-    "Attumen the Huntsman", "Moroes", "Maiden of Virtue", "Opera Event",
+    "Attumen the Huntsman", "Moroes", "Maiden of Virtue", "Opera Hall",
     "The Curator", "Shade of Aran", "Terestian Illhoof", "Netherspite",
     "Chess Event", "Prince Malchezaar", "Nightbane",
     # Gruul's Lair
@@ -380,3 +382,44 @@ class TestSpecRules:
                 f"Fallback for {role} should have empty key_abilities"
             )
             assert rules.role == role
+
+
+class TestEncounterContexts:
+    def test_encounter_context_dataclass_exists(self):
+        fields = set(EncounterContext.__dataclass_fields__.keys())
+        assert "name" in fields
+        assert "gcd_modifier" in fields
+        assert "melee_modifier" in fields
+        assert "notes" in fields
+
+    def test_encounter_contexts_dict_exists(self):
+        assert isinstance(ENCOUNTER_CONTEXTS, dict)
+
+    def test_patchwerk_is_1_0(self):
+        ctx = ENCOUNTER_CONTEXTS["Patchwerk"]
+        assert ctx.gcd_modifier == 1.0
+        assert ctx.melee_modifier is None  # No melee override needed
+
+    def test_sapphiron_has_melee_penalty(self):
+        ctx = ENCOUNTER_CONTEXTS["Sapphiron"]
+        assert ctx.gcd_modifier < 1.0  # Air phases reduce DPS uptime
+        assert ctx.melee_modifier is not None
+        assert ctx.melee_modifier < ctx.gcd_modifier  # Melee worse than ranged
+
+    def test_heigan_is_low(self):
+        ctx = ENCOUNTER_CONTEXTS["Heigan the Unclean"]
+        assert ctx.gcd_modifier <= 0.65  # Dance phase = minimal DPS
+
+    def test_unknown_encounter_defaults_to_1(self):
+        assert "NonexistentBoss" not in ENCOUNTER_CONTEXTS
+
+    @pytest.mark.parametrize(
+        "boss_name",
+        list(ENCOUNTER_CONTEXTS.keys()),
+    )
+    def test_modifiers_in_valid_range(self, boss_name):
+        ctx = ENCOUNTER_CONTEXTS[boss_name]
+        assert 0.3 <= ctx.gcd_modifier <= 1.0
+        if ctx.melee_modifier is not None:
+            assert 0.3 <= ctx.melee_modifier <= 1.0
+            assert ctx.melee_modifier <= ctx.gcd_modifier
