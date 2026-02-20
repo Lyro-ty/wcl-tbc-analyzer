@@ -10,9 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Architecture:** Three-layer monolith:
 1. **Data pipeline** — Python scripts + pipeline modules pull from WCL GraphQL API v2 into PostgreSQL
-2. **FastAPI server** — serves REST API (61 endpoints), health, analysis; lifespan wires DB + LLM + agent + auto-ingest
+2. **FastAPI server** — serves REST API (57 endpoints), health, analysis; lifespan wires DB + LLM + agent + auto-ingest
 3. **LangGraph agent** — CRAG pattern: route → query DB (via tools) → grade → analyze → END
-4. **React frontend** — TypeScript + Tailwind CSS dashboard with 15 pages (charts via Recharts)
+4. **React frontend** — TypeScript + Tailwind CSS dashboard with 14 pages (charts via Recharts)
 
 **Tech stack:** Python 3.12, FastAPI, LangGraph, langchain-openai (OpenAI-compatible ollama), PostgreSQL 16, SQLAlchemy 2.0 async, httpx, pydantic-settings v2, tenacity
 
@@ -62,7 +62,7 @@ code/
 │   │       ├── table_data.py   # Table-data queries (4)
 │   │       ├── event.py        # Event-data queries (16)
 │   │       └── api.py          # REST API queries (23)
-│   ├── pipeline/           # Data transformation (17 modules)
+│   ├── pipeline/           # Data transformation (15 modules)
 │   │   ├── ingest.py       # WCL response → DB rows (delete-then-insert, supports --with-tables/--with-events)
 │   │   ├── normalize.py    # Fight normalization (DPS/HPS calc, boss detection)
 │   │   ├── characters.py   # Character registration + retroactive fight_performances marking
@@ -78,8 +78,7 @@ code/
 │   │   ├── cast_events.py   # WCL Cast events → cast_events + cast_metrics + cooldown_usage + cancelled_casts
 │   │   ├── resource_events.py # WCL Resource events → resource_snapshots (per-fight)
 │   │   ├── auto_ingest.py   # Background polling + weekly benchmark auto-refresh
-│   │   ├── discord_format.py # Discord export formatting for raid summaries
-│   │   └── summaries.py     # Report/raid night summary generation
+│   │   └── benchmarks.py    # Benchmark pipeline (discover/ingest/compute top player data)
 │   ├── agent/              # LangGraph agent
 │   │   ├── llm.py          # LLM client (ChatOpenAI pointing at ollama)
 │   │   ├── tool_utils.py   # @db_tool decorator, session wiring, helper functions
@@ -93,7 +92,7 @@ code/
 │   │   ├── state.py        # AnalyzerState (extends MessagesState)
 │   │   ├── prompts.py      # System prompts and templates
 │   │   └── graph.py        # CRAG state graph (6 nodes, MAX_RETRIES=2)
-│   ├── api/                # FastAPI layer (61 endpoints across 10 route files)
+│   ├── api/                # FastAPI layer (57 endpoints across 10 route files)
 │   │   ├── app.py          # App factory + lifespan (wires DB, LLM, graph, auto-ingest)
 │   │   ├── deps.py         # Dependency injection
 │   │   └── routes/
@@ -158,7 +157,7 @@ Tools use a **module-level global** pattern via `tool_utils.py` — no DI framew
 3. Individual tool functions receive a `session` arg automatically — no manual session management
 4. The compiled graph and its tools are also injected into the analyze route via `set_graph()`
 
-## Agent tools (32 total)
+## Agent tools (30 total)
 
 ### Player/encounter-level tools
 | Tool | Purpose |
@@ -188,7 +187,6 @@ Tools use a **module-level global** pattern via `tool_utils.py` — no DI framew
 | `get_ability_breakdown` | Per-ability damage/healing breakdown for a player in a fight |
 | `get_buff_analysis` | Buff/debuff uptimes for a player in a fight |
 | `get_overheal_analysis` | Per-ability overhealing breakdown for healers |
-| `get_trinket_performance` | Trinket proc uptime vs expected for known trinkets |
 
 ### Event-level analysis tools (require `--with-events`)
 | Tool | Purpose |
@@ -196,7 +194,6 @@ Tools use a **module-level global** pattern via `tool_utils.py` — no DI framew
 | `get_death_analysis` | Detailed death recap with killing blow and damage sequence |
 | `get_activity_report` | GCD uptime / ABC analysis (casts/min, gaps, downtime) |
 | `get_cooldown_efficiency` | Major cooldown usage efficiency per ability |
-| `get_cooldown_windows` | DPS during burst cooldown windows vs baseline |
 | `get_cancelled_casts` | Cast cancel rate analysis (begincast vs cast) |
 | `get_consumable_check` | Consumable preparation audit (flasks, food, oils) |
 | `get_resource_usage` | Mana/rage/energy usage analysis (min/max/avg, time at zero) |
@@ -357,13 +354,13 @@ curl -X POST http://localhost:8000/api/analyze \
 - **Event tables:** `death_details`, `cast_events`, `cast_metrics`, `cooldown_usage`, `cancelled_casts`, `resource_snapshots` only populated when `--with-events` flag is used.
 - **Rotation scoring:** Uses 3 rules (GCD uptime, CPM, CD efficiency) with per-spec thresholds via `SPEC_ROTATION_RULES` in constants.py. Spec-specific ability priority checking not yet implemented.
 - **DoT refresh analysis:** Only covers Warlock, Priest, and Druid DoTs (keyed by class name, no spec filtering).
-- **Trinket tracking:** Limited to 5 known TBC P1 trinkets. Expand `CLASSIC_TRINKETS` for more coverage.
-- **Cooldown windows:** DPS gain during burst windows is estimated (20% boost), not computed from actual damage events.
+- **Trinket tracking:** Limited to 5 known TBC P1 trinkets in `CLASSIC_TRINKETS`. Annotated inline within `get_buff_analysis` output (no standalone tool). Expand dict for more coverage.
 - **GCD fixed at 1500ms:** `cast_events.py` uses a fixed 1500ms GCD. In WoW, haste reduces GCD to as low as 1.0s for some classes.
 - **Healer DPS field:** `parse_rankings_to_performances()` stores WCL's `amount` in the `dps` column for all players. For healers in report rankings, `amount` is actually HPS but gets stored as `dps`. The `total_healing`/`hps` fields are zero from report ingestion (they'd require a separate WCL API call with `metric: hps`).
 
 ## Resolved issues
 
+- **Dead code cleanup (Feb 2026):** Removed `discord_format.py` + `summaries.py` (deterministic summary path competing with AI agent), `get_cooldown_windows` (hardcoded fake 20% DPS gain), standalone `get_trinket_performance` (folded into `get_buff_analysis` as inline annotation), duplicate `ComparePage` (SpeedPage already covers both modes), unused `fight_phases` endpoint in `fights.py`. Fixed rotation scoring API to use spec-aware thresholds from `SPEC_ROTATION_RULES`. Added phase analysis estimation disclaimer.
 - **Think tags in output:** `strip_think_tags()` in `agent/utils.py` strips Nemotron's leaked `<think>...</think>` reasoning from API responses via regex. Imported as `_strip_think_tags` in `analyze.py` and `graph.py`.
 - **429 rate limits:** `WCLClient.query()` has a `tenacity` retry decorator (exponential backoff, 5 attempts) for 429, 502/503/504, connection errors, and read timeouts.
 - **Auth retry:** `_request_token()` in `auth.py` retries on 5xx responses AND `ConnectError`/`ReadTimeout` network errors (matching the client's behavior).
