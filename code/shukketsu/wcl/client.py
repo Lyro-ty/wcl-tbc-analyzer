@@ -9,7 +9,7 @@ from shukketsu.wcl.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_API_URL = "https://www.warcraftlogs.com/api/v2/client"
+DEFAULT_API_URL = "https://fresh.warcraftlogs.com/api/v2/client"
 
 
 class WCLAPIError(Exception):

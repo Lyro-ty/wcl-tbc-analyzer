@@ -31,7 +31,10 @@ async def run(report_code: str) -> None:
         settings.wcl.client_secret.get_secret_value(),
         settings.wcl.oauth_url,
     )
-    async with WCLClient(auth, RateLimiter()) as wcl, session_factory() as session:
+    async with (
+        WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl,
+        session_factory() as session,
+    ):
         total = await ingest_table_data_for_report(wcl, session, report_code)
         await session.commit()
     await engine.dispose()

@@ -4,6 +4,7 @@ import pytest
 
 from shukketsu.pipeline.ingest import (
     IngestResult,
+    _safe_float,
     ingest_report,
     parse_fights,
     parse_rankings_to_performances,
@@ -21,6 +22,59 @@ class TestNormalize:
 
     def test_is_boss_fight_false_missing(self):
         assert is_boss_fight({}) is False
+
+
+class TestSafeFloat:
+    """Verify _safe_float coerces WCL API values safely."""
+
+    def test_none_returns_none(self):
+        assert _safe_float(None) is None
+
+    def test_dash_returns_none(self):
+        """WCL returns '-' for parse_percentile when no parse exists."""
+        assert _safe_float("-") is None
+
+    def test_empty_string_returns_none(self):
+        assert _safe_float("") is None
+
+    def test_int_returns_float(self):
+        assert _safe_float(90) == 90.0
+
+    def test_float_returns_float(self):
+        assert _safe_float(85.5) == 85.5
+
+    def test_string_number_returns_float(self):
+        assert _safe_float("75.2") == 75.2
+
+
+class TestParseRankingsWithDashParse:
+    """Verify parse_rankings_to_performances handles WCL '-' parse values."""
+
+    def test_dash_parse_percentile_becomes_none(self):
+        """WCL returns '-' for tanks/healers without a DPS parse."""
+        rankings = [
+            {
+                "name": "TankDruid",
+                "class": "Druid",
+                "spec": "Guardian",
+                "server": {"name": "Dreamscythe"},
+                "total": 0,
+                "amount": 594.99,
+                "rankPercent": "-",
+                "bracketPercent": "-",
+                "deaths": 0,
+                "interrupts": 0,
+                "dispels": 0,
+                "itemLevel": None,
+            }
+        ]
+        result = parse_rankings_to_performances(
+            rankings, fight_id=1, my_character_names=set(),
+        )
+        perf = result[0]
+        assert perf.parse_percentile is None
+        assert perf.ilvl_parse_percentile is None
+        assert perf.item_level is None
 
 
 class TestParseReport:

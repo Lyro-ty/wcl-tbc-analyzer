@@ -168,7 +168,7 @@ async def ingest_report_endpoint(
             settings.wcl.client_secret.get_secret_value(),
             settings.wcl.oauth_url,
         )
-        async with WCLClient(auth, RateLimiter()) as wcl:
+        async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
             result = await ingest_report(
                 wcl, session, req.report_code, my_names,
                 ingest_tables=req.with_tables,
@@ -221,7 +221,7 @@ async def fetch_table_data(
             settings.wcl.client_secret.get_secret_value(),
             settings.wcl.oauth_url,
         )
-        async with WCLClient(auth, RateLimiter()) as wcl:
+        async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
             rows = await ingest_table_data_for_report(wcl, session, report_code)
         await session.commit()
         logger.info("Fetched table data for %s: %d rows", report_code, rows)
@@ -266,7 +266,7 @@ async def fetch_event_data(
             settings.wcl.client_secret.get_secret_value(),
             settings.wcl.oauth_url,
         )
-        async with WCLClient(auth, RateLimiter()) as wcl:
+        async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
             result = await ingest_report(
                 wcl, session, report_code, my_names,
                 ingest_events=True,

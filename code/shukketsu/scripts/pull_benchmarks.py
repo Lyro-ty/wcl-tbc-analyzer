@@ -107,7 +107,7 @@ async def run(
         settings.wcl.oauth_url,
     )
     async with (
-        WCLClient(auth, RateLimiter()) as wcl,
+        WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl,
         session_factory() as session,
     ):
         result = await run_benchmark_pipeline(

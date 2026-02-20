@@ -91,7 +91,7 @@ async def refresh_rankings(
             settings.wcl.client_secret.get_secret_value(),
             settings.wcl.oauth_url,
         )
-        async with WCLClient(auth, RateLimiter()) as wcl:
+        async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
             result = await ingest_all_rankings(
                 wcl, session, encounter_ids, list(TBC_SPECS), force=force,
             )
@@ -151,7 +151,7 @@ async def refresh_speed_rankings(
             settings.wcl.client_secret.get_secret_value(),
             settings.wcl.oauth_url,
         )
-        async with WCLClient(auth, RateLimiter()) as wcl:
+        async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
             result = await ingest_all_speed_rankings(
                 wcl, session, encounter_ids, force=force,
             )

@@ -39,7 +39,7 @@ async def run(
         settings.wcl.client_secret.get_secret_value(),
         settings.wcl.oauth_url,
     )
-    async with WCLClient(auth, RateLimiter()) as wcl:
+    async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
         # Ingest in an atomic transaction
         async with session_factory() as session, session.begin():
             result = await ingest_report(

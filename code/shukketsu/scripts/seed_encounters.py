@@ -42,7 +42,10 @@ async def run(zone_ids: list[int] | None = None, from_db: bool = False) -> None:
             settings.wcl.client_secret.get_secret_value(),
             settings.wcl.oauth_url,
         )
-        async with WCLClient(auth, RateLimiter()) as wcl, session_factory() as session:
+        async with (
+            WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl,
+            session_factory() as session,
+        ):
             encounters = await discover_and_seed_encounters(wcl, session, zone_ids)
             await session.commit()
         logger.info("Discovered and seeded %d encounters", len(encounters))

@@ -42,6 +42,20 @@ def parse_fights(fights_data: list[dict[str, Any]], report_code: str) -> list[Fi
     return result
 
 
+def _safe_float(val: Any) -> float | None:
+    """Coerce WCL numeric fields to float or None.
+
+    WCL returns '-' for parse_percentile/bracketPercent when no parse exists
+    (e.g. tanks/healers without a DPS ranking).
+    """
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
 def parse_rankings_to_performances(
     rankings_data: list[dict[str, Any]],
     fight_id: int,
@@ -64,12 +78,12 @@ def parse_rankings_to_performances(
             dps=0.0 if is_healer else amount,
             total_healing=0,
             hps=amount if is_healer else 0.0,
-            parse_percentile=r.get("rankPercent"),
-            ilvl_parse_percentile=r.get("bracketPercent"),
+            parse_percentile=_safe_float(r.get("rankPercent")),
+            ilvl_parse_percentile=_safe_float(r.get("bracketPercent")),
             deaths=r.get("deaths", 0),
             interrupts=r.get("interrupts", 0),
             dispels=r.get("dispels", 0),
-            item_level=r.get("itemLevel"),
+            item_level=_safe_float(r.get("itemLevel")),
             is_my_character=r["name"].lower() in my_names_lower,
         ))
     return result
