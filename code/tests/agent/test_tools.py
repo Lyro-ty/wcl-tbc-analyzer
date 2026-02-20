@@ -5,17 +5,20 @@ from langchain_core.tools import BaseTool
 from shukketsu.agent.tools import (
     ALL_TOOLS,
     compare_raid_to_top,
+    compare_to_top,
     compare_two_raids,
     get_ability_breakdown,
     get_buff_analysis,
     get_consumable_check,
     get_deaths_and_mechanics,
+    get_fight_details,
     get_gear_changes,
     get_my_performance,
     get_raid_execution,
     get_regressions,
     get_resource_usage,
     get_rotation_score,
+    get_spec_leaderboard,
     get_top_rankings,
     get_wipe_progression,
     resolve_my_fights,
@@ -1649,3 +1652,201 @@ class TestDpsRotationScorer:
 
         # All rules should pass -> 100% -> S grade
         assert "S" in result
+
+
+class TestRoleAwareToolDisplay:
+    """Tools should show HPS for healers, DPS for others."""
+
+    async def test_get_my_performance_healer_shows_hps(self):
+        """When a healer's data is formatted, show HPS not DPS."""
+        mock_rows = [
+            MagicMock(
+                player_name="HealBot", player_class="Paladin", player_spec="Holy",
+                dps=0.0, hps=1200.5, parse_percentile=85.0, ilvl_parse_percentile=80.0,
+                deaths=0, item_level=141, encounter_name="Gruul",
+                kill=True, duration_ms=180000,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
+            result = await get_my_performance.ainvoke(
+                {"encounter_name": "Gruul", "player_name": "HealBot"}
+            )
+
+        assert "HPS" in result
+        assert "1,200.5" in result
+        # Should NOT show "DPS:" for a healer
+        assert "DPS:" not in result
+
+    async def test_get_my_performance_dps_shows_dps(self):
+        """When a DPS player's data is formatted, show DPS."""
+        mock_rows = [
+            MagicMock(
+                player_name="TestRogue", player_class="Warrior", player_spec="Fury",
+                dps=2500.0, hps=0.0, parse_percentile=95.0, ilvl_parse_percentile=90.0,
+                deaths=0, item_level=141, encounter_name="Gruul",
+                kill=True, duration_ms=180000,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
+            result = await get_my_performance.ainvoke(
+                {"encounter_name": "Gruul", "player_name": "TestRogue"}
+            )
+
+        assert "DPS:" in result
+        assert "2,500.0" in result
+        # Should NOT show "HPS:" for a DPS player
+        assert "HPS:" not in result
+
+    async def test_get_fight_details_mixed_roles(self):
+        """Fight details with both DPS and healer players show correct labels."""
+        mock_rows = [
+            MagicMock(
+                player_name="DPSWarrior", player_class="Warrior", player_spec="Fury",
+                dps=2500.0, hps=0.0, parse_percentile=90.0,
+                deaths=0, interrupts=3, dispels=0, item_level=141,
+                encounter_name="Gruul", kill=True, duration_ms=180000,
+                report_title="Raid Night",
+            ),
+            MagicMock(
+                player_name="HealPriest", player_class="Priest", player_spec="Holy",
+                dps=50.0, hps=1800.0, parse_percentile=88.0,
+                deaths=1, interrupts=0, dispels=5, item_level=140,
+                encounter_name="Gruul", kill=True, duration_ms=180000,
+                report_title="Raid Night",
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
+            result = await get_fight_details.ainvoke(
+                {"report_code": "abc123", "fight_id": 1}
+            )
+
+        # DPS player shows DPS
+        assert "DPS: 2,500.0" in result
+        # Healer shows HPS
+        assert "HPS: 1,800.0" in result
+
+    async def test_compare_to_top_healer_shows_hps(self):
+        """Compare to top shows HPS label for healer specs."""
+        mock_row = MagicMock(
+            player_spec="Restoration", player_class="Druid",
+            dps=50.0, hps=1500.0, parse_percentile=90.0,
+            # top_rankings.amount stores the primary metric for the spec,
+            # so avg_dps/min_dps/max_dps contain HPS values for healers
+            avg_dps=1800.0, min_dps=1400.0, max_dps=2200.0,
+            item_level=141, avg_ilvl=142.0, deaths=0,
+        )
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = mock_row
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
+            result = await compare_to_top.ainvoke(
+                {"encounter_name": "Gruul", "player_name": "TreeDruid",
+                 "class_name": "Druid", "spec_name": "Restoration"}
+            )
+
+        assert "Your HPS:" in result
+        assert "1,500.0" in result
+        # Should NOT show "Your DPS:" for a healer
+        assert "Your DPS:" not in result
+
+    async def test_compare_to_top_dps_shows_dps(self):
+        """Compare to top shows DPS label for DPS specs."""
+        mock_row = MagicMock(
+            player_spec="Fury", player_class="Warrior",
+            dps=2500.0, hps=0.0, parse_percentile=90.0,
+            avg_dps=2800.0, min_dps=2400.0, max_dps=3200.0,
+            avg_hps=0.0, min_hps=0.0, max_hps=0.0,
+            item_level=141, avg_ilvl=142.0, deaths=0,
+        )
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = mock_row
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
+            result = await compare_to_top.ainvoke(
+                {"encounter_name": "Gruul", "player_name": "TestWarr",
+                 "class_name": "Warrior", "spec_name": "Fury"}
+            )
+
+        assert "Your DPS:" in result
+        assert "2,500.0" in result
+
+    async def test_get_top_rankings_healer_shows_hps(self):
+        """Top rankings for healer spec shows HPS label."""
+        mock_rows = [
+            MagicMock(
+                player_name="TopHealer", player_server="Faerlina",
+                amount=2000.0, duration_ms=150000, guild_name="Top Guild",
+                item_level=146, rank_position=1,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
+            result = await get_top_rankings.ainvoke(
+                {"encounter_name": "Gruul", "class_name": "Paladin",
+                 "spec_name": "Holy"}
+            )
+
+        assert "HPS:" in result
+        assert "2,000.0" in result
+        assert "DPS:" not in result
+
+    async def test_get_spec_leaderboard_healer_shows_hps(self):
+        """Spec leaderboard shows HPS for healer specs, DPS for DPS specs."""
+        mock_rows = [
+            MagicMock(
+                player_spec="Fury", player_class="Warrior",
+                avg_dps=2500.0, max_dps=3000.0, median_dps=2400.0,
+                avg_hps=0.0, max_hps=0.0, median_hps=0.0,
+                avg_parse=85.0, avg_ilvl=141, sample_size=50,
+            ),
+            MagicMock(
+                player_spec="Holy", player_class="Paladin",
+                avg_dps=50.0, max_dps=80.0, median_dps=45.0,
+                avg_hps=1200.0, max_hps=1800.0, median_hps=1100.0,
+                avg_parse=80.0, avg_ilvl=140, sample_size=20,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
+            result = await get_spec_leaderboard.ainvoke(
+                {"encounter_name": "Gruul"}
+            )
+
+        # Fury Warrior shows DPS
+        assert "Avg DPS: 2,500.0" in result
+        # Holy Paladin shows HPS
+        assert "Avg HPS: 1,200.0" in result

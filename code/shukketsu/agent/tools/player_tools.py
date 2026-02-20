@@ -2,6 +2,18 @@
 
 from shukketsu.agent.tool_utils import _format_duration, db_tool, wildcard
 from shukketsu.db import queries as q
+from shukketsu.pipeline.constants import ROLE_BY_SPEC
+
+
+def _metric_label(spec: str | None) -> tuple[str, str]:
+    """Return (label, field) for the primary metric based on spec role.
+
+    Healers get ("HPS", "hps"); everyone else gets ("DPS", "dps").
+    Defaults to DPS when spec is None or unknown.
+    """
+    if spec and ROLE_BY_SPEC.get(spec) == "healer":
+        return "HPS", "hps"
+    return "DPS", "dps"
 
 
 @db_tool
@@ -59,8 +71,11 @@ async def get_my_performance(
     lines = [f"Performance for {player_name} on {encounter_name}:\n"]
     for r in rows:
         outcome = "Kill" if r.kill else "Wipe"
+        label, _ = _metric_label(r.player_spec)
+        val = r.hps if label == "HPS" else r.dps
         lines.append(
-            f"- {r.player_spec} {r.player_class} | DPS: {r.dps:,.1f} | "
+            f"- {r.player_spec} {r.player_class} | "
+            f"{label}: {val:,.1f} | "
             f"Parse: {r.parse_percentile}% "
             f"(iLvl: {r.ilvl_parse_percentile}%) | "
             f"Deaths: {r.deaths} | iLvl: {r.item_level} | "
@@ -88,11 +103,12 @@ async def get_top_rankings(
             f"on {encounter_name}."
         )
 
+    label, _ = _metric_label(spec_name)
     lines = [f"Top {spec_name} {class_name} rankings on {encounter_name}:\n"]
     for r in rows:
         lines.append(
             f"#{r.rank_position} {r.player_name} ({r.player_server}) | "
-            f"DPS: {r.amount:,.1f} | iLvl: {r.item_level} | "
+            f"{label}: {r.amount:,.1f} | iLvl: {r.item_level} | "
             f"Duration: {_format_duration(r.duration_ms)} | "
             f"Guild: {r.guild_name}"
         )
@@ -123,12 +139,19 @@ async def compare_to_top(
             f"on {encounter_name}."
         )
 
-    gap = ((row.avg_dps - row.dps) / row.avg_dps * 100) if row.avg_dps else 0
+    label, _ = _metric_label(row.player_spec)
+    my_val = row.hps if label == "HPS" else row.dps
+    # top_rankings.amount stores the primary metric (HPS for healers,
+    # DPS for others), so avg_dps/min_dps/max_dps contain the correct
+    # values regardless of role.
+    gap = (
+        (row.avg_dps - my_val) / row.avg_dps * 100
+    ) if row.avg_dps else 0
     return (
         f"Comparison for {player_name} ({row.player_spec} "
         f"{row.player_class}) on {encounter_name}:\n"
-        f"  Your DPS: {row.dps:,.1f} | Parse: {row.parse_percentile}%\n"
-        f"  Top 10 avg DPS: {row.avg_dps:,.1f} "
+        f"  Your {label}: {my_val:,.1f} | Parse: {row.parse_percentile}%\n"
+        f"  Top 10 avg {label}: {row.avg_dps:,.1f} "
         f"(range: {row.min_dps:,.1f} - {row.max_dps:,.1f})\n"
         f"  Gap to top avg: {gap:.1f}%\n"
         f"  Your iLvl: {row.item_level} | "
@@ -160,9 +183,11 @@ async def get_fight_details(
         f"{_format_duration(first.duration_ms)}) — {first.report_title}\n"
     ]
     for r in rows:
+        label, _ = _metric_label(r.player_spec)
+        val = r.hps if label == "HPS" else r.dps
         lines.append(
             f"  {r.player_name} ({r.player_spec} {r.player_class}) | "
-            f"DPS: {r.dps:,.1f} | Parse: {r.parse_percentile}% | "
+            f"{label}: {val:,.1f} | Parse: {r.parse_percentile}% | "
             f"Deaths: {r.deaths} | Int: {r.interrupts} | "
             f"Disp: {r.dispels}"
         )
@@ -266,13 +291,22 @@ async def get_spec_leaderboard(session, encounter_name: str) -> str:
         )
 
     lines = [
-        f"Spec DPS leaderboard on {encounter_name} (kills only):\n"
+        f"Spec performance leaderboard on {encounter_name} (kills only):\n"
     ]
     for i, r in enumerate(rows, 1):
+        label, _ = _metric_label(r.player_spec)
+        if label == "HPS":
+            avg_val = getattr(r, "avg_hps", 0.0) or 0.0
+            max_val = getattr(r, "max_hps", 0.0) or 0.0
+            med_val = getattr(r, "median_hps", 0.0) or 0.0
+        else:
+            avg_val = r.avg_dps
+            max_val = r.max_dps
+            med_val = r.median_dps
         lines.append(
             f"#{i} {r.player_spec} {r.player_class} | "
-            f"Avg DPS: {r.avg_dps:,.1f} | Max: {r.max_dps:,.1f} | "
-            f"Median: {r.median_dps:,.1f} | Avg Parse: {r.avg_parse}% | "
+            f"Avg {label}: {avg_val:,.1f} | Max: {max_val:,.1f} | "
+            f"Median: {med_val:,.1f} | Avg Parse: {r.avg_parse}% | "
             f"iLvl: {r.avg_ilvl} | n={r.sample_size}"
         )
     return "\n".join(lines)
