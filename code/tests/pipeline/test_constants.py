@@ -135,6 +135,29 @@ class TestConsumableSpellIds:
                 f"Role '{role}' missing Flask of Relentless Assault (28520)"
             )
 
+    def test_food_buff_names_accurate(self):
+        """Food buff display names should match actual TBC buff names."""
+        food_by_id = {
+            c.spell_id: c.name for c in REQUIRED_CONSUMABLES["all"]
+            if c.category == "food"
+        }
+        # 43722 is "Enlightened" (+20 Spell Crit), not "Well Fed (Hit)"
+        if 43722 in food_by_id:
+            assert food_by_id[43722] == "Enlightened (Spell Crit)", (
+                f"43722 labeled '{food_by_id[43722]}', "
+                f"should be 'Enlightened (Spell Crit)'"
+            )
+        # 43763 is the eating channel spell, should not be here
+        assert 43763 not in food_by_id, (
+            "43763 is the eating channel spell, not the buff"
+        )
+        # 43764 is "Well Fed (Hit Rating)", not "Well Fed (AP)"
+        if 43764 in food_by_id:
+            assert food_by_id[43764] == "Well Fed (Hit Rating)", (
+                f"43764 labeled '{food_by_id[43764]}', "
+                f"should be 'Well Fed (Hit Rating)'"
+            )
+
     def test_required_flasks_are_tbc(self):
         """Required flasks should be TBC, not Classic."""
         tbc_flask_ids = {28518, 28519, 28520, 28521, 28540}

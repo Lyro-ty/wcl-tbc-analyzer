@@ -381,9 +381,8 @@ REQUIRED_CONSUMABLES: dict[str, list[ConsumableDef]] = {
         ConsumableDef(33256, "Well Fed (Agility)", "food", 80.0),
         ConsumableDef(33259, "Well Fed (Stamina)", "food", 80.0),
         ConsumableDef(33261, "Well Fed (Strength)", "food", 80.0),
-        ConsumableDef(43722, "Well Fed (Hit)", "food", 80.0),
-        ConsumableDef(43763, "Well Fed (Haste)", "food", 80.0),
-        ConsumableDef(43764, "Well Fed (AP)", "food", 80.0),
+        ConsumableDef(43722, "Enlightened (Spell Crit)", "food", 80.0),
+        ConsumableDef(43764, "Well Fed (Hit Rating)", "food", 80.0),
     ],
     "melee_dps": [
         ConsumableDef(28520, "Flask of Relentless Assault", "flask", 80.0),
