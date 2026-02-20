@@ -97,6 +97,12 @@ Compares actual uptime against expected for known trinkets \
 Flags enchantable slots without permanent enchants and empty gem sockets \
 (requires event data — report_code + fight_id + player_name).
 
+### Benchmark tools
+- **get_encounter_benchmarks**(encounter_name): Performance benchmarks from top guild kills \
+— kill stats, death rates, spec DPS targets, consumable rates, composition
+- **get_spec_benchmark**(encounter_name, class_name, spec_name): Spec-specific performance \
+targets — DPS target, GCD uptime, top abilities, buff uptimes, cooldown efficiency
+
 ## Context Resolution
 
 When the user refers to "my last fight", "my recent kills", "last raid", or similar \
@@ -191,6 +197,13 @@ ANALYSIS_PROMPT = """\
 Based on the retrieved raid performance data, provide a thorough analysis.
 
 Structure your response:
+0. **Benchmark Comparison** — Before analyzing, retrieve encounter benchmarks via \
+get_encounter_benchmarks and spec targets via get_spec_benchmark. Compare the player's \
+metrics against these targets:
+   - Flag areas >10% below benchmark as PRIORITY improvements
+   - Frame recommendations using concrete numbers: "Top Destruction Warlocks average 91% GCD \
+uptime on Gruul — yours was 82%, suggesting ~9% DPS upside from reducing downtime"
+   - If benchmarks are unavailable, skip this section silently
 1. **Summary** — Key findings in 1-2 sentences
 2. **Detailed Analysis** — Break down the numbers with context
 3. **Rotation & Abilities** — If ability breakdown data was retrieved, analyze damage/healing \
