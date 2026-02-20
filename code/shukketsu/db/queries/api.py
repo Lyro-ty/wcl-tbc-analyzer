@@ -64,6 +64,7 @@ CHARACTER_REPORTS = text("""
            COUNT(DISTINCT f.id) AS fight_count,
            SUM(CASE WHEN f.kill THEN 1 ELSE 0 END) AS kill_count,
            ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
+           ROUND(AVG(fp.hps)::numeric, 1) AS avg_hps,
            ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse,
            SUM(fp.deaths) AS total_deaths
     FROM reports r
@@ -174,6 +175,8 @@ CHARACTER_PROFILE = text("""
            COALESCE(SUM(fp.deaths), 0) AS total_deaths,
            ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
            ROUND(MAX(fp.dps)::numeric, 1) AS best_dps,
+           ROUND(AVG(fp.hps)::numeric, 1) AS avg_hps,
+           ROUND(MAX(fp.hps)::numeric, 1) AS best_hps,
            ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse,
            ROUND(MAX(fp.parse_percentile)::numeric, 1) AS best_parse,
            ROUND(AVG(fp.item_level)::numeric, 1) AS avg_ilvl
@@ -215,7 +218,8 @@ RECENT_REPORTS = text("""
            COUNT(DISTINCT f.id) AS fight_count,
            SUM(CASE WHEN f.kill THEN 1 ELSE 0 END) AS kill_count,
            SUM(CASE WHEN NOT f.kill THEN 1 ELSE 0 END) AS wipe_count,
-           ROUND(AVG(fp.dps) FILTER (WHERE f.kill)::numeric, 1) AS avg_kill_dps
+           ROUND(AVG(fp.dps) FILTER (WHERE f.kill)::numeric, 1) AS avg_kill_dps,
+           ROUND(AVG(fp.hps) FILTER (WHERE f.kill)::numeric, 1) AS avg_kill_hps
     FROM reports r
     LEFT JOIN fights f ON f.report_code = r.code
     LEFT JOIN fight_performances fp ON fp.fight_id = f.id
@@ -265,7 +269,8 @@ NIGHT_SUMMARY_FIGHTS = text("""
            COALESCE(SUM(fp.deaths), 0) AS total_deaths,
            COALESCE(SUM(fp.interrupts), 0) AS total_interrupts,
            ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse,
-           ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps
+           ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
+           ROUND(AVG(fp.hps)::numeric, 1) AS avg_hps
     FROM fights f
     JOIN encounters e ON f.encounter_id = e.id
     JOIN reports r ON f.report_code = r.code
@@ -278,7 +283,7 @@ NIGHT_SUMMARY_FIGHTS = text("""
 
 NIGHT_SUMMARY_PLAYERS = text("""
     SELECT fp.player_name, e.name AS encounter_name, f.fight_id,
-           fp.dps, fp.parse_percentile, fp.deaths, fp.interrupts,
+           fp.dps, fp.hps, fp.parse_percentile, fp.deaths, fp.interrupts,
            f.kill
     FROM fight_performances fp
     JOIN fights f ON fp.fight_id = f.id

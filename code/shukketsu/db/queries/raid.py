@@ -32,7 +32,8 @@ RAID_VS_TOP_SPEED = text("""
                SUM(fp.deaths) AS total_deaths,
                SUM(fp.interrupts) AS total_interrupts,
                SUM(fp.dispels) AS total_dispels,
-               ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps
+               ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
+               ROUND(AVG(fp.hps)::numeric, 1) AS avg_hps
         FROM fights f
         JOIN encounters e ON f.encounter_id = e.id
         LEFT JOIN fight_performances fp ON fp.fight_id = f.id
@@ -51,7 +52,8 @@ RAID_VS_TOP_SPEED = text("""
         GROUP BY sr.encounter_id
     )
     SELECT mr.fight_id, mr.encounter_name, mr.duration_ms, mr.player_count,
-           mr.total_deaths, mr.total_interrupts, mr.total_dispels, mr.avg_dps,
+           mr.total_deaths, mr.total_interrupts, mr.total_dispels,
+           mr.avg_dps, mr.avg_hps,
            ts.world_record_ms, ts.top10_avg_ms, ts.top100_median_ms
     FROM my_raid mr
     LEFT JOIN top_speeds ts ON mr.encounter_id = ts.encounter_id
@@ -67,6 +69,7 @@ COMPARE_TWO_RAIDS = text("""
                SUM(fp.interrupts) AS total_interrupts,
                SUM(fp.dispels) AS total_dispels,
                ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
+               ROUND(AVG(fp.hps)::numeric, 1) AS avg_hps,
                STRING_AGG(DISTINCT fp.player_spec || ' ' || fp.player_class, ', '
                    ORDER BY fp.player_spec || ' ' || fp.player_class) AS composition,
                ROW_NUMBER() OVER (
@@ -87,6 +90,7 @@ COMPARE_TWO_RAIDS = text("""
                SUM(fp.interrupts) AS total_interrupts,
                SUM(fp.dispels) AS total_dispels,
                ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
+               ROUND(AVG(fp.hps)::numeric, 1) AS avg_hps,
                STRING_AGG(DISTINCT fp.player_spec || ' ' || fp.player_class, ', '
                    ORDER BY fp.player_spec || ' ' || fp.player_class) AS composition,
                ROW_NUMBER() OVER (
@@ -105,6 +109,7 @@ COMPARE_TWO_RAIDS = text("""
            a.total_interrupts AS a_interrupts, b.total_interrupts AS b_interrupts,
            a.total_dispels AS a_dispels, b.total_dispels AS b_dispels,
            a.avg_dps AS a_avg_dps, b.avg_dps AS b_avg_dps,
+           a.avg_hps AS a_avg_hps, b.avg_hps AS b_avg_hps,
            a.player_count AS a_players, b.player_count AS b_players,
            a.composition AS a_comp, b.composition AS b_comp
     FROM raid_a a
@@ -123,6 +128,8 @@ RAID_EXECUTION_SUMMARY = text("""
            SUM(fp.dispels) AS total_dispels,
            ROUND(AVG(fp.dps)::numeric, 1) AS raid_avg_dps,
            ROUND(SUM(fp.dps)::numeric, 1) AS raid_total_dps,
+           ROUND(AVG(fp.hps)::numeric, 1) AS raid_avg_hps,
+           ROUND(SUM(fp.hps)::numeric, 1) AS raid_total_hps,
            ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse,
            ROUND(AVG(fp.item_level)::numeric, 1) AS avg_ilvl
     FROM fights f

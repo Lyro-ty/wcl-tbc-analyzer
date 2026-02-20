@@ -50,7 +50,7 @@ TOP_RANKINGS = text("""
 
 COMPARE_TO_TOP = text("""
     WITH my_perf AS (
-        SELECT fp.dps, fp.parse_percentile, fp.item_level, fp.deaths,
+        SELECT fp.dps, fp.hps, fp.parse_percentile, fp.item_level, fp.deaths,
                fp.player_class, fp.player_spec
         FROM fight_performances fp
         JOIN fights f ON fp.fight_id = f.id
@@ -133,6 +133,8 @@ SPEC_LEADERBOARD = text("""
            ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
            ROUND(MAX(fp.dps)::numeric, 1) AS max_dps,
            ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY fp.dps)::numeric, 1) AS median_dps,
+           ROUND(AVG(fp.hps)::numeric, 1) AS avg_hps,
+           ROUND(MAX(fp.hps)::numeric, 1) AS max_hps,
            ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse,
            ROUND(AVG(fp.item_level)::numeric, 1) AS avg_ilvl
     FROM fight_performances fp
@@ -187,6 +189,7 @@ WIPE_PROGRESSION = text("""
            f.duration_ms,
            COUNT(fp.id) AS player_count,
            ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
+           ROUND(AVG(fp.hps)::numeric, 1) AS avg_hps,
            SUM(fp.deaths) AS total_deaths,
            ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse
     FROM fights f
@@ -202,7 +205,7 @@ WIPE_PROGRESSION = text("""
 REGRESSION_CHECK = text("""
     WITH ranked_fights AS (
         SELECT fp.player_name, e.name AS encounter_name,
-               fp.dps, fp.parse_percentile,
+               fp.dps, fp.hps, fp.parse_percentile,
                f.end_time,
                ROW_NUMBER() OVER (
                    PARTITION BY fp.player_name, e.id
@@ -217,7 +220,8 @@ REGRESSION_CHECK = text("""
     baseline AS (
         SELECT player_name, encounter_name,
                AVG(parse_percentile) AS baseline_parse,
-               AVG(dps) AS baseline_dps
+               AVG(dps) AS baseline_dps,
+               AVG(hps) AS baseline_hps
         FROM ranked_fights WHERE rn BETWEEN 3 AND 7
         GROUP BY player_name, encounter_name
         HAVING COUNT(*) >= 3
@@ -225,7 +229,8 @@ REGRESSION_CHECK = text("""
     recent AS (
         SELECT player_name, encounter_name,
                AVG(parse_percentile) AS recent_parse,
-               AVG(dps) AS recent_dps
+               AVG(dps) AS recent_dps,
+               AVG(hps) AS recent_hps
         FROM ranked_fights WHERE rn BETWEEN 1 AND 2
         GROUP BY player_name, encounter_name
     )
@@ -234,9 +239,13 @@ REGRESSION_CHECK = text("""
            ROUND(b.baseline_parse::numeric, 1) AS baseline_parse,
            ROUND(r.recent_dps::numeric, 1) AS recent_dps,
            ROUND(b.baseline_dps::numeric, 1) AS baseline_dps,
+           ROUND(r.recent_hps::numeric, 1) AS recent_hps,
+           ROUND(b.baseline_hps::numeric, 1) AS baseline_hps,
            ROUND((r.recent_parse - b.baseline_parse)::numeric, 1) AS parse_delta,
            ROUND(((r.recent_dps - b.baseline_dps)
-               / NULLIF(b.baseline_dps, 0) * 100)::numeric, 1) AS dps_delta_pct
+               / NULLIF(b.baseline_dps, 0) * 100)::numeric, 1) AS dps_delta_pct,
+           ROUND(((r.recent_hps - b.baseline_hps)
+               / NULLIF(b.baseline_hps, 0) * 100)::numeric, 1) AS hps_delta_pct
     FROM recent r
     JOIN baseline b ON LOWER(r.player_name) = LOWER(b.player_name)
                    AND r.encounter_name = b.encounter_name
@@ -246,7 +255,7 @@ REGRESSION_CHECK = text("""
 
 MY_RECENT_KILLS = text("""
     SELECT f.report_code, f.fight_id, e.name AS encounter_name,
-           fp.dps, fp.parse_percentile, fp.deaths, fp.item_level,
+           fp.dps, fp.hps, fp.parse_percentile, fp.deaths, fp.item_level,
            f.duration_ms, r.title AS report_title, r.start_time AS report_time
     FROM fight_performances fp
     JOIN fights f ON fp.fight_id = f.id
