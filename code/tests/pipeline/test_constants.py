@@ -4,6 +4,7 @@ import pytest
 
 from shukketsu.pipeline.constants import (
     ALL_BOSS_NAMES,
+    CLASSIC_COOLDOWNS,
     FRESH_BOSS_NAMES,
     FRESH_ZONES,
     REQUIRED_CONSUMABLES,
@@ -14,6 +15,7 @@ from shukketsu.pipeline.constants import (
     TBC_TANK_SPECS,
     TBC_ZONES,
     ClassSpec,
+    CooldownDef,
 )
 
 
@@ -136,3 +138,68 @@ class TestConsumableSpellIds:
                         f"{role}: Healing Power has spell_id {c.spell_id},"
                         f" expected 28491"
                     )
+
+
+class TestCooldownTypes:
+    """Verify CooldownDef has cd_type and all entries are correctly classified."""
+
+    def test_cooldown_def_has_cd_type(self):
+        assert hasattr(CooldownDef, "__dataclass_fields__")
+        assert "cd_type" in CooldownDef.__dataclass_fields__
+
+    def test_all_cd_types_valid(self):
+        valid_types = {"throughput", "interrupt", "defensive", "utility"}
+        for class_name, cds in CLASSIC_COOLDOWNS.items():
+            for cd in cds:
+                assert cd.cd_type in valid_types, (
+                    f"{class_name} {cd.name} has invalid cd_type={cd.cd_type}"
+                )
+
+    def test_interrupts_present(self):
+        """Verify key interrupts are tracked (Earth Shock, not Wind Shear)."""
+        warrior_cds = {cd.name for cd in CLASSIC_COOLDOWNS["Warrior"]}
+        assert "Pummel" in warrior_cds
+
+        rogue_cds = {cd.name for cd in CLASSIC_COOLDOWNS["Rogue"]}
+        assert "Kick" in rogue_cds
+
+        mage_cds = {cd.name for cd in CLASSIC_COOLDOWNS["Mage"]}
+        assert "Counterspell" in mage_cds
+
+        shaman_cds = {cd.name for cd in CLASSIC_COOLDOWNS["Shaman"]}
+        assert "Earth Shock" in shaman_cds
+        assert "Wind Shear" not in shaman_cds  # Does NOT exist in TBC
+
+    def test_shield_block_not_tracked(self):
+        """Shield Block (5s CD) is a rotation ability, not a defensive CD."""
+        warrior_names = {cd.name for cd in CLASSIC_COOLDOWNS["Warrior"]}
+        assert "Shield Block" not in warrior_names
+
+    def test_tree_of_life_not_tracked(self):
+        """Tree of Life is a shapeshift, not a cooldown."""
+        druid_names = {cd.name for cd in CLASSIC_COOLDOWNS["Druid"]}
+        assert "Tree of Life" not in druid_names
+
+    def test_defensive_cds_present(self):
+        warrior_cds = {cd.name: cd for cd in CLASSIC_COOLDOWNS["Warrior"]}
+        assert "Shield Wall" in warrior_cds
+        assert warrior_cds["Shield Wall"].cd_type == "defensive"
+        assert "Last Stand" in warrior_cds
+        assert warrior_cds["Last Stand"].cd_type == "defensive"
+
+    def test_utility_cds_present(self):
+        warrior_cds = {cd.name: cd for cd in CLASSIC_COOLDOWNS["Warrior"]}
+        assert "Bloodrage" in warrior_cds
+        assert warrior_cds["Bloodrage"].cd_type == "utility"
+
+    def test_throughput_cds_unchanged(self):
+        """Existing throughput CDs should still be present and correctly typed."""
+        warrior_cds = {cd.name: cd for cd in CLASSIC_COOLDOWNS["Warrior"]}
+        assert "Death Wish" in warrior_cds
+        assert warrior_cds["Death Wish"].cd_type == "throughput"
+
+    @pytest.mark.parametrize("class_name", list(CLASSIC_COOLDOWNS.keys()))
+    def test_no_duplicate_spell_ids(self, class_name):
+        cds = CLASSIC_COOLDOWNS[class_name]
+        ids = [cd.spell_id for cd in cds]
+        assert len(ids) == len(set(ids)), f"Duplicate spell IDs in {class_name}"

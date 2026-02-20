@@ -143,52 +143,68 @@ class CooldownDef:
     name: str
     cooldown_sec: int
     duration_sec: int = 0  # Actual buff duration (0 = instant/passive)
+    cd_type: str = "throughput"  # "throughput", "interrupt", "defensive", "utility"
 
 
 # Classic Fresh / TBC major throughput cooldowns per class.
 # spell_id values are WCL abilityGameID (WoW spell IDs).
 CLASSIC_COOLDOWNS: dict[str, list[CooldownDef]] = {
     "Warrior": [
-        CooldownDef(12292, "Death Wish", 180, 30),
-        CooldownDef(1719, "Recklessness", 900, 15),
-        CooldownDef(12328, "Sweeping Strikes", 30, 10),
+        CooldownDef(12292, "Death Wish", 180, 30, cd_type="throughput"),
+        CooldownDef(1719, "Recklessness", 900, 15, cd_type="throughput"),
+        CooldownDef(12328, "Sweeping Strikes", 30, 10, cd_type="throughput"),
+        CooldownDef(6552, "Pummel", 10, 0, cd_type="interrupt"),
+        CooldownDef(871, "Shield Wall", 1800, 10, cd_type="defensive"),
+        CooldownDef(12975, "Last Stand", 600, 20, cd_type="defensive"),
+        CooldownDef(2687, "Bloodrage", 60, 10, cd_type="utility"),
+        CooldownDef(18499, "Berserker Rage", 30, 10, cd_type="utility"),
     ],
     "Paladin": [
-        CooldownDef(31884, "Avenging Wrath", 180, 20),
+        CooldownDef(31884, "Avenging Wrath", 180, 20, cd_type="throughput"),
+        CooldownDef(10308, "Hammer of Justice", 60, 0, cd_type="defensive"),
+        CooldownDef(642, "Divine Shield", 300, 12, cd_type="defensive"),
+        CooldownDef(10310, "Lay on Hands", 3600, 0, cd_type="utility"),
     ],
     "Hunter": [
-        CooldownDef(3045, "Rapid Fire", 300, 15),
-        CooldownDef(19574, "Bestial Wrath", 120, 18),
-        CooldownDef(34692, "The Beast Within", 120, 18),
+        CooldownDef(3045, "Rapid Fire", 300, 15, cd_type="throughput"),
+        CooldownDef(19574, "Bestial Wrath", 120, 18, cd_type="throughput"),
+        CooldownDef(34692, "The Beast Within", 120, 18, cd_type="throughput"),
     ],
     "Rogue": [
-        CooldownDef(13750, "Adrenaline Rush", 300, 15),
-        CooldownDef(13877, "Blade Flurry", 120, 15),
-        CooldownDef(14177, "Cold Blood", 180, 0),
+        CooldownDef(13750, "Adrenaline Rush", 300, 15, cd_type="throughput"),
+        CooldownDef(13877, "Blade Flurry", 120, 15, cd_type="throughput"),
+        CooldownDef(14177, "Cold Blood", 180, 0, cd_type="throughput"),
+        CooldownDef(1769, "Kick", 10, 0, cd_type="interrupt"),
+        CooldownDef(26669, "Evasion", 300, 15, cd_type="defensive"),
+        CooldownDef(31224, "Cloak of Shadows", 60, 5, cd_type="defensive"),
     ],
     "Priest": [
-        CooldownDef(10060, "Power Infusion", 180, 15),
-        CooldownDef(33206, "Pain Suppression", 120, 8),
-        CooldownDef(15487, "Silence", 45, 0),
+        CooldownDef(10060, "Power Infusion", 180, 15, cd_type="throughput"),
+        CooldownDef(33206, "Pain Suppression", 120, 8, cd_type="defensive"),
+        CooldownDef(15487, "Silence", 45, 0, cd_type="interrupt"),
     ],
     "Shaman": [
-        CooldownDef(2825, "Bloodlust", 600, 40),
-        CooldownDef(16166, "Elemental Mastery", 180, 0),
+        CooldownDef(2825, "Bloodlust", 600, 40, cd_type="throughput"),
+        CooldownDef(16166, "Elemental Mastery", 180, 0, cd_type="throughput"),
+        CooldownDef(25454, "Earth Shock", 6, 0, cd_type="interrupt"),
+        CooldownDef(16190, "Mana Tide Totem", 300, 12, cd_type="utility"),
+        CooldownDef(2894, "Fire Elemental Totem", 600, 120, cd_type="utility"),
     ],
     "Mage": [
-        CooldownDef(12042, "Arcane Power", 180, 15),
-        CooldownDef(12051, "Evocation", 480, 8),
-        CooldownDef(11129, "Combustion", 180, 0),
-        CooldownDef(12472, "Icy Veins", 180, 20),
+        CooldownDef(12042, "Arcane Power", 180, 15, cd_type="throughput"),
+        CooldownDef(12051, "Evocation", 480, 8, cd_type="utility"),
+        CooldownDef(11129, "Combustion", 180, 0, cd_type="throughput"),
+        CooldownDef(12472, "Icy Veins", 180, 20, cd_type="throughput"),
+        CooldownDef(2139, "Counterspell", 24, 0, cd_type="interrupt"),
     ],
     "Warlock": [
-        CooldownDef(18708, "Fel Domination", 900, 0),
-        CooldownDef(18288, "Amplify Curse", 180, 0),
+        CooldownDef(18708, "Fel Domination", 900, 0, cd_type="utility"),
+        CooldownDef(18288, "Amplify Curse", 180, 0, cd_type="throughput"),
     ],
     "Druid": [
-        CooldownDef(29166, "Innervate", 360, 20),
-        CooldownDef(17116, "Nature's Swiftness", 180, 0),
-        CooldownDef(33891, "Tree of Life", 0, 0),
+        CooldownDef(29166, "Innervate", 360, 20, cd_type="utility"),
+        CooldownDef(17116, "Nature's Swiftness", 180, 0, cd_type="utility"),
+        CooldownDef(16979, "Feral Charge", 15, 0, cd_type="interrupt"),
     ],
 }
 
