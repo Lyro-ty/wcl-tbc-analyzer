@@ -1,6 +1,10 @@
 """Agent tools package -- re-exports ALL_TOOLS for graph binding."""
 
 from shukketsu.agent.tool_utils import set_session_factory
+from shukketsu.agent.tools.benchmark_tools import (
+    get_encounter_benchmarks,
+    get_spec_benchmark,
+)
 from shukketsu.agent.tools.event_tools import (
     get_activity_report,
     get_cancelled_casts,
@@ -75,6 +79,9 @@ ALL_TOOLS = [
     get_gear_changes,
     get_phase_analysis,
     get_enchant_gem_check,
+    # Benchmark tools (2)
+    get_encounter_benchmarks,
+    get_spec_benchmark,
 ]
 
 __all__ = [
@@ -114,4 +121,7 @@ __all__ = [
     "get_gear_changes",
     "get_phase_analysis",
     "get_enchant_gem_check",
+    # Benchmark tools
+    "get_encounter_benchmarks",
+    "get_spec_benchmark",
 ]
