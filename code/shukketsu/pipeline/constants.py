@@ -369,6 +369,11 @@ CLASSIC_DOTS: dict[str, list[DotDef]] = {
     "Druid": [
         DotDef(27013, "Moonfire", 12000, 3000),
         DotDef(27012, "Insect Swarm", 12000, 2000),
+        DotDef(27003, "Rake", 9000, 3000),
+        DotDef(27008, "Rip", 12000, 2000),
+    ],
+    "Hunter": [
+        DotDef(27016, "Serpent Sting", 15000, 3000),
     ],
 }
 
@@ -401,6 +406,82 @@ CLASSIC_TRINKETS: dict[int, TrinketDef] = {
 
 
 ENCOUNTER_PHASES: dict[str, list[PhaseDef]] = {
+    # --- TBC P1: Karazhan ---
+    "Attumen the Huntsman": [
+        PhaseDef("P1 - Midnight", 0.0, 0.35,
+                 "DPS Midnight, Attumen spawns at 95%"),
+        PhaseDef("P2 - Both Active", 0.35, 0.7,
+                 "Kill Midnight while dodging Attumen cleave"),
+        PhaseDef("P3 - Mounted", 0.7, 1.0,
+                 "Attumen mounts Midnight, burn phase"),
+    ],
+    "Moroes": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "Kill adds then boss, manage Garrote"),
+    ],
+    "Maiden of Virtue": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "Single phase, Repentance every 30s"),
+    ],
+    "Opera Event": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "Varies by week: Oz, Romulo & Julianne, Big Bad Wolf"),
+    ],
+    "The Curator": [
+        PhaseDef("P1 - Sparks", 0.0, 0.7,
+                 "Kill Astral Flares, boss Hateful Bolts"),
+        PhaseDef("P2 - Evocate", 0.7, 1.0,
+                 "Curator evocates at 0 mana, +200% damage taken"),
+    ],
+    "Shade of Aran": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "No aggro table, rotating abilities, elementals at 40%"),
+    ],
+    "Terestian Illhoof": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "Kill imps, free Sacrifice targets"),
+    ],
+    "Netherspite": [
+        PhaseDef("Portal Phase", 0.0, 0.5,
+                 "Soak colored beams to buff raid/debuff boss"),
+        PhaseDef("Banish Phase", 0.5, 1.0,
+                 "Boss banishes, void zones, no portals"),
+    ],
+    "Chess Event": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "Chess minigame, no standard DPS analysis"),
+    ],
+    "Prince Malchezaar": [
+        PhaseDef("P1 - Normal", 0.0, 0.4,
+                 "Shadow damage, standard tanking"),
+        PhaseDef("P2 - Axes", 0.4, 0.7,
+                 "Dual wield, thrash, Shadow Nova"),
+        PhaseDef("P3 - Infernals", 0.7, 1.0,
+                 "Axes + Infernals, amplified Shadow Nova"),
+    ],
+    "Nightbane": [
+        PhaseDef("Ground Phase", 0.0, 0.5,
+                 "Tank and spank with Charred Earth"),
+        PhaseDef("Air Phase", 0.5, 1.0,
+                 "Boss flies up, Smoking Blast, Rain of Bones"),
+    ],
+    # --- TBC P1: Gruul's Lair ---
+    "High King Maulgar": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "Kill adds (Blindeye, Olm, Kiggler, Krosh) then Maulgar"),
+    ],
+    "Gruul the Dragonkiller": [
+        PhaseDef("Full Fight", 0.0, 1.0,
+                 "DPS race, stacking Growth buff, periodic Shatter"),
+    ],
+    # --- TBC P1: Magtheridon's Lair ---
+    "Magtheridon": [
+        PhaseDef("P1 - Channelers", 0.0, 0.3,
+                 "Kill 5 Hellfire Channelers before Magtheridon activates"),
+        PhaseDef("P2 - Magtheridon", 0.3, 1.0,
+                 "Click cubes for Banish, dodge Blast Nova, burn boss"),
+    ],
+    # --- Classic Fresh: Naxxramas ---
     "Patchwerk": [
         PhaseDef("Full Fight", 0.0, 1.0, "Single phase DPS race"),
     ],

@@ -5,6 +5,8 @@ import pytest
 from shukketsu.pipeline.constants import (
     ALL_BOSS_NAMES,
     CLASSIC_COOLDOWNS,
+    CLASSIC_DOTS,
+    ENCOUNTER_PHASES,
     FRESH_BOSS_NAMES,
     FRESH_ZONES,
     REQUIRED_CONSUMABLES,
@@ -203,3 +205,92 @@ class TestCooldownTypes:
         cds = CLASSIC_COOLDOWNS[class_name]
         ids = [cd.spell_id for cd in cds]
         assert len(ids) == len(set(ids)), f"Duplicate spell IDs in {class_name}"
+
+
+TBC_P1_BOSSES = [
+    # Karazhan
+    "Attumen the Huntsman", "Moroes", "Maiden of Virtue", "Opera Event",
+    "The Curator", "Shade of Aran", "Terestian Illhoof", "Netherspite",
+    "Chess Event", "Prince Malchezaar", "Nightbane",
+    # Gruul's Lair
+    "High King Maulgar", "Gruul the Dragonkiller",
+    # Magtheridon's Lair
+    "Magtheridon",
+]
+
+
+class TestEncounterPhases:
+    """Verify ENCOUNTER_PHASES for TBC P1 and Fresh Naxxramas bosses."""
+
+    @pytest.mark.parametrize("boss", TBC_P1_BOSSES)
+    def test_tbc_p1_boss_has_phases(self, boss):
+        assert boss in ENCOUNTER_PHASES, f"Missing phases for {boss}"
+
+    @pytest.mark.parametrize("boss", list(ENCOUNTER_PHASES.keys()))
+    def test_phases_start_at_zero(self, boss):
+        phases = ENCOUNTER_PHASES[boss]
+        assert phases[0].pct_start == 0.0, f"{boss} first phase doesn't start at 0.0"
+
+    @pytest.mark.parametrize("boss", list(ENCOUNTER_PHASES.keys()))
+    def test_phases_end_at_one(self, boss):
+        phases = ENCOUNTER_PHASES[boss]
+        assert phases[-1].pct_end == 1.0, f"{boss} last phase doesn't end at 1.0"
+
+    @pytest.mark.parametrize("boss", list(ENCOUNTER_PHASES.keys()))
+    def test_phases_contiguous(self, boss):
+        """Each phase end should equal the next phase start."""
+        phases = ENCOUNTER_PHASES[boss]
+        for i in range(len(phases) - 1):
+            assert phases[i].pct_end == phases[i + 1].pct_start, (
+                f"{boss}: gap between phase {i} end ({phases[i].pct_end}) "
+                f"and phase {i+1} start ({phases[i+1].pct_start})"
+            )
+
+    @pytest.mark.parametrize("boss", list(ENCOUNTER_PHASES.keys()))
+    def test_phases_have_names_and_descriptions(self, boss):
+        for phase in ENCOUNTER_PHASES[boss]:
+            assert phase.name, f"{boss}: phase has empty name"
+            assert phase.description, f"{boss}: phase '{phase.name}' has empty description"
+
+    def test_prince_malchezaar_has_three_phases(self):
+        assert len(ENCOUNTER_PHASES["Prince Malchezaar"]) == 3
+
+    def test_magtheridon_has_two_phases(self):
+        assert len(ENCOUNTER_PHASES["Magtheridon"]) == 2
+
+    def test_kelthuzad_has_three_phases(self):
+        assert len(ENCOUNTER_PHASES["Kel'Thuzad"]) == 3
+
+
+class TestDotExpansion:
+    def test_hunter_dots_present(self):
+        assert "Hunter" in CLASSIC_DOTS
+        names = {d.name for d in CLASSIC_DOTS["Hunter"]}
+        assert "Serpent Sting" in names
+
+    def test_feral_druid_dots_present(self):
+        """Feral DoTs are under the existing 'Druid' key alongside Balance DoTs."""
+        druid_dots = {d.name for d in CLASSIC_DOTS["Druid"]}
+        assert "Rake" in druid_dots
+        assert "Rip" in druid_dots
+        # Existing Balance dots still present
+        assert "Moonfire" in druid_dots
+        assert "Insect Swarm" in druid_dots
+
+    def test_dot_values_correct(self):
+        hunter_dots = {d.name: d for d in CLASSIC_DOTS["Hunter"]}
+        ss = hunter_dots["Serpent Sting"]
+        assert ss.spell_id == 27016
+        assert ss.duration_ms == 15000
+        assert ss.tick_interval_ms == 3000
+
+        druid_dots = {d.name: d for d in CLASSIC_DOTS["Druid"]}
+        rake = druid_dots["Rake"]
+        assert rake.spell_id == 27003
+        assert rake.duration_ms == 9000
+        assert rake.tick_interval_ms == 3000
+
+        rip = druid_dots["Rip"]
+        assert rip.spell_id == 27008
+        assert rip.duration_ms == 12000
+        assert rip.tick_interval_ms == 2000
