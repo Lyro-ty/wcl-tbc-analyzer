@@ -40,9 +40,9 @@ interrupts, dispels, DPS, and parse percentiles per boss with raid-wide totals. 
 Use this for raid summaries as well (report_code).
 - **get_ability_breakdown**: Per-ability damage/healing breakdown for a player \
 in a fight (requires table data — report_code + fight_id + player_name)
-- **get_buff_analysis**: Buff/debuff uptimes for a player in a fight. Also useful for \
-checking raid buff coverage across the roster \
-(requires table data — report_code + fight_id + player_name)
+- **get_buff_analysis**: Buff/debuff uptimes for a player in a fight. Also annotates \
+known trinket procs with expected uptime. Also useful for checking raid buff coverage \
+across the roster (requires table data — report_code + fight_id + player_name)
 - **get_death_analysis**: Detailed death recap for players in a fight \
 (requires event data — report_code + fight_id, optional player_name). Shows killing blow, \
 source, and last damage events before death.
@@ -86,9 +86,6 @@ Shows early refresh rates, clipped ticks, and timing quality. Only applies to \
 DoT specs (Warlock, Shadow Priest, Balance Druid) (report_code + fight_id + player_name).
 - **get_rotation_score**: Rule-based rotation quality score for a player in a fight. \
 Checks GCD uptime, CPM, and cooldown efficiency. Returns letter grade A-F \
-(report_code + fight_id + player_name).
-- **get_trinket_performance**: Trinket proc uptime analysis for a player in a fight. \
-Compares actual uptime against expected for known trinkets \
 (report_code + fight_id + player_name).
 - **get_enchant_gem_check**: Check a player's gear for missing enchants and gem sockets. \
 Flags enchantable slots without permanent enchants and empty gem sockets \
@@ -236,19 +233,16 @@ Skip if no DoT data available.
 highlight specific rule violations. GCD uptime targets are adjusted for encounter context \
 (e.g., Gruul ~85%, Netherspite ~70%). A/B grades are strong, C needs tuning, D/F \
 indicates fundamental rotation issues. Skip if no rotation data available.
-13. **Trinket Performance** — If trinket proc data was retrieved, evaluate trinket uptime. \
-Good trinket procs should have 20-35% uptime depending on the trinket. Low uptime may \
-indicate suboptimal trinket choices or bad RNG. Skip if no trinket data available.
-14. **Raid Buff Coverage** — If raid buff coverage data was retrieved (via get_buff_analysis), \
+13. **Raid Buff Coverage** — If raid buff coverage data was retrieved (via get_buff_analysis), \
 highlight buffs with low coverage (<50% of raid) or missing entirely. Key buffs like \
 Battle Shout, Mark of the Wild, and Blessings should cover the full raid. \
 Skip if no buff coverage data available.
-15. **Actionable Checklist** — Specific, prioritized improvement suggestions as checkboxes:
+14. **Actionable Checklist** — Specific, prioritized improvement suggestions as checkboxes:
    - [ ] Highest-impact improvement first
    - [ ] Second priority
    - [ ] Third priority
-16. **Encouragement** — Acknowledge strengths and progress
-17. **Healer Efficiency** — If analyzing a healer with overheal and resource data:
+15. **Encouragement** — Acknowledge strengths and progress
+16. **Healer Efficiency** — If analyzing a healer with overheal and resource data:
    - Overheal percentage by spell (targets: Holy Paladin ~20%, Resto Druid ~45%)
    - Mana management (time at zero mana, innervate/mana pot usage)
    - Spell selection (right spells for the situation)

@@ -489,15 +489,6 @@ class RotationScoreResponse(BaseModel):
     violations_json: str | None
 
 
-class TrinketProcResponse(BaseModel):
-    player_name: str
-    trinket_name: str
-    spell_id: int
-    uptime_pct: float
-    expected_uptime_pct: float
-    grade: str
-
-
 class PhaseMetricResponse(BaseModel):
     player_name: str
     phase_name: str

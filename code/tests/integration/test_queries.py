@@ -425,15 +425,6 @@ async def test_player_fight_info_query(session):
 
 
 @pytest.mark.integration
-async def test_player_buffs_for_trinkets_query(session):
-    """PLAYER_BUFFS_FOR_TRINKETS query executes without syntax error."""
-    await session.execute(
-        q.PLAYER_BUFFS_FOR_TRINKETS,
-        {"report_code": "test", "fight_id": 0, "player_name": "%test%"},
-    )
-
-
-@pytest.mark.integration
 async def test_cast_events_for_phases_query(session):
     """CAST_EVENTS_FOR_PHASES query executes without syntax error."""
     await session.execute(

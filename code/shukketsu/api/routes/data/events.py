@@ -1,4 +1,4 @@
-"""Event-data endpoints: cast timeline, cooldowns, resources, DoT, rotation, trinkets."""
+"""Event-data endpoints: cast timeline, cooldowns, resources, DoT, rotation."""
 
 import json
 import logging
@@ -18,7 +18,6 @@ from shukketsu.api.models import (
     PhaseMetricResponse,
     ResourceSnapshotResponse,
     RotationScoreResponse,
-    TrinketProcResponse,
 )
 from shukketsu.db import queries as q
 
@@ -334,56 +333,6 @@ async def fight_rotation_score(
         raise
     except Exception:
         logger.exception("Failed to get rotation score")
-        raise HTTPException(status_code=500, detail="Internal server error") from None
-
-
-@router.get(
-    "/reports/{report_code}/fights/{fight_id}/trinkets/{player}",
-    response_model=list[TrinketProcResponse],
-)
-async def fight_trinket_procs(
-    report_code: str, fight_id: int, player: str,
-    session: AsyncSession = Depends(get_db),
-):
-    """Track trinket proc uptimes for a player in a fight."""
-    from shukketsu.pipeline.constants import CLASSIC_TRINKETS
-
-    try:
-        result = await session.execute(
-            q.PLAYER_BUFFS_FOR_TRINKETS,
-            {"report_code": report_code, "fight_id": fight_id,
-             "player_name": player},
-        )
-        rows = result.fetchall()
-
-        entries = []
-        for r in rows:
-            trinket_def = CLASSIC_TRINKETS.get(r.spell_id)
-            if not trinket_def:
-                continue
-
-            actual = float(r.uptime_pct)
-            expected = trinket_def.expected_uptime_pct
-
-            if actual >= expected:
-                grade = "EXCELLENT"
-            elif actual >= expected * 0.8:
-                grade = "GOOD"
-            else:
-                grade = "POOR"
-
-            entries.append(TrinketProcResponse(
-                player_name=player,
-                trinket_name=trinket_def.name,
-                spell_id=r.spell_id,
-                uptime_pct=round(actual, 1),
-                expected_uptime_pct=expected,
-                grade=grade,
-            ))
-
-        return entries
-    except Exception:
-        logger.exception("Failed to get trinket procs")
         raise HTTPException(status_code=500, detail="Internal server error") from None
 
 

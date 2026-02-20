@@ -40,7 +40,6 @@ from shukketsu.agent.tools.table_tools import (
     get_ability_breakdown,
     get_buff_analysis,
     get_overheal_analysis,
-    get_trinket_performance,
 )
 
 ALL_TOOLS = [
@@ -60,11 +59,10 @@ ALL_TOOLS = [
     compare_raid_to_top,
     compare_two_raids,
     get_raid_execution,
-    # Table-data tools (4)
+    # Table-data tools (3)
     get_ability_breakdown,
     get_buff_analysis,
     get_overheal_analysis,
-    get_trinket_performance,
     # Event-data tools (11)
     get_death_analysis,
     get_activity_report,
@@ -105,7 +103,6 @@ __all__ = [
     "get_ability_breakdown",
     "get_buff_analysis",
     "get_overheal_analysis",
-    "get_trinket_performance",
     # Event-data tools
     "get_death_analysis",
     "get_activity_report",

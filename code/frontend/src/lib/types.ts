@@ -347,15 +347,6 @@ export interface RotationScoreEntry {
   violations_json: string | null
 }
 
-export interface TrinketProc {
-  player_name: string
-  trinket_name: string
-  spell_id: number
-  uptime_pct: number
-  expected_uptime_pct: number
-  grade: string
-}
-
 export interface DashboardStats {
   total_reports: number
   total_kills: number

@@ -1,6 +1,6 @@
-"""Table-data SQL queries for --with-tables agent tools (4 queries).
+"""Table-data SQL queries for --with-tables agent tools (3 queries).
 
-Used by: agent/tools/table_tools.py, api/routes/data/events.py
+Used by: agent/tools/table_tools.py
 """
 
 from sqlalchemy import text
@@ -9,7 +9,6 @@ __all__ = [
     "ABILITY_BREAKDOWN",
     "BUFF_ANALYSIS",
     "OVERHEAL_ANALYSIS",
-    "PLAYER_BUFFS_FOR_TRINKETS",
 ]
 
 ABILITY_BREAKDOWN = text("""
@@ -50,14 +49,4 @@ OVERHEAL_ANALYSIS = text("""
       AND am.metric_type = 'healing'
       AND am.total > 0
     ORDER BY am.total DESC
-""")
-
-PLAYER_BUFFS_FOR_TRINKETS = text("""
-    SELECT bu.ability_name, bu.spell_id, bu.uptime_pct
-    FROM buff_uptimes bu
-    JOIN fights f ON bu.fight_id = f.id
-    WHERE f.report_code = :report_code
-      AND f.fight_id = :fight_id
-      AND bu.player_name ILIKE :player_name
-      AND bu.metric_type = 'buff'
 """)

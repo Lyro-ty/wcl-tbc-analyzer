@@ -316,10 +316,6 @@ export async function fetchRotationScore(
   )
 }
 
-export async function fetchTrinketProcs(code: string, fightId: number, player: string): Promise<import('./types').TrinketProc[]> {
-  return fetchJson(`/api/data/reports/${code}/fights/${fightId}/trinkets/${encodeURIComponent(player)}`)
-}
-
 export async function getDashboardStats(): Promise<import('./types').DashboardStats> {
   return fetchJson('/api/data/dashboard/stats')
 }

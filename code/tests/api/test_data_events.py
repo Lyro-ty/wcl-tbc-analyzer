@@ -296,18 +296,3 @@ async def test_rotation_score_violations(client, mock_session):
     assert "CPM" in data["violations_json"]
 
 
-# ---------------------------------------------------------------------------
-# GET /api/data/reports/{code}/fights/{id}/trinkets/{player}
-# ---------------------------------------------------------------------------
-
-async def test_trinket_procs_empty(client, mock_session):
-    """Returns empty list when no trinket buffs found."""
-    mock_result = MagicMock()
-    mock_result.fetchall.return_value = []
-    mock_session.execute = AsyncMock(return_value=mock_result)
-
-    resp = await client.get(
-        "/api/data/reports/abc123/fights/1/trinkets/Lyro"
-    )
-    assert resp.status_code == 200
-    assert resp.json() == []

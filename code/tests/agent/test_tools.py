@@ -35,7 +35,7 @@ class TestToolDecorators:
             assert tool.description, f"{tool.name} has no description"
 
     def test_expected_tool_count(self):
-        assert len(ALL_TOOLS) == 31
+        assert len(ALL_TOOLS) == 30
 
     def test_tool_names(self):
         names = {t.name for t in ALL_TOOLS}
@@ -50,7 +50,7 @@ class TestToolDecorators:
             "get_wipe_progression", "get_regressions",
             "resolve_my_fights", "get_gear_changes", "get_phase_analysis",
             "get_resource_usage", "get_dot_management",
-            "get_rotation_score", "get_trinket_performance",
+            "get_rotation_score",
             "get_enchant_gem_check",
             "get_encounter_benchmarks", "get_spec_benchmark",
         }
@@ -440,6 +440,37 @@ class TestGetBuffAnalysis:
             )
 
         assert "table data" in result.lower() or "not have been ingested" in result.lower()
+
+    async def test_trinket_annotation(self):
+        """Known trinket procs are annotated with expected uptime."""
+        mock_rows = [
+            MagicMock(
+                player_name="TestWarr", metric_type="buff",
+                ability_name="Dragonspine Trophy", spell_id=28830,
+                uptime_pct=20.0, stack_count=0,
+            ),
+            MagicMock(
+                player_name="TestWarr", metric_type="buff",
+                ability_name="Battle Shout", spell_id=2048,
+                uptime_pct=95.0, stack_count=0,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
+            result = await get_buff_analysis.ainvoke(
+                {"report_code": "abc123", "fight_id": 1, "player_name": "TestWarr"}
+            )
+
+        assert "trinket proc, expected ~22%" in result
+        assert "Dragonspine Trophy" in result
+        # Non-trinket buff should NOT have trinket annotation
+        assert "Battle Shout" in result
+        assert result.count("trinket proc") == 1
 
 
 class TestGetMyPerformanceBestsOnly:

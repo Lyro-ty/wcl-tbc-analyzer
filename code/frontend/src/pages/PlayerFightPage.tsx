@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, Swords, Heart, HeartCrack, Shield, Sparkles, Skull, Activity, Timer, ClipboardCheck, Ban, ListOrdered, Gauge, Layers, RotateCcw, Target, Gem } from 'lucide-react'
+import { ArrowLeft, Loader2, Swords, Heart, HeartCrack, Shield, Sparkles, Skull, Activity, Timer, ClipboardCheck, Ban, ListOrdered, Gauge, Layers, RotateCcw, Target } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   fetchCancelledCasts,
@@ -15,7 +15,6 @@ import {
   fetchPlayerAbilities,
   fetchPlayerBuffs,
   fetchResourceUsage,
-  fetchTrinketProcs,
   getFightDetails,
 } from '../lib/api'
 import type { AbilityMetric, FightPlayer } from '../lib/types'
@@ -33,7 +32,6 @@ import CastTimeline from '../components/charts/CastTimeline'
 import ConsumableCheck from '../components/ConsumableCheck'
 import DeathRecap from '../components/DeathRecap'
 import OverhealChart from '../components/charts/OverhealChart'
-import TrinketChart from '../components/charts/TrinketChart'
 import DataTable, { type Column } from '../components/ui/DataTable'
 import ErrorBoundary from '../components/ui/ErrorBoundary'
 import QuickAction from '../components/ui/QuickAction'
@@ -129,12 +127,6 @@ export default function PlayerFightPage() {
   // Load rotation score (event data)
   const { data: rotationScore } = useApiQuery(
     () => fetchRotationScore(code!, fightIdNum, player!).catch(() => null),
-    [code, fightId, player],
-  )
-
-  // Load trinket proc data
-  const { data: trinketProcs } = useApiQuery(
-    () => fetchTrinketProcs(code!, fightIdNum, player!).catch(() => []),
     [code, fightId, player],
   )
 
@@ -569,20 +561,6 @@ export default function PlayerFightPage() {
         </div>
       )}
 
-      {/* Trinket Procs */}
-      {trinketProcs && trinketProcs.length > 0 && (
-        <div className="mb-8">
-          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-200">
-            <Gem className="h-5 w-5 text-emerald-400" />
-            Trinket Performance
-          </h2>
-          <ErrorBoundary>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-              <TrinketChart data={trinketProcs} />
-            </div>
-          </ErrorBoundary>
-        </div>
-      )}
     </div>
   )
 }

@@ -1,7 +1,8 @@
-"""Table-data agent tools requiring --with-tables ingestion (4 tools)."""
+"""Table-data agent tools requiring --with-tables ingestion (3 tools)."""
 
 from shukketsu.agent.tool_utils import TABLE_DATA_HINT, db_tool, grade_above, wildcard
 from shukketsu.db import queries as q
+from shukketsu.pipeline.constants import CLASSIC_TRINKETS
 
 
 @db_tool
@@ -60,7 +61,8 @@ async def get_buff_analysis(
     """Get a player's buff and debuff uptimes for a specific fight.
     Shows buff/debuff uptime percentages to identify missing buffs or low
     uptimes. Use this to analyze buff management, consumable usage, and debuff
-    application. Requires table data to have been ingested with --with-tables."""
+    application. Also annotates known trinket procs with expected uptime.
+    Requires table data to have been ingested with --with-tables."""
     result = await session.execute(
         q.BUFF_ANALYSIS,
         {"report_code": report_code, "fight_id": fight_id,
@@ -85,10 +87,18 @@ async def get_buff_analysis(
         lines.append("Buffs:")
         for r in buff_rows[:15]:
             tier = grade_above(r.uptime_pct, [(90, "HIGH"), (50, "MED")], "LOW")
-            lines.append(
-                f"  [{tier}] {r.ability_name} | "
-                f"Uptime: {r.uptime_pct}%"
-            )
+            trinket = CLASSIC_TRINKETS.get(r.spell_id)
+            if trinket:
+                lines.append(
+                    f"  [{tier}] {r.ability_name} | "
+                    f"Uptime: {r.uptime_pct}% "
+                    f"(trinket proc, expected ~{trinket.expected_uptime_pct:.0f}%)"
+                )
+            else:
+                lines.append(
+                    f"  [{tier}] {r.ability_name} | "
+                    f"Uptime: {r.uptime_pct}%"
+                )
 
     if debuff_rows:
         lines.append("\nDebuffs applied:")
@@ -146,54 +156,4 @@ async def get_overheal_analysis(
             f"Overheal: {overheal_amt:,} ({oh_pct:.1f}%){flag}"
         )
 
-    return "\n".join(lines)
-
-
-@db_tool
-async def get_trinket_performance(
-    session, report_code: str, fight_id: int, player_name: str,
-) -> str:
-    """Get trinket proc uptime analysis for a player in a fight.
-    Compares actual uptime against expected for known trinkets.
-    Requires table data ingestion."""
-    from shukketsu.pipeline.constants import CLASSIC_TRINKETS
-
-    result = await session.execute(
-        q.PLAYER_BUFFS_FOR_TRINKETS,
-        {"report_code": report_code, "fight_id": fight_id,
-         "player_name": wildcard(player_name)},
-    )
-    rows = result.fetchall()
-
-    entries = []
-    for r in rows:
-        trinket_def = CLASSIC_TRINKETS.get(r.spell_id)
-        if not trinket_def:
-            continue
-
-        actual = float(r.uptime_pct)
-        expected = trinket_def.expected_uptime_pct
-
-        grade = grade_above(
-            actual, [(expected, "EXCELLENT"), (expected * 0.8, "GOOD")], "POOR",
-        )
-
-        entries.append(
-            f"  [{grade}] {trinket_def.name}: Uptime {actual:.1f}% "
-            f"(expected {expected:.0f}%)"
-        )
-
-    if not entries:
-        return (
-            f"No known trinket procs found for '{player_name}' in "
-            f"fight {fight_id} of report {report_code}. Either the "
-            f"player has no tracked trinkets or table data has not "
-            f"been ingested yet."
-        )
-
-    lines = [
-        f"Trinket performance for {player_name} in "
-        f"{report_code}#{fight_id}:\n"
-    ]
-    lines.extend(entries)
     return "\n".join(lines)
