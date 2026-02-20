@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Architecture:** Three-layer monolith:
 1. **Data pipeline** — Python scripts + pipeline modules pull from WCL GraphQL API v2 into PostgreSQL
-2. **FastAPI server** — serves REST API (54 endpoints), health, analysis; lifespan wires DB + LLM + agent + auto-ingest
+2. **FastAPI server** — serves REST API (61 endpoints), health, analysis; lifespan wires DB + LLM + agent + auto-ingest
 3. **LangGraph agent** — CRAG pattern: route → query DB (via tools) → grade → analyze → END
 4. **React frontend** — TypeScript + Tailwind CSS dashboard with 15 pages (charts via Recharts)
 
@@ -62,7 +62,7 @@ code/
 │   │       ├── table_data.py   # Table-data queries (4)
 │   │       ├── event.py        # Event-data queries (16)
 │   │       └── api.py          # REST API queries (23)
-│   ├── pipeline/           # Data transformation (16 modules)
+│   ├── pipeline/           # Data transformation (17 modules)
 │   │   ├── ingest.py       # WCL response → DB rows (delete-then-insert, supports --with-tables/--with-events)
 │   │   ├── normalize.py    # Fight normalization (DPS/HPS calc, boss detection)
 │   │   ├── characters.py   # Character registration + retroactive fight_performances marking
@@ -71,27 +71,29 @@ code/
 │   │   ├── rankings.py     # Top rankings ingestion (delete-then-insert, staleness checks)
 │   │   ├── seeds.py        # Encounter seed data (upsert from WCL API or manual list)
 │   │   ├── speed_rankings.py # Speed (kill time) rankings ingestion from fightRankings API
+│   │   ├── benchmarks.py   # Benchmark pipeline: discover top reports → ingest → compute aggregates
 │   │   ├── table_data.py   # WCL table() API → ability_metrics + buff_uptimes (per-fight)
 │   │   ├── combatant_info.py # WCL CombatantInfo events → fight_consumables + gear_snapshots
 │   │   ├── death_events.py  # WCL Death events → death_details (per-fight)
 │   │   ├── cast_events.py   # WCL Cast events → cast_events + cast_metrics + cooldown_usage + cancelled_casts
 │   │   ├── resource_events.py # WCL Resource events → resource_snapshots (per-fight)
-│   │   ├── auto_ingest.py   # Background polling service for guild report auto-ingestion
+│   │   ├── auto_ingest.py   # Background polling + weekly benchmark auto-refresh
 │   │   ├── discord_format.py # Discord export formatting for raid summaries
 │   │   └── summaries.py     # Report/raid night summary generation
 │   ├── agent/              # LangGraph agent
 │   │   ├── llm.py          # LLM client (ChatOpenAI pointing at ollama)
 │   │   ├── tool_utils.py   # @db_tool decorator, session wiring, helper functions
-│   │   ├── tools/          # 30 agent tools (domain-grouped, @db_tool decorated)
-│   │   │   ├── player_tools.py  # 11 player/encounter tools
-│   │   │   ├── raid_tools.py    # 3 raid comparison tools
-│   │   │   ├── table_tools.py   # 4 table-data tools
-│   │   │   └── event_tools.py   # 12 event-data tools
+│   │   ├── tools/          # 32 agent tools (domain-grouped, @db_tool decorated)
+│   │   │   ├── player_tools.py    # 11 player/encounter tools
+│   │   │   ├── raid_tools.py      # 3 raid comparison tools
+│   │   │   ├── table_tools.py     # 4 table-data tools
+│   │   │   ├── event_tools.py     # 12 event-data tools
+│   │   │   └── benchmark_tools.py # 2 benchmark tools
 │   │   ├── utils.py        # strip_think_tags() for Nemotron output cleanup
 │   │   ├── state.py        # AnalyzerState (extends MessagesState)
 │   │   ├── prompts.py      # System prompts and templates
 │   │   └── graph.py        # CRAG state graph (6 nodes, MAX_RETRIES=2)
-│   ├── api/                # FastAPI layer (54 endpoints across 9 route files)
+│   ├── api/                # FastAPI layer (61 endpoints across 10 route files)
 │   │   ├── app.py          # App factory + lifespan (wires DB, LLM, graph, auto-ingest)
 │   │   ├── deps.py         # Dependency injection
 │   │   └── routes/
@@ -104,11 +106,14 @@ code/
 │   │           ├── characters.py   # Character management + progression (9 endpoints)
 │   │           ├── events.py       # Event-data endpoints (10 endpoints)
 │   │           ├── rankings.py     # Rankings + leaderboards (4 endpoints)
-│   │           └── comparison.py   # Raid comparisons (2 endpoints)
-│   └── scripts/            # CLI entry points (7 total, registered in pyproject.toml)
+│   │           ├── comparison.py   # Raid comparisons (2 endpoints)
+│   │           └── benchmarks.py  # Benchmark data + watched guilds (7 endpoints)
+│   └── scripts/            # CLI entry points (9 total, registered in pyproject.toml)
 │       ├── pull_my_logs.py       # pull-my-logs: fetch report data from WCL
 │       ├── pull_rankings.py      # pull-rankings: fetch top rankings per encounter/spec
 │       ├── pull_speed_rankings.py # pull-speed-rankings: fetch speed (kill time) rankings
+│       ├── pull_benchmarks.py    # pull-benchmarks: pull top guild reports and compute benchmarks
+│       ├── manage_watched_guilds.py # manage-watched-guilds: manage guild watchlist
 │       ├── register_character.py # register-character: register tracked characters
 │       ├── seed_encounters.py    # seed-encounters: bootstrap encounter table from WCL
 │       ├── snapshot_progression.py # snapshot-progression: compute progression snapshots
@@ -153,7 +158,7 @@ Tools use a **module-level global** pattern via `tool_utils.py` — no DI framew
 3. Individual tool functions receive a `session` arg automatically — no manual session management
 4. The compiled graph and its tools are also injected into the analyze route via `set_graph()`
 
-## Agent tools (30 total)
+## Agent tools (32 total)
 
 ### Player/encounter-level tools
 | Tool | Purpose |
@@ -201,9 +206,15 @@ Tools use a **module-level global** pattern via `tool_utils.py` — no DI framew
 | `get_phase_analysis` | Per-phase fight breakdown with player performance |
 | `get_enchant_gem_check` | Enchant/gem validation (flags missing enchants, empty gem sockets) |
 
-Tools are in `code/shukketsu/agent/tools/` (4 domain-grouped modules), SQL queries (raw `text()` with named params, PostgreSQL-specific) in `code/shukketsu/db/queries/` (5 domain-grouped modules).
+### Benchmark tools
+| Tool | Purpose |
+|------|---------|
+| `get_encounter_benchmarks` | Overall encounter benchmarks from top guild kills (kill stats, deaths, consumables, composition, DPS targets) |
+| `get_spec_benchmark` | Spec-specific performance targets (DPS, GCD uptime, top abilities, buff uptimes, cooldown efficiency) |
 
-## Database schema (18 tables)
+Tools are in `code/shukketsu/agent/tools/` (5 domain-grouped modules), SQL queries (raw `text()` with named params, PostgreSQL-specific) in `code/shukketsu/db/queries/` (6 domain-grouped modules).
+
+## Database schema (21 tables)
 
 ### Core tables
 - `encounters` — WCL encounter definitions (PK: WCL encounter ID, not auto-increment)
@@ -229,8 +240,13 @@ Tools are in `code/shukketsu/agent/tools/` (4 domain-grouped modules), SQL queri
 - `fight_consumables` — consumable buffs active per player per fight
 - `gear_snapshots` — per-slot gear snapshots with enchant/gem data from CombatantInfo events
 
+### Benchmark tables
+- `watched_guilds` — guild watchlist for benchmark tracking (name, WCL guild ID, server)
+- `benchmark_reports` — tracks which top reports have been ingested for benchmarks
+- `encounter_benchmarks` — pre-computed aggregate benchmarks per encounter (JSON column)
+
 **Key DB patterns:**
-- `session.merge()` used for idempotent upserts (encounters, reports, snapshots, characters)
+- `session.merge()` used for idempotent upserts (encounters, reports, snapshots, characters, benchmarks)
 - Report ingestion uses **delete-then-insert** for fights+performances, `session.merge()` for the report itself
 - Rankings use **delete-then-insert** refresh with staleness checks (default 24h)
 - Speed rankings follow the same delete-then-insert + staleness pattern, one API call per encounter
@@ -256,6 +272,10 @@ Uses nested pydantic-settings with `env_nested_delimiter="__"`:
 - `LANGFUSE__ENABLED` — Enable Langfuse tracing (default: `false`)
 - `LANGFUSE__PUBLIC_KEY`, `LANGFUSE__SECRET_KEY` — Langfuse API keys (from Langfuse UI project settings)
 - `LANGFUSE__HOST` — Langfuse endpoint (default: `http://localhost:3000`)
+- `BENCHMARK__ENABLED` — Enable benchmark auto-refresh (default: `true`)
+- `BENCHMARK__REFRESH_INTERVAL_DAYS` — Days between auto-refresh (default: `7`)
+- `BENCHMARK__MAX_REPORTS_PER_ENCOUNTER` — Top reports to ingest per encounter (default: `10`)
+- `BENCHMARK__ZONE_IDS` — Zones for benchmarks (default: all)
 
 Config lives in `.env` (gitignored). Template in `.env.example`. Settings are `@lru_cache(maxsize=1)` — loaded once per process.
 
@@ -296,6 +316,12 @@ pull-speed-rankings --zone-id 1047 --force
 register-character --name Lyro --server Whitemane --region US --class-name Warrior --spec Arms
 seed-encounters --zone-ids 1047,1048
 snapshot-progression --character Lyro
+pull-benchmarks                                   # Full: discover top reports → ingest → compute
+pull-benchmarks --compute-only                    # Recompute from existing ingested data
+pull-benchmarks --encounter "Gruul" --zone-id 1048
+manage-watched-guilds --add "APES" --guild-id 12345 --server whitemane --region US
+manage-watched-guilds --list
+manage-watched-guilds --remove "APES"
 
 # Test the agent
 curl -X POST http://localhost:8000/api/analyze \

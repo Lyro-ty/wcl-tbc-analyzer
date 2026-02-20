@@ -247,8 +247,8 @@ Skip if no buff coverage data available.
    - [ ] Highest-impact improvement first
    - [ ] Second priority
    - [ ] Third priority
-17. **Encouragement** — Acknowledge strengths and progress
-18. **Healer Efficiency** — If analyzing a healer with overheal and resource data:
+16. **Encouragement** — Acknowledge strengths and progress
+17. **Healer Efficiency** — If analyzing a healer with overheal and resource data:
    - Overheal percentage by spell (targets: Holy Paladin ~20%, Resto Druid ~45%)
    - Mana management (time at zero mana, innervate/mana pot usage)
    - Spell selection (right spells for the situation)
