@@ -107,6 +107,49 @@ class TestRoleAwareQueries:
         assert "fp.hps" in query_text
 
 
+class TestSpecLeaderboardQuery:
+    """Verify SPEC_LEADERBOARD includes healers and has median_hps."""
+
+    def test_includes_healers_via_hps_filter(self):
+        """Filter must allow rows where hps > 0 (healers have dps = 0)."""
+        from shukketsu.db.queries.player import SPEC_LEADERBOARD
+        sql = SPEC_LEADERBOARD.text
+        assert "(fp.dps > 0 OR fp.hps > 0)" in sql
+        # Must NOT have the old healer-excluding filter
+        assert "AND fp.dps > 0\n" not in sql
+
+    def test_has_median_hps(self):
+        """Leaderboard must compute median_hps alongside median_dps."""
+        from shukketsu.db.queries.player import SPEC_LEADERBOARD
+        sql = SPEC_LEADERBOARD.text
+        assert "median_hps" in sql
+
+    def test_orders_by_greatest_metric(self):
+        """ORDER BY must use GREATEST for mixed roles."""
+        from shukketsu.db.queries.player import SPEC_LEADERBOARD
+        sql = SPEC_LEADERBOARD.text
+        assert "GREATEST(AVG(fp.dps), AVG(fp.hps))" in sql
+
+
+class TestFightDetailsQuery:
+    """Verify FIGHT_DETAILS orders by GREATEST for mixed roles."""
+
+    def test_orders_by_greatest_metric(self):
+        """Healers should not always sort to the bottom."""
+        from shukketsu.db.queries.player import FIGHT_DETAILS
+        sql = FIGHT_DETAILS.text
+        assert "GREATEST(fp.dps, fp.hps)" in sql
+
+
+class TestMyRecentKillsQuery:
+    """Verify MY_RECENT_KILLS includes player_spec for role detection."""
+
+    def test_has_player_spec(self):
+        from shukketsu.db.queries.player import MY_RECENT_KILLS
+        sql = MY_RECENT_KILLS.text
+        assert "fp.player_spec" in sql
+
+
 class TestGearChangesQuery:
     def test_uses_min_id_not_min_fight_id(self):
         """GEAR_CHANGES should use MIN(f2.id) for stable ordering."""

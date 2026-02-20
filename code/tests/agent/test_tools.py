@@ -668,8 +668,11 @@ class TestGetRegressions:
                 baseline_parse=90.2,
                 recent_dps=1205.3,
                 baseline_dps=1890.0,
+                recent_hps=0.0,
+                baseline_hps=0.0,
                 parse_delta=-18.2,
                 dps_delta_pct=-36.2,
+                hps_delta_pct=None,
             ),
             MagicMock(
                 player_name="Lyro",
@@ -678,8 +681,11 @@ class TestGetRegressions:
                 baseline_parse=70.1,
                 recent_dps=1650.0,
                 baseline_dps=1350.0,
+                recent_hps=0.0,
+                baseline_hps=0.0,
                 parse_delta=18.4,
                 dps_delta_pct=22.2,
+                hps_delta_pct=None,
             ),
         ]
         mock_result = MagicMock()
@@ -711,8 +717,11 @@ class TestGetRegressions:
                 baseline_parse=90.2,
                 recent_dps=1205.3,
                 baseline_dps=1890.0,
+                recent_hps=0.0,
+                baseline_hps=0.0,
                 parse_delta=-18.2,
                 dps_delta_pct=-36.2,
+                hps_delta_pct=None,
             ),
         ]
         mock_result = MagicMock()
@@ -765,8 +774,11 @@ class TestGetRegressions:
                 baseline_parse=90.2,
                 recent_dps=1205.3,
                 baseline_dps=0.0,
+                recent_hps=0.0,
+                baseline_hps=0.0,
                 parse_delta=-18.2,
                 dps_delta_pct=None,
+                hps_delta_pct=None,
             ),
         ]
         mock_result = MagicMock()

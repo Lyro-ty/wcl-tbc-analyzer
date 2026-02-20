@@ -346,9 +346,11 @@ async def resolve_my_fights(
             f"{r.parse_percentile}%"
             if r.parse_percentile is not None else "N/A"
         )
+        label, _ = _metric_label(r.player_spec)
+        val = r.hps if label == "HPS" else r.dps
         lines.append(
             f"  {i}. {r.encounter_name} — report {r.report_code} fight "
-            f"#{r.fight_id} | DPS: {r.dps:,.1f} | Parse: {parse_str} | "
+            f"#{r.fight_id} | {label}: {val:,.1f} | Parse: {parse_str} | "
             f"{duration}"
         )
     return "\n".join(lines)
@@ -430,11 +432,28 @@ async def get_regressions(
             direction = "IMPROVEMENT"
             delta_str = f"up {r.parse_delta} pts"
 
-        dps_str = f"{r.recent_dps:,.1f}"
-        baseline_dps_str = f"{r.baseline_dps:,.1f}"
-        dps_delta = (
-            f"{r.dps_delta_pct:+.1f}%"
-            if r.dps_delta_pct is not None
+        # Show HPS for healers (hps > dps), DPS otherwise
+        is_healer = (
+            r.recent_hps is not None
+            and r.recent_dps is not None
+            and r.recent_hps > r.recent_dps
+        )
+        if is_healer:
+            metric_label = "HPS"
+            recent_val = r.recent_hps
+            baseline_val = r.baseline_hps
+            delta_pct = r.hps_delta_pct
+        else:
+            metric_label = "DPS"
+            recent_val = r.recent_dps
+            baseline_val = r.baseline_dps
+            delta_pct = r.dps_delta_pct
+
+        val_str = f"{recent_val:,.1f}"
+        baseline_str = f"{baseline_val:,.1f}"
+        pct_str = (
+            f"{delta_pct:+.1f}%"
+            if delta_pct is not None
             else "N/A"
         )
 
@@ -442,6 +461,6 @@ async def get_regressions(
             f"  [{direction}] {r.player_name} on {r.encounter_name}: "
             f"Parse {r.recent_parse}% (was {r.baseline_parse}%) "
             f"-- {delta_str} | "
-            f"DPS: {dps_str} (was {baseline_dps_str}, {dps_delta})"
+            f"{metric_label}: {val_str} (was {baseline_str}, {pct_str})"
         )
     return "\n".join(lines)

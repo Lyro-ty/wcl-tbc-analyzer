@@ -85,7 +85,7 @@ FIGHT_DETAILS = text("""
     JOIN reports r ON f.report_code = r.code
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
-    ORDER BY fp.dps DESC
+    ORDER BY GREATEST(fp.dps, fp.hps) DESC
     LIMIT 50
 """)
 
@@ -133,6 +133,7 @@ SPEC_LEADERBOARD = text("""
            ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
            ROUND(MAX(fp.dps)::numeric, 1) AS max_dps,
            ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY fp.dps)::numeric, 1) AS median_dps,
+           ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY fp.hps)::numeric, 1) AS median_hps,
            ROUND(AVG(fp.hps)::numeric, 1) AS avg_hps,
            ROUND(MAX(fp.hps)::numeric, 1) AS max_hps,
            ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse,
@@ -142,10 +143,10 @@ SPEC_LEADERBOARD = text("""
     JOIN encounters e ON f.encounter_id = e.id
     WHERE e.name ILIKE :encounter_name
       AND f.kill = true
-      AND fp.dps > 0
+      AND (fp.dps > 0 OR fp.hps > 0)
     GROUP BY fp.player_class, fp.player_spec
     HAVING COUNT(*) >= 3
-    ORDER BY avg_dps DESC
+    ORDER BY GREATEST(AVG(fp.dps), AVG(fp.hps)) DESC
     LIMIT 50
 """)
 
@@ -255,7 +256,8 @@ REGRESSION_CHECK = text("""
 
 MY_RECENT_KILLS = text("""
     SELECT f.report_code, f.fight_id, e.name AS encounter_name,
-           fp.dps, fp.hps, fp.parse_percentile, fp.deaths, fp.item_level,
+           fp.player_spec, fp.dps, fp.hps, fp.parse_percentile,
+           fp.deaths, fp.item_level,
            f.duration_ms, r.title AS report_title, r.start_time AS report_time
     FROM fight_performances fp
     JOIN fights f ON fp.fight_id = f.id
