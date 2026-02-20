@@ -7,8 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class WCLConfig(BaseModel):
     client_id: str = ""
     client_secret: SecretStr = SecretStr("")
-    api_url: str = "https://www.warcraftlogs.com/api/v2/client"
-    oauth_url: str = "https://www.warcraftlogs.com/oauth/token"
+    api_url: str = "https://fresh.warcraftlogs.com/api/v2/client"
+    oauth_url: str = "https://fresh.warcraftlogs.com/oauth/token"
 
 
 class DatabaseConfig(BaseModel):
