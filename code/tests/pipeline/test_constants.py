@@ -124,6 +124,17 @@ class TestConsumableSpellIds:
                         f" expected 28491"
                     )
 
+    def test_melee_and_ranged_have_flask_option(self):
+        """melee_dps and ranged_dps should include Flask of Relentless Assault."""
+        for role in ("melee_dps", "ranged_dps"):
+            flask_ids = {
+                c.spell_id for c in REQUIRED_CONSUMABLES[role]
+                if c.category == "flask"
+            }
+            assert 28520 in flask_ids, (
+                f"Role '{role}' missing Flask of Relentless Assault (28520)"
+            )
+
     def test_required_flasks_are_tbc(self):
         """Required flasks should be TBC, not Classic."""
         tbc_flask_ids = {28518, 28519, 28520, 28521, 28540}

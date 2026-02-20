@@ -386,6 +386,7 @@ REQUIRED_CONSUMABLES: dict[str, list[ConsumableDef]] = {
         ConsumableDef(43764, "Well Fed (AP)", "food", 80.0),
     ],
     "melee_dps": [
+        ConsumableDef(28520, "Flask of Relentless Assault", "flask", 80.0),
         ConsumableDef(17538, "Elixir of the Mongoose", "battle_elixir", 80.0),
         ConsumableDef(28490, "Elixir of Major Agility", "battle_elixir", 80.0),
         ConsumableDef(11334, "Elixir of Greater Agility", "battle_elixir", 80.0),
@@ -393,6 +394,7 @@ REQUIRED_CONSUMABLES: dict[str, list[ConsumableDef]] = {
         ConsumableDef(22730, "Scroll of Strength V", "scroll", 80.0),
     ],
     "ranged_dps": [
+        ConsumableDef(28520, "Flask of Relentless Assault", "flask", 80.0),
         ConsumableDef(28490, "Elixir of Major Agility", "battle_elixir", 80.0),
     ],
     "caster_dps": [
