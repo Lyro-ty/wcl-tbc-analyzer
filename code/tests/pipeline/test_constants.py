@@ -398,6 +398,24 @@ class TestSpecRules:
                 f"{key}: key_abilities should be tuple, got {type(rules.key_abilities)}"
             )
 
+    def test_no_passive_procs_in_key_abilities(self):
+        """Key abilities must be active casts, not passive procs."""
+        passive_procs = {"Windfury", "Windfury Weapon"}
+        for key, rules in SPEC_ROTATION_RULES.items():
+            for ab in rules.key_abilities:
+                assert ab not in passive_procs, (
+                    f"{key}: '{ab}' is a passive proc, not a castable ability"
+                )
+
+    def test_survival_hunter_is_ranged(self):
+        """Survival Hunter should not have melee-only abilities as key."""
+        rules = SPEC_ROTATION_RULES[("Hunter", "Survival")]
+        melee_only = {"Raptor Strike", "Mongoose Bite"}
+        for ab in rules.key_abilities:
+            assert ab not in melee_only, (
+                f"Survival Hunter has melee ability '{ab}' but is ranged"
+            )
+
     def test_role_default_rules_covers_all_roles(self):
         expected = {"melee_dps", "caster_dps", "ranged_dps", "healer", "tank"}
         assert set(ROLE_DEFAULT_RULES.keys()) == expected

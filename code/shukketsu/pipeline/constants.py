@@ -250,7 +250,7 @@ SPEC_ROTATION_RULES: dict[tuple[str, str], SpecRules] = {
     # --- Melee DPS ---
     ("Warrior", "Arms"): SpecRules(
         88, 28, 85, 60,
-        ("Mortal Strike", "Whirlwind", "Slam"), "melee_dps",
+        ("Mortal Strike", "Whirlwind", "Execute"), "melee_dps",
     ),
     ("Warrior", "Fury"): SpecRules(
         90, 32, 85, 60,
@@ -274,7 +274,7 @@ SPEC_ROTATION_RULES: dict[tuple[str, str], SpecRules] = {
     ),
     ("Shaman", "Enhancement"): SpecRules(
         85, 25, 80, 60,
-        ("Stormstrike", "Earth Shock", "Windfury"), "melee_dps",
+        ("Stormstrike", "Earth Shock", "Shamanistic Rage"), "melee_dps",
     ),
     ("Druid", "Feral"): SpecRules(
         88, 30, 85, 60,
@@ -291,7 +291,7 @@ SPEC_ROTATION_RULES: dict[tuple[str, str], SpecRules] = {
     ),
     ("Hunter", "Survival"): SpecRules(
         82, 22, 85, 60,
-        ("Steady Shot", "Auto Shot", "Raptor Strike"), "ranged_dps",
+        ("Steady Shot", "Auto Shot", "Multi-Shot"), "ranged_dps",
     ),
     # --- Caster DPS ---
     ("Priest", "Shadow"): SpecRules(
