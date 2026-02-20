@@ -105,6 +105,19 @@ When the user refers to "my last fight", "my recent kills", "last raid", or simi
 relative references, use the resolve_my_fights tool first to find the relevant report \
 codes and fight IDs, then use other tools with those specific identifiers.
 
+## Role Awareness
+
+When analyzing healers, focus on HPS, overheal efficiency, mana management, \
+and spell selection — not DPS. Healers with 0 DPS is normal and correct. \
+When analyzing tanks, focus on survivability, threat generation, and defensive \
+cooldown usage — not raw DPS.
+
+## TBC Game Mechanics
+
+In TBC, the Shaman interrupt is Earth Shock (rank 8), which is on the GCD and \
+costs mana. Shamans do not gain a dedicated interrupt until WotLK. Paladins \
+have no true interrupt in TBC; Hammer of Justice is a 60-second stun.
+
 ## Analysis Framework
 
 When analyzing performance, consider:
@@ -216,8 +229,9 @@ Flag significant DPS drops in non-downtime phases. Skip if no phase data availab
 GCDs and clip remaining ticks. Advise refreshing in the pandemic window (last 30% of duration). \
 Skip if no DoT data available.
 13. **Rotation Score** — If rotation score data was retrieved, present the letter grade and \
-highlight specific rule violations. A/B grades are strong, C needs tuning, D/F indicates \
-fundamental rotation issues. Skip if no rotation data available.
+highlight specific rule violations. GCD uptime targets are adjusted for encounter context \
+(e.g., Patchwerk ~100%, Sapphiron ~70%). A/B grades are strong, C needs tuning, D/F \
+indicates fundamental rotation issues. Skip if no rotation data available.
 14. **Trinket Performance** — If trinket proc data was retrieved, evaluate trinket uptime. \
 Good trinket procs should have 20-35% uptime depending on the trinket. Low uptime may \
 indicate suboptimal trinket choices or bad RNG. Skip if no trinket data available.
@@ -230,6 +244,12 @@ Skip if no buff coverage data available.
    - [ ] Second priority
    - [ ] Third priority
 17. **Encouragement** — Acknowledge strengths and progress
+18. **Healer Efficiency** — If analyzing a healer with overheal and resource data:
+   - Overheal percentage by spell (targets: Holy Paladin ~20%, Resto Druid ~45%)
+   - Mana management (time at zero mana, innervate/mana pot usage)
+   - Spell selection (right spells for the situation)
+   - Downranking efficiency (if applicable)
+   Skip if not analyzing a healer or no overheal/resource data available.
 
 Use the player's class/spec context to give spec-specific advice when possible.
 """

@@ -2451,3 +2451,29 @@ class TestRoleAwareToolDisplay:
         assert "Avg DPS: 2,500.0" in result
         # Holy Paladin shows HPS
         assert "Avg HPS: 1,200.0" in result
+
+
+class TestPromptContent:
+    def test_system_prompt_mentions_healer_hps(self):
+        from shukketsu.agent.prompts import SYSTEM_PROMPT
+        assert "HPS" in SYSTEM_PROMPT
+        assert "healer" in SYSTEM_PROMPT.lower()
+
+    def test_system_prompt_mentions_earth_shock(self):
+        from shukketsu.agent.prompts import SYSTEM_PROMPT
+        assert "Earth Shock" in SYSTEM_PROMPT
+        assert "Wind Shear" not in SYSTEM_PROMPT
+
+    def test_analysis_prompt_has_healer_section(self):
+        from shukketsu.agent.prompts import ANALYSIS_PROMPT
+        assert "overheal" in ANALYSIS_PROMPT.lower()
+        assert "mana" in ANALYSIS_PROMPT.lower()
+
+    def test_analysis_prompt_mentions_encounter_modifiers(self):
+        from shukketsu.agent.prompts import ANALYSIS_PROMPT
+        lower = ANALYSIS_PROMPT.lower()
+        assert (
+            "encounter modifier" in lower
+            or "encounter context" in lower
+            or "adjusted" in lower
+        )
