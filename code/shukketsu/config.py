@@ -51,6 +51,13 @@ class AutoIngestConfig(BaseModel):
     with_events: bool = True
 
 
+class BenchmarkConfig(BaseModel):
+    enabled: bool = True
+    refresh_interval_days: int = 7
+    max_reports_per_encounter: int = 10
+    zone_ids: list[int] = []  # Empty = all zones
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -67,6 +74,7 @@ class Settings(BaseSettings):
     langfuse: LangfuseConfig = LangfuseConfig()
     guild: GuildConfig = GuildConfig()
     auto_ingest: AutoIngestConfig = AutoIngestConfig()
+    benchmark: BenchmarkConfig = BenchmarkConfig()
 
 
 @lru_cache(maxsize=1)
