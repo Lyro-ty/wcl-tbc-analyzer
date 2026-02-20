@@ -10,9 +10,11 @@ Domain files:
     table_data.py — Table-data (--with-tables) queries (4)
     event.py      — Event-data (--with-events) queries (16)
     api.py        — REST API-only queries (23)
+    benchmark.py  — Benchmark pipeline queries (12)
 """
 
 from shukketsu.db.queries.api import *  # noqa: F401, F403
+from shukketsu.db.queries.benchmark import *  # noqa: F401, F403
 from shukketsu.db.queries.event import *  # noqa: F401, F403
 from shukketsu.db.queries.player import *  # noqa: F401, F403
 from shukketsu.db.queries.raid import *  # noqa: F401, F403
