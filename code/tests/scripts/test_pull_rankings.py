@@ -36,8 +36,8 @@ def test_parse_args_dry_run():
 
 
 def test_parse_args_zone_id():
-    args = parse_args(["--zone-id", "2018"])
-    assert args.zone_id == 2018
+    args = parse_args(["--zone-id", "1047"])
+    assert args.zone_id == 1047
 
 
 def test_parse_args_include_hps():
@@ -48,7 +48,7 @@ def test_parse_args_include_hps():
 def test_parse_args_all_options():
     args = parse_args([
         "--encounter", "Brutallus",
-        "--zone-id", "1015",
+        "--zone-id", "1048",
         "--class-name", "Warrior",
         "--spec-name", "Fury",
         "--include-hps",
@@ -57,7 +57,7 @@ def test_parse_args_all_options():
         "--dry-run",
     ])
     assert args.encounter == "Brutallus"
-    assert args.zone_id == 1015
+    assert args.zone_id == 1048
     assert args.class_name == "Warrior"
     assert args.spec_name == "Fury"
     assert args.include_hps is True
