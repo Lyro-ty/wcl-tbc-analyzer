@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-**Shukketsu Raid Analyzer** — an agentic AI tool that collects Warcraft Logs (WCL) data for World of Warcraft TBC Classic (The Burning Crusade) and provides raid improvement analysis via a LangGraph CRAG agent powered by Nemotron 3 Nano 30B (served via ollama).
+**Shukketsu Raid Analyzer** — an agentic AI tool that collects Warcraft Logs (WCL) data for World of Warcraft TBC Classic (The Burning Crusade) and provides raid improvement analysis via a LangGraph ReAct agent powered by Nemotron 3 Nano 30B (served via ollama).
 
 **Game context:** WoW TBC Classic (The Burning Crusade), Phase 1 only. TBC P1 zone IDs: Karazhan (1047), Gruul's Lair/Magtheridon (1048). Reports may contain fights from multiple zones/raids.
 
 **Architecture:** Three-layer monolith:
 1. **Data pipeline** — Python scripts + pipeline modules pull from WCL GraphQL API v2 into PostgreSQL
 2. **FastAPI server** — serves REST API (57 endpoints), health, analysis; lifespan wires DB + LLM + agent + auto-ingest
-3. **LangGraph agent** — CRAG pattern: route → query DB (via tools) → grade → analyze → END
+3. **LangGraph agent** — ReAct pattern: agent ⇄ tools → END (LLM decides when to call tools and when to respond)
 4. **React frontend** — TypeScript + Tailwind CSS dashboard with 14 pages (charts via Recharts)
 
 **Tech stack:** Python 3.12, FastAPI, LangGraph, langchain-openai (OpenAI-compatible ollama), PostgreSQL 16, SQLAlchemy 2.0 async, httpx, pydantic-settings v2, tenacity
@@ -90,8 +90,8 @@ code/
 │   │   │   └── benchmark_tools.py # 2 benchmark tools
 │   │   ├── utils.py        # strip_think_tags() for Nemotron output cleanup
 │   │   ├── state.py        # AnalyzerState (extends MessagesState)
-│   │   ├── prompts.py      # System prompts and templates
-│   │   └── graph.py        # CRAG state graph (6 nodes, MAX_RETRIES=2)
+│   │   ├── prompts.py      # SYSTEM_PROMPT (domain knowledge + analysis format + workflow patterns)
+│   │   └── graph.py        # ReAct agent graph (2 nodes: agent + tools)
 │   ├── api/                # FastAPI layer (57 endpoints across 10 route files)
 │   │   ├── app.py          # App factory + lifespan (wires DB, LLM, graph, auto-ingest)
 │   │   ├── deps.py         # Dependency injection
@@ -125,24 +125,17 @@ code/
 └── alembic/                # Database migrations (async-aware)
 ```
 
-## CRAG agent flow
+## ReAct agent flow
 
 ```
-route → query → [tool_executor if tool_calls] → grade
-                                                   ↓
-  ← rewrite ←──────────────────────────── insufficient?
-                                                   ↓
-                                                relevant
-                                                   ↓
-                                              analyze → END
+agent ⇄ tools → END
+(LLM decides when to call tools and when to respond)
 ```
 
-- **route**: Classifies query as `my_performance | comparison | trend | general`
-- **query**: LLM with bound tools retrieves data
-- **tool_executor**: ToolNode executes tool calls, results feed back to grade
-- **grade**: LLM judges data as "relevant" or "insufficient" (`_format_messages` includes ToolMessage content)
-- **rewrite**: Reformulates query, increments `retry_count`
-- **MAX_RETRIES = 2**: After 2 retries, grade forces "relevant" and proceeds
+- **agent**: LLM with bound tools (30 total). Prepends `SYSTEM_PROMPT` as system message. Normalizes Nemotron's PascalCase tool args to snake_case. If the LLM returns tool calls, routes to `tools`; otherwise routes to END.
+- **tools**: `ToolNode` executes tool calls, results feed back to `agent`.
+- **Routing**: Uses `tools_condition` from `langgraph.prebuilt` — no custom routing logic.
+- **Iteration limit**: `recursion_limit=25` (default) — allows ~12 tool-calling rounds.
 
 ## Tool ↔ DB session wiring
 
@@ -360,17 +353,18 @@ curl -X POST http://localhost:8000/api/analyze \
 
 ## Resolved issues
 
+- **CRAG → ReAct simplification (Feb 2026):** Replaced 6-node CRAG graph (route → query → grade → rewrite → analyze) with 2-node ReAct loop (agent ⇄ tools → END). Eliminated 3 decorative LLM calls per request (router, grader, rewriter). Merged `ANALYSIS_PROMPT` into `SYSTEM_PROMPT`. Dropped `query_type` from API response and frontend. Added workflow patterns to guide multi-tool chaining. Streaming now filters by `agent` node with think-tag buffer reset between turns.
 - **Dead code cleanup (Feb 2026):** Removed `discord_format.py` + `summaries.py` (deterministic summary path competing with AI agent), `get_cooldown_windows` (hardcoded fake 20% DPS gain), standalone `get_trinket_performance` (folded into `get_buff_analysis` as inline annotation), duplicate `ComparePage` (SpeedPage already covers both modes), unused `fight_phases` endpoint in `fights.py`. Fixed rotation scoring API to use spec-aware thresholds from `SPEC_ROTATION_RULES`. Added phase analysis estimation disclaimer.
-- **Think tags in output:** `strip_think_tags()` in `agent/utils.py` strips Nemotron's leaked `<think>...</think>` reasoning from API responses via regex. Imported as `_strip_think_tags` in `analyze.py` and `graph.py`.
+- **Think tags in output:** `strip_think_tags()` in `agent/utils.py` strips Nemotron's leaked `<think>...</think>` reasoning from API responses via regex. Used in `analyze.py` (API layer). Streaming resets the think-tag buffer between agent turns when the tools node fires.
 - **429 rate limits:** `WCLClient.query()` has a `tenacity` retry decorator (exponential backoff, 5 attempts) for 429, 502/503/504, connection errors, and read timeouts.
 - **Auth retry:** `_request_token()` in `auth.py` retries on 5xx responses AND `ConnectError`/`ReadTimeout` network errors (matching the client's behavior).
-- **Grader blindness:** `_format_messages()` in `graph.py` now includes `ToolMessage` content so the grader can see DB query results.
+- **Grader blindness:** (Resolved by CRAG→ReAct migration — grader node removed entirely.)
 - **Ingest idempotency:** `ingest_report()` uses delete-then-insert for fights+performances, `session.merge()` for reports — safe to re-ingest the same report.
 - **Tool error handling:** All 30 agent tools catch exceptions and return friendly error strings instead of propagating tracebacks to the LLM.
 - **Missing indexes:** Migration 003 adds indexes on `fight_performances(fight_id, player_name, class+spec)`, `fights(report_code, encounter_id)`, and `top_rankings(encounter_id, class, spec)`.
-- **Think tags in agent nodes:** `strip_think_tags()` now applied in both `route_query` and `grade_results` graph nodes, not just the API response.
+- **Think tags in agent nodes:** (Resolved by CRAG→ReAct migration — route/grade nodes removed. Think-tag stripping now only in API layer.)
 - **Tool arg case normalization:** `_normalize_tool_args()` in `graph.py` converts Nemotron's PascalCase tool argument keys to snake_case.
-- **Dead respond node:** Removed the near-noop `generate_insight` node; `analyze` now flows directly to END.
+- **Dead respond node:** (Resolved by CRAG→ReAct migration — all CRAG nodes removed.)
 - **Deaths query:** `DEATHS_AND_MECHANICS` now includes players with `deaths=0` who have interrupt/dispel contributions.
 - **Health check:** `/health` endpoint now pings the database (`SELECT 1`) and LLM (`/v1/models`) and returns 503 when either is unreachable.
 - **LLM guardrails:** `max_tokens` (4096) and `timeout` (300s) now configured on the ChatOpenAI client.
@@ -379,10 +373,10 @@ curl -X POST http://localhost:8000/api/analyze \
 - **No streaming:** `POST /api/analyze/stream` SSE endpoint streams analysis tokens via LangGraph `astream(stream_mode="messages")`. Think-tag buffering strips `<think>...</think>` before forwarding. Frontend uses `fetch` + `ReadableStream` for incremental message rendering.
 - **No event-level data:** WCL `table()` API now ingested into `ability_metrics` and `buff_uptimes` tables. WCL `events()` API ingested via `--with-events` for death recaps, cast timelines, GCD metrics, cooldown tracking, cancel rates, and resource snapshots.
 - **Context window truncation:** ollama `num_ctx` now explicitly set to 32768 via `LLM__NUM_CTX` config. Previously defaulted to 2048, causing silent context truncation.
-- **No observability:** Langfuse `CallbackHandler` traces all LLM calls, tool executions, and CRAG loop iterations. Self-hosted via `docker-compose.langfuse.yml`. Toggleable via `LANGFUSE__ENABLED`.
-- **Phantom agent prompt sections:** Sections 9-14 in ANALYSIS_PROMPT (Resource Usage, Cooldown Windows, Phase Performance, DoT Management, Rotation Score, Trinket Performance) now have matching agent tools and DB data backing them.
+- **No observability:** Langfuse `CallbackHandler` traces all LLM calls, tool executions, and ReAct loop iterations. Self-hosted via `docker-compose.langfuse.yml`. Toggleable via `LANGFUSE__ENABLED`.
+- **Phantom agent prompt sections:** All SYSTEM_PROMPT analysis sections now have matching agent tools and DB data backing them.
 - **Missing frontend API routes:** All event-data endpoints implemented: `events-available`, `cast-timeline`, `cooldown-windows`, `resources`, `dot-refreshes`, `rotation`, `trinkets`, `phases/{player}`, `event-data` backfill.
-- **Agent tool gaps:** Tools consolidated to 30 (removed 2 overlapping, added 6 new). All 17 ANALYSIS_PROMPT sections now have corresponding tools.
+- **Agent tool gaps:** Tools consolidated to 30 (removed 2 overlapping, added 6 new). All SYSTEM_PROMPT analysis sections now have corresponding tools.
 - **Case-insensitive player matching:** All SQL queries use `ILIKE` for `player_name`/`character_name`. Agent tools wrap with `%` wildcards. Character registration uses `func.lower()` for retroactive marking. Ingest pipeline uses lowercase set for `is_my_character` check.
 - **Consumable name mismatches:** Fixed 4 incorrect spell ID → name mappings in `CONSUMABLE_CATEGORIES` (28490, 28502, 28509, 28514).
 - **Enchantable slots:** Corrected from `{0,2,4,5,7,8,9,11,14,15}` to `{0,2,4,6,7,8,9,14,15}` — waist (5) cannot be enchanted, legs (6) can, rings (10-11) are enchanter-only.
