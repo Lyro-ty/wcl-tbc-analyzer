@@ -40,6 +40,21 @@ class TestParseTableResponse:
         result = parse_table_response({"data": "something"})
         assert result == []
 
+    def test_data_wrapped_entries(self):
+        """WCL v2 table() wraps entries in a 'data' key."""
+        raw = {"data": {"entries": [{"name": "Fireball"}, {"name": "Frostbolt"}]}}
+        result = parse_table_response(raw)
+        assert len(result) == 2
+        assert result[0]["name"] == "Fireball"
+
+    def test_data_wrapped_json_string(self):
+        """WCL v2 table() may return JSON string with data wrapper."""
+        import json
+        raw = json.dumps({"data": {"entries": [{"name": "Arcane Blast"}]}})
+        result = parse_table_response(raw)
+        assert len(result) == 1
+        assert result[0]["name"] == "Arcane Blast"
+
 
 class TestParseAbilityMetrics:
     def test_basic_damage_entries(self):

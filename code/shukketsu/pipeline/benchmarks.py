@@ -38,15 +38,20 @@ async def discover_benchmark_reports(
 
     # Deduplicate per encounter, limit to max_per_encounter
     seen_per_encounter: dict[int, int] = {}
+    seen_codes: set[str] = set()
     candidates: list[dict] = []
     for row in speed_rows:
         eid = row.encounter_id
+        code = row.report_code
+        if code in seen_codes:
+            continue
         count = seen_per_encounter.get(eid, 0)
         if count >= max_per_encounter:
             continue
         seen_per_encounter[eid] = count + 1
+        seen_codes.add(code)
         candidates.append({
-            "report_code": row.report_code,
+            "report_code": code,
             "source": "speed_ranking",
             "encounter_id": eid,
             "guild_name": row.guild_name,
@@ -95,7 +100,7 @@ async def ingest_benchmark_reports(
                 ingest_tables=True,
                 ingest_events=True,
             )
-            session.add(BenchmarkReport(
+            await session.merge(BenchmarkReport(
                 report_code=code,
                 source=report["source"],
                 encounter_id=report.get("encounter_id"),
@@ -263,7 +268,7 @@ async def compute_encounter_benchmarks(
         await session.merge(EncounterBenchmark(
             encounter_id=eid,
             sample_size=kill_row.kill_count,
-            computed_at=datetime.now(UTC),
+            computed_at=datetime.now(UTC).replace(tzinfo=None),
             benchmarks=benchmarks,
         ))
         computed += 1

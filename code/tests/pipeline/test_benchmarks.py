@@ -127,12 +127,41 @@ class TestDiscoverBenchmarkReports:
 
         assert len(reports) == 0
 
+    async def test_deduplicates_across_encounters(self):
+        """Same report_code for different encounters only appears once."""
+        session = AsyncMock()
+
+        # Same report for two encounters (e.g. Gruul + Mag in same report)
+        speed_rows = [
+            _make_row(report_code="abc", encounter_id=650, guild_name="G1"),
+            _make_row(report_code="abc", encounter_id=649, guild_name="G1"),
+            _make_row(report_code="def", encounter_id=650, guild_name="G2"),
+        ]
+        speed_result = MagicMock()
+        speed_result.fetchall.return_value = speed_rows
+        existing_result = MagicMock()
+        existing_result.fetchall.return_value = []
+        watched_mock = MagicMock()
+        watched_mock.scalars.return_value.all.return_value = []
+
+        session.execute = AsyncMock(
+            side_effect=[speed_result, watched_mock, existing_result]
+        )
+
+        reports = await discover_benchmark_reports(session)
+
+        # "abc" should only appear once (first encounter wins)
+        assert len(reports) == 2
+        codes = [r["report_code"] for r in reports]
+        assert codes == ["abc", "def"]
+        # First appearance is encounter 650
+        assert reports[0]["encounter_id"] == 650
+
 
 class TestIngestBenchmarkReports:
     async def test_ingests_reports(self):
         wcl = AsyncMock()
         session = AsyncMock()
-        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
         reports = [
             {
@@ -157,7 +186,7 @@ class TestIngestBenchmarkReports:
 
         assert result == {"ingested": 2, "errors": 0}
         assert mock_ingest.call_count == 2
-        assert session.add.call_count == 2
+        assert session.merge.await_count == 2
         assert session.commit.call_count == 2
 
         # Verify ingest_report called with correct args
@@ -168,7 +197,6 @@ class TestIngestBenchmarkReports:
     async def test_handles_ingest_error(self):
         wcl = AsyncMock()
         session = AsyncMock()
-        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
         reports = [
             {
@@ -197,6 +225,36 @@ class TestIngestBenchmarkReports:
 
         assert result == {"ingested": 1, "errors": 1}
         assert session.rollback.call_count == 1
+
+    async def test_deduplicates_by_report_code(self):
+        """Same report_code for different encounters uses merge (no duplicate)."""
+        wcl = AsyncMock()
+        session = AsyncMock()
+
+        reports = [
+            {
+                "report_code": "abc",
+                "source": "speed_ranking",
+                "encounter_id": 650,
+                "guild_name": "G1",
+            },
+            {
+                "report_code": "abc",
+                "source": "speed_ranking",
+                "encounter_id": 649,
+                "guild_name": "G1",
+            },
+        ]
+
+        with patch(
+            "shukketsu.pipeline.benchmarks.ingest_report",
+            new_callable=AsyncMock,
+        ):
+            result = await ingest_benchmark_reports(wcl, session, reports)
+
+        # Both succeed because merge() handles duplicates
+        assert result == {"ingested": 2, "errors": 0}
+        assert session.merge.await_count == 2
 
     async def test_empty_reports(self):
         wcl = AsyncMock()
@@ -385,7 +443,6 @@ class TestRunBenchmarkPipeline:
     async def test_full_pipeline(self):
         wcl = AsyncMock()
         session = AsyncMock()
-        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
         discovered_reports = [
             {
@@ -458,7 +515,6 @@ class TestRunBenchmarkPipeline:
     async def test_with_encounter_filter(self):
         wcl = AsyncMock()
         session = AsyncMock()
-        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
         with (
             patch(
@@ -493,7 +549,6 @@ class TestRunBenchmarkPipeline:
     async def test_ingest_errors_tracked(self):
         wcl = AsyncMock()
         session = AsyncMock()
-        session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
         with (
             patch(

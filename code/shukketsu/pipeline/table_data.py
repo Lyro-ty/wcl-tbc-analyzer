@@ -12,11 +12,27 @@ logger = logging.getLogger(__name__)
 
 
 def parse_table_response(raw: Any) -> list[dict]:
-    """Parse WCL table response, handling JSON string/dict ambiguity."""
+    """Parse WCL table response, handling JSON string/dict ambiguity.
+
+    WCL table() returns a JSON scalar that may be:
+    - A JSON string (needs json.loads)
+    - {"data": {"entries": [...]}} (wrapped in "data" key)
+    - {"entries": [...]} (flat)
+    - A list directly
+    """
     if isinstance(raw, str):
         raw = json.loads(raw)
     if isinstance(raw, dict):
-        return raw.get("entries", [])
+        # WCL v2 wraps table data in a "data" key
+        if "data" in raw and isinstance(raw["data"], dict):
+            raw = raw["data"]
+        entries = raw.get("entries", [])
+        if not entries:
+            logger.debug(
+                "parse_table_response: no entries found, keys=%s",
+                list(raw.keys()),
+            )
+        return entries
     if isinstance(raw, list):
         return raw
     return []
