@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -75,6 +75,27 @@ class Settings(BaseSettings):
     guild: GuildConfig = GuildConfig()
     auto_ingest: AutoIngestConfig = AutoIngestConfig()
     benchmark: BenchmarkConfig = BenchmarkConfig()
+
+    @model_validator(mode="after")
+    def _check_cross_field_deps(self):
+        if self.auto_ingest.enabled and self.guild.id <= 0:
+            raise ValueError(
+                "AUTO_INGEST__ENABLED=true requires GUILD__ID to be set"
+            )
+        if self.langfuse.enabled:
+            if not self.langfuse.public_key:
+                raise ValueError(
+                    "LANGFUSE__ENABLED=true requires LANGFUSE__PUBLIC_KEY"
+                )
+            if not self.langfuse.secret_key.get_secret_value():
+                raise ValueError(
+                    "LANGFUSE__ENABLED=true requires LANGFUSE__SECRET_KEY"
+                )
+        if self.benchmark.max_reports_per_encounter < 1:
+            raise ValueError(
+                "BENCHMARK__MAX_REPORTS_PER_ENCOUNTER must be >= 1"
+            )
+        return self
 
 
 @lru_cache(maxsize=1)

@@ -230,7 +230,7 @@ async def test_429_without_retry_after_uses_rate_limiter(auth, limiter):
     """429 without Retry-After header falls back to rate limiter data."""
     _mock_oauth()
     # Pre-populate rate limiter with reset info
-    limiter.update({
+    await limiter.update({
         "pointsSpentThisHour": 3500,
         "limitPerHour": 3600,
         "pointsResetIn": 300,
@@ -260,6 +260,48 @@ async def test_429_without_retry_after_uses_rate_limiter(auth, limiter):
     assert any(s >= 290 for s in sleep_calls), (
         f"Expected a sleep >= 290s from rate limiter fallback, got {sleep_calls}"
     )
+
+
+@respx.mock
+async def test_query_raises_on_non_dict_response(auth, limiter):
+    """Non-dict response (e.g. a list) raises WCLAPIError."""
+    _mock_oauth()
+    respx.post(API_URL).mock(
+        return_value=httpx.Response(200, json=[{"unexpected": "list"}])
+    )
+
+    async with WCLClient(auth, limiter, api_url=API_URL) as client:
+        with pytest.raises(WCLAPIError, match="Expected dict"):
+            await client.query("query { test }")
+
+
+@respx.mock
+async def test_query_raises_on_missing_data_key(auth, limiter):
+    """Response dict without 'data' or 'errors' key raises WCLAPIError."""
+    _mock_oauth()
+    respx.post(API_URL).mock(
+        return_value=httpx.Response(200, json={"unexpected": "shape"})
+    )
+
+    async with WCLClient(auth, limiter, api_url=API_URL) as client:
+        with pytest.raises(WCLAPIError, match="missing 'data' key"):
+            await client.query("query { test }")
+
+
+@respx.mock
+async def test_query_handles_error_without_message_key(auth, limiter):
+    """GraphQL error objects without a 'message' key don't crash."""
+    _mock_oauth()
+    respx.post(API_URL).mock(
+        return_value=httpx.Response(200, json={
+            "errors": [{"code": "SOME_ERROR"}],
+            "data": None,
+        })
+    )
+
+    async with WCLClient(auth, limiter, api_url=API_URL) as client:
+        with pytest.raises(WCLAPIError):
+            await client.query("query { test }")
 
 
 class TestParseRetryAfter:

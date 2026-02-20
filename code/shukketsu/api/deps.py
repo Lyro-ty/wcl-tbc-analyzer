@@ -14,6 +14,7 @@ from shukketsu.config import get_settings
 # Set during lifespan, read by Depends()
 _session_factory = None
 _graph = None
+_wcl_factory = None
 
 # Cooldown tracking for WCL-calling endpoints
 _cooldowns: dict[str, float] = {}
@@ -25,6 +26,19 @@ def set_dependencies(session_factory, graph=None) -> None:
     global _session_factory, _graph
     _session_factory = session_factory
     _graph = graph
+
+
+def set_wcl_factory(factory) -> None:
+    """Called once during app lifespan startup."""
+    global _wcl_factory
+    _wcl_factory = factory
+
+
+def get_wcl_factory():
+    """FastAPI dependency -- returns the shared WCL client factory."""
+    if _wcl_factory is None:
+        raise RuntimeError("WCL factory not initialized")
+    return _wcl_factory
 
 
 async def get_db() -> AsyncGenerator[AsyncSession]:

@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from shukketsu.config import LangfuseConfig, LLMConfig, Settings, get_settings
 
 
@@ -74,3 +77,29 @@ def test_langfuse_env_override(monkeypatch):
     assert settings.langfuse.public_key == "pk-lf-test"
     assert settings.langfuse.secret_key.get_secret_value() == "sk-lf-test"
     assert settings.langfuse.host == "http://langfuse:3000"
+
+
+class TestCrossFieldValidators:
+    def test_auto_ingest_without_guild_raises(self, monkeypatch):
+        monkeypatch.setenv("AUTO_INGEST__ENABLED", "true")
+        # guild.id defaults to 0 → should fail
+        with pytest.raises(ValidationError, match="GUILD__ID"):
+            Settings(_env_file=None)
+
+    def test_langfuse_without_keys_raises(self, monkeypatch):
+        monkeypatch.setenv("LANGFUSE__ENABLED", "true")
+        # public_key/secret_key default to empty → should fail
+        with pytest.raises(ValidationError, match="LANGFUSE__PUBLIC_KEY"):
+            Settings(_env_file=None)
+
+    def test_langfuse_without_secret_raises(self, monkeypatch):
+        monkeypatch.setenv("LANGFUSE__ENABLED", "true")
+        monkeypatch.setenv("LANGFUSE__PUBLIC_KEY", "pk-test")
+        with pytest.raises(ValidationError, match="LANGFUSE__SECRET_KEY"):
+            Settings(_env_file=None)
+
+    def test_valid_minimal_config_passes(self):
+        settings = Settings(_env_file=None)
+        assert settings.auto_ingest.enabled is False
+        assert settings.langfuse.enabled is False
+        assert settings.benchmark.max_reports_per_encounter >= 1

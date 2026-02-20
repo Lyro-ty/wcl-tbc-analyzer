@@ -11,34 +11,34 @@ def test_initial_state():
     assert rl.is_safe
 
 
-def test_update_state():
+async def test_update_state():
     rl = RateLimiter()
-    rl.update({"pointsSpentThisHour": 100, "limitPerHour": 3600, "pointsResetIn": 3500})
+    await rl.update({"pointsSpentThisHour": 100, "limitPerHour": 3600, "pointsResetIn": 3500})
     assert rl.points_remaining == 3500
     assert rl.limit_per_hour == 3600
 
 
-def test_is_safe_under_limit():
+async def test_is_safe_under_limit():
     rl = RateLimiter(safety_margin=0.1)
-    rl.update({"pointsSpentThisHour": 100, "limitPerHour": 3600, "pointsResetIn": 3500})
+    await rl.update({"pointsSpentThisHour": 100, "limitPerHour": 3600, "pointsResetIn": 3500})
     assert rl.is_safe
 
 
-def test_is_not_safe_near_limit():
+async def test_is_not_safe_near_limit():
     rl = RateLimiter(safety_margin=0.1)
-    rl.update({"pointsSpentThisHour": 3500, "limitPerHour": 3600, "pointsResetIn": 300})
+    await rl.update({"pointsSpentThisHour": 3500, "limitPerHour": 3600, "pointsResetIn": 300})
     assert not rl.is_safe
 
 
-def test_is_not_safe_at_limit():
+async def test_is_not_safe_at_limit():
     rl = RateLimiter(safety_margin=0.1)
-    rl.update({"pointsSpentThisHour": 3600, "limitPerHour": 3600, "pointsResetIn": 100})
+    await rl.update({"pointsSpentThisHour": 3600, "limitPerHour": 3600, "pointsResetIn": 100})
     assert not rl.is_safe
 
 
 async def test_wait_if_needed_returns_immediately_when_safe():
     rl = RateLimiter()
-    rl.update({"pointsSpentThisHour": 100, "limitPerHour": 3600, "pointsResetIn": 3500})
+    await rl.update({"pointsSpentThisHour": 100, "limitPerHour": 3600, "pointsResetIn": 3500})
     with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
         await rl.wait_if_needed()
         mock_sleep.assert_not_called()
@@ -46,7 +46,7 @@ async def test_wait_if_needed_returns_immediately_when_safe():
 
 async def test_wait_if_needed_sleeps_when_not_safe():
     rl = RateLimiter(safety_margin=0.1)
-    rl.update({"pointsSpentThisHour": 3500, "limitPerHour": 3600, "pointsResetIn": 300})
+    await rl.update({"pointsSpentThisHour": 3500, "limitPerHour": 3600, "pointsResetIn": 300})
     with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
         await rl.wait_if_needed()
         mock_sleep.assert_called_once_with(300)
@@ -68,7 +68,7 @@ class TestRateLimiterSleepCap:
         monkeypatch.setattr(asyncio, "sleep", mock_sleep)
 
         rl = RateLimiter()
-        rl.update({
+        await rl.update({
             "pointsSpentThisHour": 3500,
             "limitPerHour": 3600,
             "pointsResetIn": 7200,
@@ -86,7 +86,7 @@ class TestRateLimiterSleepCap:
         monkeypatch.setattr(asyncio, "sleep", mock_sleep)
 
         rl = RateLimiter()
-        rl.update({
+        await rl.update({
             "pointsSpentThisHour": 3500,
             "limitPerHour": 3600,
             "pointsResetIn": 0,
@@ -96,37 +96,37 @@ class TestRateLimiterSleepCap:
 
 
 class TestMarkThrottled:
-    def test_mark_throttled_with_retry_after(self):
+    async def test_mark_throttled_with_retry_after(self):
         """mark_throttled uses Retry-After value when provided."""
         rl = RateLimiter()
         before = time.monotonic()
-        rl.mark_throttled(retry_after=120)
+        await rl.mark_throttled(retry_after=120)
         assert rl._throttled_until >= before + 119  # allow 1s tolerance
 
-    def test_mark_throttled_falls_back_to_reset_in(self):
+    async def test_mark_throttled_falls_back_to_reset_in(self):
         """mark_throttled uses _points_reset_in when no Retry-After."""
         rl = RateLimiter()
-        rl.update({
+        await rl.update({
             "pointsSpentThisHour": 3500,
             "limitPerHour": 3600,
             "pointsResetIn": 300,
         })
         before = time.monotonic()
-        rl.mark_throttled(retry_after=None)
+        await rl.mark_throttled(retry_after=None)
         assert rl._throttled_until >= before + 299
 
-    def test_mark_throttled_fallback_60s(self):
+    async def test_mark_throttled_fallback_60s(self):
         """mark_throttled uses 60s fallback when no data available."""
         rl = RateLimiter()
         before = time.monotonic()
-        rl.mark_throttled(retry_after=None)
+        await rl.mark_throttled(retry_after=None)
         assert rl._throttled_until >= before + 59
 
-    def test_mark_throttled_capped_at_max(self):
+    async def test_mark_throttled_capped_at_max(self):
         """mark_throttled caps sleep at MAX_SLEEP_SECONDS."""
         rl = RateLimiter()
         before = time.monotonic()
-        rl.mark_throttled(retry_after=9999)
+        await rl.mark_throttled(retry_after=9999)
         assert rl._throttled_until <= before + 3601
 
     async def test_wait_if_needed_honours_throttle(self, monkeypatch):
@@ -156,7 +156,7 @@ class TestMarkThrottled:
         monkeypatch.setattr(asyncio, "sleep", mock_sleep)
 
         rl = RateLimiter()
-        rl.update({
+        await rl.update({
             "pointsSpentThisHour": 3500,
             "limitPerHour": 3600,
             "pointsResetIn": 300,
@@ -180,7 +180,7 @@ class TestMarkThrottled:
 
         rl = RateLimiter()
         rl._throttled_until = time.monotonic() - 10  # already expired
-        rl.update({
+        await rl.update({
             "pointsSpentThisHour": 100,
             "limitPerHour": 3600,
             "pointsResetIn": 3500,

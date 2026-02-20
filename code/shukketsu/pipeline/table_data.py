@@ -145,6 +145,7 @@ async def ingest_table_data_for_fight(
 
     for wcl_type, metric_type, parse_kind in data_type_config:
         try:
+            # API call OUTSIDE savepoint — if it fails, no data is deleted
             raw_data = await wcl.query(
                 query,
                 variables={
@@ -156,49 +157,49 @@ async def ingest_table_data_for_fight(
             table_raw = raw_data["reportData"]["report"]["table"]
             top_entries = parse_table_response(table_raw)
 
-            # Delete only THIS type's rows right before insert (prevents
-            # partial data loss if a later API call fails)
-            if parse_kind == "ability":
-                await session.execute(
-                    delete(AbilityMetric).where(
-                        AbilityMetric.fight_id == fight.id,
-                        AbilityMetric.metric_type == metric_type,
-                    )
-                )
-            else:
-                await session.execute(
-                    delete(BuffUptime).where(
-                        BuffUptime.fight_id == fight.id,
-                        BuffUptime.metric_type == metric_type,
-                    )
-                )
-
-            # Without sourceID, WCL returns entries grouped by source (player)
-            for source_entry in top_entries:
-                player_name = source_entry.get("name", "")
-                if not player_name:
-                    continue
-
-                sub_entries = source_entry.get("entries", [])
-                if not sub_entries:
-                    # Flat format (single-source or unexpected shape) — skip
-                    continue
-
+            # Savepoint wraps delete+insert — rolls back on error,
+            # preserving existing rows
+            async with session.begin_nested():
                 if parse_kind == "ability":
-                    metrics = parse_ability_metrics(
-                        sub_entries, fight.id, player_name, metric_type,
+                    await session.execute(
+                        delete(AbilityMetric).where(
+                            AbilityMetric.fight_id == fight.id,
+                            AbilityMetric.metric_type == metric_type,
+                        )
                     )
-                    for m in metrics:
-                        session.add(m)
-                    total_rows += len(metrics)
                 else:
-                    uptimes = parse_buff_uptimes(
-                        sub_entries, fight.id, player_name, metric_type,
-                        fight_duration_ms,
+                    await session.execute(
+                        delete(BuffUptime).where(
+                            BuffUptime.fight_id == fight.id,
+                            BuffUptime.metric_type == metric_type,
+                        )
                     )
-                    for u in uptimes:
-                        session.add(u)
-                    total_rows += len(uptimes)
+
+                # Without sourceID, WCL returns entries grouped by source
+                for source_entry in top_entries:
+                    player_name = source_entry.get("name", "")
+                    if not player_name:
+                        continue
+
+                    sub_entries = source_entry.get("entries", [])
+                    if not sub_entries:
+                        continue
+
+                    if parse_kind == "ability":
+                        metrics = parse_ability_metrics(
+                            sub_entries, fight.id, player_name, metric_type,
+                        )
+                        for m in metrics:
+                            session.add(m)
+                        total_rows += len(metrics)
+                    else:
+                        uptimes = parse_buff_uptimes(
+                            sub_entries, fight.id, player_name, metric_type,
+                            fight_duration_ms,
+                        )
+                        for u in uptimes:
+                            session.add(u)
+                        total_rows += len(uptimes)
 
         except Exception:
             logger.exception(

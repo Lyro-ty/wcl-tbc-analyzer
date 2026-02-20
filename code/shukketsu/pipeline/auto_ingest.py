@@ -23,6 +23,7 @@ class AutoIngestService:
         self._task: asyncio.Task | None = None
         self._trigger_task: asyncio.Task | None = None
         self._poll_lock = asyncio.Lock()
+        self._ingest_lock = asyncio.Lock()
         self._last_poll: datetime | None = None
         self._status: str = "idle"  # idle, polling, ingesting, error
         self._last_error: str | None = None
@@ -83,18 +84,20 @@ class AutoIngestService:
                 from shukketsu.pipeline.benchmarks import run_benchmark_pipeline
 
                 async with (
+                    self._ingest_lock,
                     self._wcl_factory() as wcl,
                     self._session_factory() as session,
                 ):
-                    result = await run_benchmark_pipeline(
-                        wcl, session,
-                        max_reports_per_encounter=self._benchmark_max_reports,
-                    )
-                    logger.info(
-                        "Benchmark auto-refresh: discovered=%d,"
-                        " ingested=%d, computed=%d",
-                        result.discovered, result.ingested, result.computed,
-                    )
+                        result = await run_benchmark_pipeline(
+                            wcl, session,
+                            max_reports_per_encounter=self._benchmark_max_reports,
+                        )
+                        logger.info(
+                            "Benchmark auto-refresh: discovered=%d,"
+                            " ingested=%d, computed=%d",
+                            result.discovered, result.ingested,
+                            result.computed,
+                        )
                 self._last_benchmark_run = datetime.now(UTC)
             except Exception:
                 logger.exception("Benchmark auto-refresh failed")
@@ -212,50 +215,54 @@ class AutoIngestService:
                 char_result = await session.execute(select(MyCharacter.name))
                 my_names = {row[0] for row in char_result}
 
-            # Ingest each new report
+            # Ingest each new report (under ingest lock to prevent
+            # concurrent poll + benchmark from ingesting the same report)
             cfg = self.settings.auto_ingest
-            for report_data in new_reports:
-                code = report_data["code"]
-                try:
-                    async with (
-                        self._session_factory() as session,
-                        session.begin(),
-                    ):
-                        ingest_result = await ingest_report(
-                            wcl, session, code,
-                            my_character_names=my_names,
-                            ingest_tables=cfg.with_tables,
-                            ingest_events=cfg.with_events,
-                        )
-                    if ingest_result.enrichment_errors:
-                        logger.warning(
-                            "Enrichment errors for %s: %s",
-                            code, ingest_result.enrichment_errors,
-                        )
-                    # Snapshot in separate transaction after successful commit
+            async with self._ingest_lock:
+                for report_data in new_reports:
+                    code = report_data["code"]
                     try:
                         async with (
                             self._session_factory() as session,
                             session.begin(),
                         ):
-                            from shukketsu.pipeline.progression import (
-                                snapshot_all_characters,
+                            ingest_result = await ingest_report(
+                                wcl, session, code,
+                                my_character_names=my_names,
+                                ingest_tables=cfg.with_tables,
+                                ingest_events=cfg.with_events,
                             )
-                            await snapshot_all_characters(session)
-                    except Exception:
-                        logger.exception(
-                            "Failed to auto-snapshot progression "
-                            "after ingest of %s", code,
+                        if ingest_result.enrichment_errors:
+                            logger.warning(
+                                "Enrichment errors for %s: %s",
+                                code, ingest_result.enrichment_errors,
+                            )
+                        # Snapshot in separate transaction after commit
+                        try:
+                            async with (
+                                self._session_factory() as session,
+                                session.begin(),
+                            ):
+                                from shukketsu.pipeline.progression import (
+                                    snapshot_all_characters,
+                                )
+                                await snapshot_all_characters(session)
+                        except Exception:
+                            logger.exception(
+                                "Failed to auto-snapshot progression "
+                                "after ingest of %s", code,
+                            )
+                        self._stats["reports_ingested"] += 1
+                        logger.info(
+                            "Auto-ingested report %s: %s",
+                            code, report_data.get("title", ""),
                         )
-                    self._stats["reports_ingested"] += 1
-                    logger.info(
-                        "Auto-ingested report %s: %s",
-                        code, report_data.get("title", ""),
-                    )
-                except Exception as exc:
-                    logger.exception("Failed to auto-ingest report %s", code)
-                    self._last_error = str(exc)
-                    self._stats["errors"] += 1
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to auto-ingest report %s", code,
+                        )
+                        self._last_error = str(exc)
+                        self._stats["errors"] += 1
 
         self._status = "idle"
 

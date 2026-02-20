@@ -61,19 +61,10 @@ async def refresh_rankings(
 ):
     from sqlalchemy import select
 
-    from shukketsu.config import get_settings
+    from shukketsu.api.deps import get_wcl_factory
     from shukketsu.db.models import Encounter
     from shukketsu.pipeline.constants import TBC_SPECS
     from shukketsu.pipeline.rankings import ingest_all_rankings
-    from shukketsu.wcl.auth import WCLAuth
-    from shukketsu.wcl.client import WCLClient
-    from shukketsu.wcl.rate_limiter import RateLimiter
-
-    settings = get_settings()
-    if not settings.wcl.client_id:
-        raise HTTPException(
-            status_code=503, detail="WCL credentials not configured"
-        )
 
     try:
         stmt = select(Encounter.id)
@@ -86,12 +77,7 @@ async def refresh_rankings(
                 status_code=404, detail="No encounters found"
             )
 
-        auth = WCLAuth(
-            settings.wcl.client_id,
-            settings.wcl.client_secret.get_secret_value(),
-            settings.wcl.oauth_url,
-        )
-        async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
+        async with get_wcl_factory()() as wcl:
             result = await ingest_all_rankings(
                 wcl, session, encounter_ids, list(TBC_SPECS), force=force,
             )
@@ -122,18 +108,9 @@ async def refresh_speed_rankings(
 ):
     from sqlalchemy import select
 
-    from shukketsu.config import get_settings
+    from shukketsu.api.deps import get_wcl_factory
     from shukketsu.db.models import Encounter
     from shukketsu.pipeline.speed_rankings import ingest_all_speed_rankings
-    from shukketsu.wcl.auth import WCLAuth
-    from shukketsu.wcl.client import WCLClient
-    from shukketsu.wcl.rate_limiter import RateLimiter
-
-    settings = get_settings()
-    if not settings.wcl.client_id:
-        raise HTTPException(
-            status_code=503, detail="WCL credentials not configured"
-        )
 
     try:
         stmt = select(Encounter.id)
@@ -146,12 +123,7 @@ async def refresh_speed_rankings(
                 status_code=404, detail="No encounters found"
             )
 
-        auth = WCLAuth(
-            settings.wcl.client_id,
-            settings.wcl.client_secret.get_secret_value(),
-            settings.wcl.oauth_url,
-        )
-        async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
+        async with get_wcl_factory()() as wcl:
             result = await ingest_all_speed_rankings(
                 wcl, session, encounter_ids, force=force,
             )

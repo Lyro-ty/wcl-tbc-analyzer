@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 
@@ -30,24 +31,26 @@ class WCLAuth:
         self._oauth_url = oauth_url
         self._token: str | None = None
         self._expires_at: float = 0
+        self._lock = asyncio.Lock()
 
     async def get_token(self, client: httpx.AsyncClient) -> str:
-        if self._token and time.monotonic() < self._expires_at:
+        async with self._lock:
+            if self._token and time.monotonic() < self._expires_at:
+                return self._token
+
+            response = await self._request_token(client)
+
+            if response.status_code == 401:
+                raise WCLAuthError(f"401: {response.text}")
+            if response.status_code >= 400:
+                raise WCLAuthError(f"{response.status_code}: {response.text}")
+
+            data = response.json()
+            self._token = data["access_token"]
+            # Refresh 60s before actual expiry
+            self._expires_at = time.monotonic() + data["expires_in"] - 60
+            logger.info("Obtained new WCL access token, expires in %ds", data["expires_in"])
             return self._token
-
-        response = await self._request_token(client)
-
-        if response.status_code == 401:
-            raise WCLAuthError(f"401: {response.text}")
-        if response.status_code >= 400:
-            raise WCLAuthError(f"{response.status_code}: {response.text}")
-
-        data = response.json()
-        self._token = data["access_token"]
-        # Refresh 60s before actual expiry
-        self._expires_at = time.monotonic() + data["expires_in"] - 60
-        logger.info("Obtained new WCL access token, expires in %ds", data["expires_in"])
-        return self._token
 
     @retry(
         retry=(

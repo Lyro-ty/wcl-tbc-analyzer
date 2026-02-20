@@ -55,6 +55,12 @@ class TestParseTableResponse:
         assert len(result) == 1
         assert result[0]["name"] == "Arcane Blast"
 
+    def test_data_wrapped_without_entries(self):
+        """WCL v2 data wrapper with no entries key returns empty."""
+        raw = {"data": {"totalTime": 120000}}
+        result = parse_table_response(raw)
+        assert result == []
+
 
 class TestParseAbilityMetrics:
     def test_basic_damage_entries(self):

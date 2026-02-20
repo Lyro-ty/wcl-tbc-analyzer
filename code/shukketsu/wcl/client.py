@@ -28,18 +28,21 @@ class WCLClient:
         rate_limiter: RateLimiter,
         *,
         api_url: str = DEFAULT_API_URL,
+        http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self._auth = auth
         self._rate_limiter = rate_limiter
         self._api_url = api_url
-        self._http: httpx.AsyncClient | None = None
+        self._http: httpx.AsyncClient | None = http_client
+        self._owns_http = http_client is None
 
     async def __aenter__(self) -> "WCLClient":
-        self._http = httpx.AsyncClient(timeout=30.0)
+        if self._owns_http:
+            self._http = httpx.AsyncClient(timeout=30.0)
         return self
 
     async def __aexit__(self, *exc: object) -> None:
-        if self._http:
+        if self._owns_http and self._http:
             await self._http.aclose()
             self._http = None
 
@@ -91,7 +94,7 @@ class WCLClient:
             # --- 429: rate-limited — sleep for the reset window, not backoff ---
             if response.status_code == 429:
                 retry_after = _parse_retry_after(response)
-                self._rate_limiter.mark_throttled(retry_after)
+                await self._rate_limiter.mark_throttled(retry_after)
                 if attempt == MAX_RETRIES:
                     response.raise_for_status()
                 continue  # wait_if_needed() at top of loop will sleep
@@ -118,15 +121,26 @@ class WCLClient:
 
             result = response.json()
 
+            if not isinstance(result, dict):
+                raise WCLAPIError(
+                    f"Expected dict response, got {type(result).__name__}"
+                )
+            if "data" not in result and "errors" not in result:
+                raise WCLAPIError(
+                    f"Response missing 'data' key, keys: {list(result.keys())}"
+                )
+
             # Update rate limiter from response extensions
             extensions = result.get("extensions", {})
             rate_limit_data = extensions.get("rateLimitData")
             if rate_limit_data:
-                self._rate_limiter.update(rate_limit_data)
+                await self._rate_limiter.update(rate_limit_data)
 
             # Check for GraphQL errors
             if "errors" in result and result["errors"]:
-                messages = "; ".join(e["message"] for e in result["errors"])
+                messages = "; ".join(
+                    e.get("message", str(e)) for e in result["errors"]
+                )
                 raise WCLAPIError(messages)
 
             return result["data"]

@@ -12,7 +12,7 @@ from shukketsu.agent.graph import create_graph
 from shukketsu.agent.llm import create_llm
 from shukketsu.agent.tool_utils import set_session_factory
 from shukketsu.agent.tools import ALL_TOOLS
-from shukketsu.api.deps import set_dependencies, verify_api_key
+from shukketsu.api.deps import set_dependencies, set_wcl_factory, verify_api_key
 from shukketsu.api.routes.analyze import set_graph, set_langfuse_handler
 from shukketsu.api.routes.health import set_health_deps
 from shukketsu.config import get_settings
@@ -69,22 +69,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             langfuse_enabled = True
             logger.info("Langfuse tracing enabled: %s", settings.langfuse.host)
 
+    # Shared WCL client factory (one auth + rate limiter + HTTP pool)
+    from shukketsu.wcl.factory import WCLFactory
+
+    wcl_factory = WCLFactory(settings)
+    await wcl_factory.start()
+    set_wcl_factory(wcl_factory)
+    logger.info("WCL factory started (shared auth + rate limiter + HTTP pool)")
+
     # Auto-ingest background service (optional)
     from shukketsu.api.routes.auto_ingest import set_service as set_auto_ingest_service
     from shukketsu.pipeline.auto_ingest import AutoIngestService
-    from shukketsu.wcl.auth import WCLAuth
-    from shukketsu.wcl.client import WCLClient
-    from shukketsu.wcl.rate_limiter import RateLimiter
 
-    def _wcl_factory():
-        auth = WCLAuth(
-            settings.wcl.client_id,
-            settings.wcl.client_secret.get_secret_value(),
-            settings.wcl.oauth_url,
-        )
-        return WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url)
-
-    auto_ingest = AutoIngestService(settings, session_factory, _wcl_factory)
+    auto_ingest = AutoIngestService(settings, session_factory, wcl_factory)
     set_auto_ingest_service(auto_ingest)
     await auto_ingest.start()
 
@@ -92,6 +89,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # Shutdown
     await auto_ingest.stop()
+    await wcl_factory.stop()
     if langfuse_enabled:
         from langfuse import get_client
         get_client().flush()
@@ -110,7 +108,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://localhost:8000"],
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["X-API-Key", "Content-Type"],
     )
 

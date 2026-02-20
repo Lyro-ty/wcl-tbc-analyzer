@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, func, select
 
 from shukketsu.db.models import TopRanking
+from shukketsu.utils import ensure_utc
 
 logger = logging.getLogger(__name__)
 
@@ -165,10 +166,7 @@ async def ingest_all_rankings(
                         )
                         last_fetched = existing.scalar_one_or_none()
                         if last_fetched:
-                            aware = (
-                                last_fetched if last_fetched.tzinfo
-                                else last_fetched.replace(tzinfo=UTC)
-                            )
+                            aware = ensure_utc(last_fetched)
                             if aware > cutoff:
                                 result.skipped += 1
                                 logger.debug(

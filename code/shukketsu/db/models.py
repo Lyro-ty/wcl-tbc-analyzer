@@ -78,6 +78,7 @@ class Fight(Base):
         UniqueConstraint("report_code", "fight_id"),
         Index("ix_fights_report_code", "report_code"),
         Index("ix_fights_encounter_id", "encounter_id"),
+        Index("ix_fights_report_encounter_kill", "report_code", "encounter_id", "kill"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -115,6 +116,7 @@ class FightPerformance(Base):
     __table_args__ = (
         Index("ix_fight_performances_fight_id", "fight_id"),
         Index("ix_fight_performances_player_name", "player_name"),
+        Index("ix_fight_performances_fight_player", "fight_id", "player_name"),
         Index("ix_fight_performances_class_spec", "player_class", "player_spec"),
         Index(
             "ix_fight_performances_my_char", "is_my_character",
@@ -221,7 +223,10 @@ class BenchmarkReport(Base):
     __tablename__ = "benchmark_reports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    report_code: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    report_code: Mapped[str] = mapped_column(
+        String, ForeignKey("reports.code", ondelete="CASCADE"),
+        nullable=False, unique=True,
+    )
     source: Mapped[str] = mapped_column(String, nullable=False)
     encounter_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("encounters.id", ondelete="CASCADE"), nullable=True

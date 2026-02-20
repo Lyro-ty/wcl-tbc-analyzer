@@ -145,30 +145,16 @@ async def ingest_report_endpoint(
 ):
     from sqlalchemy import select
 
-    from shukketsu.config import get_settings
+    from shukketsu.api.deps import get_wcl_factory
     from shukketsu.db.models import MyCharacter
     from shukketsu.pipeline.ingest import ingest_report
-    from shukketsu.wcl.auth import WCLAuth
-    from shukketsu.wcl.client import WCLClient
-    from shukketsu.wcl.rate_limiter import RateLimiter
-
-    settings = get_settings()
-    if not settings.wcl.client_id:
-        raise HTTPException(
-            status_code=503, detail="WCL credentials not configured"
-        )
 
     try:
         # Get registered character names for is_my_character flagging
         chars = await session.execute(select(MyCharacter.name))
         my_names = {r[0] for r in chars}
 
-        auth = WCLAuth(
-            settings.wcl.client_id,
-            settings.wcl.client_secret.get_secret_value(),
-            settings.wcl.oauth_url,
-        )
-        async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
+        async with get_wcl_factory()() as wcl:
             result = await ingest_report(
                 wcl, session, req.report_code, my_names,
                 ingest_tables=req.with_tables,
@@ -203,25 +189,11 @@ async def ingest_report_endpoint(
 async def fetch_table_data(
     report_code: str, session: AsyncSession = Depends(get_db),
 ):
-    from shukketsu.config import get_settings
+    from shukketsu.api.deps import get_wcl_factory
     from shukketsu.pipeline.table_data import ingest_table_data_for_report
-    from shukketsu.wcl.auth import WCLAuth
-    from shukketsu.wcl.client import WCLClient
-    from shukketsu.wcl.rate_limiter import RateLimiter
-
-    settings = get_settings()
-    if not settings.wcl.client_id:
-        raise HTTPException(
-            status_code=503, detail="WCL credentials not configured"
-        )
 
     try:
-        auth = WCLAuth(
-            settings.wcl.client_id,
-            settings.wcl.client_secret.get_secret_value(),
-            settings.wcl.oauth_url,
-        )
-        async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
+        async with get_wcl_factory()() as wcl:
             rows = await ingest_table_data_for_report(wcl, session, report_code)
         await session.commit()
         logger.info("Fetched table data for %s: %d rows", report_code, rows)
@@ -244,29 +216,15 @@ async def fetch_event_data(
 ):
     from sqlalchemy import select
 
-    from shukketsu.config import get_settings
+    from shukketsu.api.deps import get_wcl_factory
     from shukketsu.db.models import MyCharacter
     from shukketsu.pipeline.ingest import ingest_report
-    from shukketsu.wcl.auth import WCLAuth
-    from shukketsu.wcl.client import WCLClient
-    from shukketsu.wcl.rate_limiter import RateLimiter
-
-    settings = get_settings()
-    if not settings.wcl.client_id:
-        raise HTTPException(
-            status_code=503, detail="WCL credentials not configured"
-        )
 
     try:
         chars = await session.execute(select(MyCharacter.name))
         my_names = {r[0] for r in chars}
 
-        auth = WCLAuth(
-            settings.wcl.client_id,
-            settings.wcl.client_secret.get_secret_value(),
-            settings.wcl.oauth_url,
-        )
-        async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
+        async with get_wcl_factory()() as wcl:
             result = await ingest_report(
                 wcl, session, report_code, my_names,
                 ingest_events=True,

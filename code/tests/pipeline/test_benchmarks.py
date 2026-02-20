@@ -1,5 +1,6 @@
 """Tests for the benchmark pipeline — discover, ingest, compute."""
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -158,10 +159,23 @@ class TestDiscoverBenchmarkReports:
         assert reports[0]["encounter_id"] == 650
 
 
+def _mock_session_with_savepoints():
+    """Create an AsyncMock session that supports begin_nested() as async cm."""
+    session = AsyncMock()
+    session.add = MagicMock()  # sync method on AsyncSession
+
+    @asynccontextmanager
+    async def _begin_nested():
+        yield
+
+    session.begin_nested = _begin_nested
+    return session
+
+
 class TestIngestBenchmarkReports:
     async def test_ingests_reports(self):
         wcl = AsyncMock()
-        session = AsyncMock()
+        session = _mock_session_with_savepoints()
 
         reports = [
             {
@@ -186,7 +200,8 @@ class TestIngestBenchmarkReports:
 
         assert result == {"ingested": 2, "errors": 0}
         assert mock_ingest.call_count == 2
-        assert session.merge.await_count == 2
+        # session.add() is sync on AsyncSession
+        assert session.add.call_count == 2
         assert session.commit.call_count == 2
 
         # Verify ingest_report called with correct args
@@ -196,7 +211,7 @@ class TestIngestBenchmarkReports:
 
     async def test_handles_ingest_error(self):
         wcl = AsyncMock()
-        session = AsyncMock()
+        session = _mock_session_with_savepoints()
 
         reports = [
             {
@@ -226,10 +241,19 @@ class TestIngestBenchmarkReports:
         assert result == {"ingested": 1, "errors": 1}
         assert session.rollback.call_count == 1
 
-    async def test_deduplicates_by_report_code(self):
-        """Same report_code for different encounters uses merge (no duplicate)."""
+    async def test_duplicate_code_raises_on_second_add(self):
+        """Same report_code twice would fail on unique constraint.
+
+        In practice, discover_benchmark_reports deduplicates upstream via
+        seen_codes set. This test shows that if duplicates slip through,
+        the second add raises (caught by the error handler).
+        """
         wcl = AsyncMock()
-        session = AsyncMock()
+        session = _mock_session_with_savepoints()
+        # Second commit raises unique violation
+        session.commit = AsyncMock(
+            side_effect=[None, Exception("unique violation")]
+        )
 
         reports = [
             {
@@ -252,9 +276,8 @@ class TestIngestBenchmarkReports:
         ):
             result = await ingest_benchmark_reports(wcl, session, reports)
 
-        # Both succeed because merge() handles duplicates
-        assert result == {"ingested": 2, "errors": 0}
-        assert session.merge.await_count == 2
+        assert result == {"ingested": 1, "errors": 1}
+        assert session.rollback.call_count == 1
 
     async def test_empty_reports(self):
         wcl = AsyncMock()

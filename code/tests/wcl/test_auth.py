@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 import httpx
@@ -90,3 +91,22 @@ async def test_get_token_retries_on_500(auth):
 
     assert token == "tok-retry"
     assert route.call_count == 2
+
+
+@respx.mock
+async def test_concurrent_get_token_single_request(auth):
+    """Two concurrent get_token calls should only make one OAuth request."""
+    route = respx.post(OAUTH_URL).mock(
+        return_value=httpx.Response(
+            200, json={"access_token": "tok-shared", "expires_in": 3600, "token_type": "bearer"}
+        )
+    )
+    async with httpx.AsyncClient() as client:
+        t1, t2 = await asyncio.gather(
+            auth.get_token(client),
+            auth.get_token(client),
+        )
+
+    assert t1 == "tok-shared"
+    assert t2 == "tok-shared"
+    assert route.call_count == 1

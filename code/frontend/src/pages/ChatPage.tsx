@@ -13,6 +13,8 @@ function generateId(): string {
   }
 }
 
+const MAX_MESSAGES = 200
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streaming, setStreaming] = useState(false)
@@ -34,7 +36,7 @@ export default function ChatPage() {
         content: '',
         timestamp: Date.now(),
       }
-      setMessages((prev) => [...prev, userMsg, assistantMsg])
+      setMessages((prev) => [...prev, userMsg, assistantMsg].slice(-MAX_MESSAGES))
       setStreaming(true)
 
       abortRef.current = postAnalyzeStream(

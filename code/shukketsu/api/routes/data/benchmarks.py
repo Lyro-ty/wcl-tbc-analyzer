@@ -164,18 +164,9 @@ async def refresh_benchmarks(
     """Trigger benchmark pipeline (1hr cooldown)."""
     from sqlalchemy import select as sa_select
 
-    from shukketsu.config import get_settings
+    from shukketsu.api.deps import get_wcl_factory
     from shukketsu.db.models import Encounter
     from shukketsu.pipeline.benchmarks import run_benchmark_pipeline
-    from shukketsu.wcl.auth import WCLAuth
-    from shukketsu.wcl.client import WCLClient
-    from shukketsu.wcl.rate_limiter import RateLimiter
-
-    settings = get_settings()
-    if not settings.wcl.client_id:
-        raise HTTPException(
-            status_code=503, detail="WCL credentials not configured"
-        )
 
     try:
         stmt = sa_select(Encounter.id)
@@ -188,12 +179,7 @@ async def refresh_benchmarks(
                 status_code=404, detail="No encounters found"
             )
 
-        auth = WCLAuth(
-            settings.wcl.client_id,
-            settings.wcl.client_secret.get_secret_value(),
-            settings.wcl.oauth_url,
-        )
-        async with WCLClient(auth, RateLimiter(), api_url=settings.wcl.api_url) as wcl:
+        async with get_wcl_factory()() as wcl:
             result = await run_benchmark_pipeline(
                 wcl, session, force=force,
             )

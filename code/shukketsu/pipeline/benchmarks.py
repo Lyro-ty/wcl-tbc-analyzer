@@ -44,6 +44,7 @@ async def discover_benchmark_reports(
         eid = row.encounter_id
         code = row.report_code
         if code in seen_codes:
+            logger.debug("Skipping %s (already seen for another encounter)", code)
             continue
         count = seen_per_encounter.get(eid, 0)
         if count >= max_per_encounter:
@@ -95,17 +96,18 @@ async def ingest_benchmark_reports(
     for report in reports:
         code = report["report_code"]
         try:
-            await ingest_report(
-                wcl, session, code,
-                ingest_tables=True,
-                ingest_events=True,
-            )
-            await session.merge(BenchmarkReport(
-                report_code=code,
-                source=report["source"],
-                encounter_id=report.get("encounter_id"),
-                guild_name=report.get("guild_name"),
-            ))
+            async with session.begin_nested():
+                await ingest_report(
+                    wcl, session, code,
+                    ingest_tables=True,
+                    ingest_events=True,
+                )
+                session.add(BenchmarkReport(
+                    report_code=code,
+                    source=report["source"],
+                    encounter_id=report.get("encounter_id"),
+                    guild_name=report.get("guild_name"),
+                ))
             await session.commit()
             ingested += 1
             logger.info("Ingested benchmark report %s", code)
@@ -268,6 +270,7 @@ async def compute_encounter_benchmarks(
         await session.merge(EncounterBenchmark(
             encounter_id=eid,
             sample_size=kill_row.kill_count,
+            # Strip tzinfo: column is TIMESTAMP WITHOUT TIME ZONE
             computed_at=datetime.now(UTC).replace(tzinfo=None),
             benchmarks=benchmarks,
         ))

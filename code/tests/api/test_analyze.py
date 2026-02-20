@@ -1,3 +1,4 @@
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -585,3 +586,66 @@ async def test_stream_skips_tool_call_chunks():
 
     assert "DPS is great" in all_tokens
     assert "get_my_performance" not in all_tokens
+
+
+async def test_analyze_503_when_semaphore_full():
+    """POST /analyze returns 503 when the LLM semaphore can't be acquired."""
+    graph = AsyncMock()
+    graph.ainvoke.return_value = {
+        "messages": [AIMessage(content="ok")],
+    }
+
+    with (
+        patch("shukketsu.api.routes.analyze._get_graph", return_value=graph),
+        patch(
+            "shukketsu.api.routes.analyze._llm_semaphore",
+            asyncio.Semaphore(0),
+        ),
+        patch(
+            "shukketsu.api.routes.analyze._LLM_ACQUIRE_TIMEOUT", 0.01,
+        ),
+    ):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/analyze",
+                json={"question": "Hello"},
+            )
+
+    assert resp.status_code == 503
+    assert "busy" in resp.json()["detail"].lower()
+
+
+async def test_stream_503_when_semaphore_full():
+    """POST /analyze/stream returns error event when semaphore is full."""
+    mock_graph = AsyncMock()
+
+    async def fake_astream(input, stream_mode=None, config=None):
+        yield (AIMessageChunk(content="ok"), {"langgraph_node": "agent"})
+
+    mock_graph.astream = fake_astream
+
+    with (
+        patch("shukketsu.api.routes.analyze._get_graph", return_value=mock_graph),
+        patch(
+            "shukketsu.api.routes.analyze._llm_semaphore",
+            asyncio.Semaphore(0),
+        ),
+        patch(
+            "shukketsu.api.routes.analyze._LLM_ACQUIRE_TIMEOUT", 0.01,
+        ),
+    ):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/analyze/stream",
+                json={"question": "Hello"},
+            )
+
+    assert resp.status_code == 200  # SSE always returns 200
+    body = resp.text
+    assert "busy" in body.lower()

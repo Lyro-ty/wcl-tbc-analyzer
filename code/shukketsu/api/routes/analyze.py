@@ -46,6 +46,7 @@ class AnalyzeRequest(BaseModel):
 
 # Limit concurrent LLM invocations
 _llm_semaphore = asyncio.Semaphore(2)
+_LLM_ACQUIRE_TIMEOUT = 30.0
 
 
 class AnalyzeResponse(BaseModel):
@@ -68,20 +69,31 @@ async def analyze(request: AnalyzeRequest):
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
     try:
-        async with _llm_semaphore:
-            config = {}
-            handler = _get_langfuse_handler()
-            if handler:
-                config["callbacks"] = [handler]
-            result = await graph.ainvoke(
-                {"messages": [HumanMessage(content=request.question)]},
-                config=config,
-            )
+        await asyncio.wait_for(
+            _llm_semaphore.acquire(), timeout=_LLM_ACQUIRE_TIMEOUT,
+        )
+    except TimeoutError:
+        raise HTTPException(
+            status_code=503,
+            detail="Analysis service busy, try again shortly",
+        ) from None
+
+    try:
+        config = {}
+        handler = _get_langfuse_handler()
+        if handler:
+            config["callbacks"] = [handler]
+        result = await graph.ainvoke(
+            {"messages": [HumanMessage(content=request.question)]},
+            config=config,
+        )
     except Exception as exc:
         logger.exception("Agent invocation failed")
         raise HTTPException(
             status_code=503, detail="Analysis service unavailable",
         ) from exc
+    finally:
+        _llm_semaphore.release()
 
     messages = result.get("messages", [])
     raw = messages[-1].content if messages else "No response generated."
@@ -101,69 +113,81 @@ async def analyze_stream(request: AnalyzeRequest):
         think_done = False
 
         try:
+            await asyncio.wait_for(
+                _llm_semaphore.acquire(), timeout=_LLM_ACQUIRE_TIMEOUT,
+            )
+        except TimeoutError:
+            yield {
+                "event": "error",
+                "data": json.dumps(
+                    {"detail": "Analysis service busy, try again shortly"}
+                ),
+            }
+            return
+
+        try:
             config = {}
             handler = _get_langfuse_handler()
             if handler:
                 config["callbacks"] = [handler]
-            async with _llm_semaphore:
-                async for chunk, metadata in graph.astream(
-                    {"messages": [HumanMessage(content=request.question)]},
-                    stream_mode="messages",
-                    config=config,
-                ):
-                    node = (
-                        metadata.get("langgraph_node")
-                        if isinstance(metadata, dict) else None
-                    )
+            async for chunk, metadata in graph.astream(
+                {"messages": [HumanMessage(content=request.question)]},
+                stream_mode="messages",
+                config=config,
+            ):
+                node = (
+                    metadata.get("langgraph_node")
+                    if isinstance(metadata, dict) else None
+                )
 
-                    # Reset think-tag buffer between agent turns
-                    if node == "tools":
+                # Reset think-tag buffer between agent turns
+                if node == "tools":
+                    buffer = ""
+                    think_done = False
+                    continue
+
+                if node != "agent":
+                    continue
+
+                if not hasattr(chunk, "content") or not chunk.content:
+                    continue
+
+                # Skip tool call chunks (intermediate turns)
+                if getattr(chunk, "tool_call_chunks", None):
+                    continue
+
+                token = chunk.content
+
+                if not think_done:
+                    buffer += token
+                    if len(buffer) > _MAX_THINK_BUFFER:
+                        cleaned = _strip_think_tags(buffer)
+                        if cleaned.strip():
+                            yield {
+                                "data": json.dumps(
+                                    {"token": cleaned}
+                                )
+                            }
                         buffer = ""
-                        think_done = False
+                        think_done = True
                         continue
+                    if "</think>" in buffer:
+                        after = THINK_PATTERN.sub("", buffer)
+                        think_done = True
+                        buffer = ""
+                        if after.strip():
+                            yield {"data": json.dumps({"token": after})}
+                    continue
 
-                    if node != "agent":
-                        continue
+                yield {"data": json.dumps({"token": token})}
 
-                    if not hasattr(chunk, "content") or not chunk.content:
-                        continue
+            # If we buffered but never saw </think>, flush as content
+            if buffer and not think_done:
+                cleaned = _strip_think_tags(buffer)
+                if cleaned.strip():
+                    yield {"data": json.dumps({"token": cleaned})}
 
-                    # Skip tool call chunks (intermediate turns)
-                    if getattr(chunk, "tool_call_chunks", None):
-                        continue
-
-                    token = chunk.content
-
-                    if not think_done:
-                        buffer += token
-                        if len(buffer) > _MAX_THINK_BUFFER:
-                            cleaned = _strip_think_tags(buffer)
-                            if cleaned.strip():
-                                yield {
-                                    "data": json.dumps(
-                                        {"token": cleaned}
-                                    )
-                                }
-                            buffer = ""
-                            think_done = True
-                            continue
-                        if "</think>" in buffer:
-                            after = THINK_PATTERN.sub("", buffer)
-                            think_done = True
-                            buffer = ""
-                            if after.strip():
-                                yield {"data": json.dumps({"token": after})}
-                        continue
-
-                    yield {"data": json.dumps({"token": token})}
-
-                # If we buffered but never saw </think>, flush as content
-                if buffer and not think_done:
-                    cleaned = _strip_think_tags(buffer)
-                    if cleaned.strip():
-                        yield {"data": json.dumps({"token": cleaned})}
-
-                yield {"data": json.dumps({"done": True})}
+            yield {"data": json.dumps({"done": True})}
 
         except asyncio.CancelledError:
             logger.info(
@@ -173,5 +197,7 @@ async def analyze_stream(request: AnalyzeRequest):
         except Exception:
             logger.exception("Streaming analysis failed")
             yield {"event": "error", "data": json.dumps({"detail": "Analysis failed"})}
+        finally:
+            _llm_semaphore.release()
 
     return EventSourceResponse(event_generator())
