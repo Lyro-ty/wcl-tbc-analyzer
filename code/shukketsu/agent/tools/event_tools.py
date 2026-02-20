@@ -13,6 +13,13 @@ from shukketsu.agent.tool_utils import (
     wildcard_or_none,
 )
 from shukketsu.db import queries as q
+from shukketsu.db.queries.table_data import ABILITY_BREAKDOWN
+from shukketsu.pipeline.constants import (
+    ENCOUNTER_CONTEXTS,
+    ROLE_BY_SPEC,
+    ROLE_DEFAULT_RULES,
+    SPEC_ROTATION_RULES,
+)
 
 
 @db_tool
@@ -481,12 +488,199 @@ async def get_dot_management(
     return "\n".join(lines)
 
 
+def _letter_grade(score: float) -> str:
+    """Return a letter grade for the given score (0-100).
+
+    S(95+), A(85+), B(75+), C(60+), D(40+), F(<40)
+    """
+    return grade_above(
+        score,
+        [(95, "S"), (85, "A"), (75, "B"), (60, "C"), (40, "D")],
+        "F",
+    )
+
+
+def _score_healer(player_name: str, spec: str) -> str:
+    """Stub: healer rotation scoring not yet implemented."""
+    return (
+        f"Healer scoring for {player_name} ({spec}) is coming soon. "
+        f"Use get_overheal_analysis for healer evaluation."
+    )
+
+
+def _score_tank(player_name: str, spec: str) -> str:
+    """Stub: tank rotation scoring not yet implemented."""
+    return (
+        f"Tank scoring for {player_name} ({spec}) is coming soon. "
+        f"Use get_cooldown_efficiency for tank evaluation."
+    )
+
+
+_LONG_CD_THRESHOLD = 180  # CDs > 180s use long_cd_efficiency
+
+
+async def _score_dps(
+    session,
+    report_code: str,
+    fight_id: int,
+    player_name: str,
+    info,
+    rules,
+):
+    """Score a DPS player's rotation using spec-aware, encounter-aware rules."""
+    pn_like = wildcard(player_name)
+    spec = info.player_spec
+    player_class = info.player_class
+    encounter_name = info.encounter_name
+
+    # --- Resolve encounter context modifier ---
+    ctx = ENCOUNTER_CONTEXTS.get(encounter_name)
+    role = rules.role
+    is_melee = role == "melee_dps"
+    if ctx:
+        modifier = (
+            ctx.melee_modifier if is_melee and ctx.melee_modifier is not None
+            else ctx.gcd_modifier
+        )
+    else:
+        modifier = 1.0
+
+    adjusted_gcd = rules.gcd_target * modifier
+    adjusted_cpm = rules.cpm_target * modifier
+
+    # --- Fetch data ---
+    cm_result = await session.execute(
+        q.FIGHT_CAST_METRICS,
+        {"report_code": report_code, "fight_id": fight_id,
+         "player_name": pn_like},
+    )
+    cm_row = cm_result.fetchone()
+
+    cd_result = await session.execute(
+        q.FIGHT_COOLDOWNS,
+        {"report_code": report_code, "fight_id": fight_id,
+         "player_name": pn_like},
+    )
+    cd_rows = cd_result.fetchall()
+
+    # Ability breakdown (from --with-tables, optional)
+    ab_result = await session.execute(
+        ABILITY_BREAKDOWN,
+        {"report_code": report_code, "fight_id": fight_id,
+         "player_name": pn_like},
+    )
+    ab_rows = ab_result.fetchall()
+
+    # --- Score rules ---
+    rules_checked = 0
+    rules_passed = 0
+    violations = []
+    notes = []
+
+    # Rule 1: GCD uptime vs adjusted target
+    if cm_row:
+        rules_checked += 1
+        if cm_row.gcd_uptime_pct >= adjusted_gcd:
+            rules_passed += 1
+        else:
+            violations.append(
+                f"GCD uptime {cm_row.gcd_uptime_pct:.1f}% "
+                f"< {adjusted_gcd:.1f}% target"
+            )
+
+        # Rule 2: CPM vs adjusted target
+        rules_checked += 1
+        if cm_row.casts_per_minute >= adjusted_cpm:
+            rules_passed += 1
+        else:
+            violations.append(
+                f"CPM {cm_row.casts_per_minute:.1f} "
+                f"< {adjusted_cpm:.1f} target"
+            )
+
+    # Rule 3+: Cooldown efficiency (short vs long thresholds)
+    for cd in cd_rows:
+        rules_checked += 1
+        cd_sec = cd.cooldown_sec if cd.cooldown_sec else 0
+        if cd_sec > _LONG_CD_THRESHOLD:
+            threshold = rules.long_cd_efficiency
+            label = "long CD"
+        else:
+            threshold = rules.cd_efficiency_target
+            label = "short CD"
+        if cd.efficiency_pct >= threshold:
+            rules_passed += 1
+        else:
+            violations.append(
+                f"{cd.ability_name} ({label}) efficiency "
+                f"{cd.efficiency_pct:.1f}% < {threshold:.0f}%"
+            )
+
+    # Rule 4: Key ability presence check
+    if rules.key_abilities and ab_rows:
+        ability_names = {r.ability_name for r in ab_rows}
+        for key_ab in rules.key_abilities:
+            rules_checked += 1
+            if key_ab in ability_names:
+                rules_passed += 1
+            else:
+                violations.append(
+                    f"Key ability '{key_ab}' not found in ability breakdown"
+                )
+    elif rules.key_abilities and not ab_rows:
+        notes.append(
+            "Ability breakdown not available (use --with-tables). "
+            "Key ability check skipped."
+        )
+
+    if rules_checked == 0:
+        return (
+            f"No cast/cooldown data found for '{player_name}' in "
+            f"fight {fight_id}. {EVENT_DATA_HINT}"
+        )
+
+    score = rules_passed / rules_checked * 100
+    grade = _letter_grade(score)
+
+    # --- Format output ---
+    lines = [
+        f"Rotation score for {player_name} ({player_class} {spec}) "
+        f"on {encounter_name} [{report_code}#{fight_id}]:\n",
+        f"  Grade: {grade} ({score:.0f}%) | "
+        f"Rules passed: {rules_passed}/{rules_checked}",
+    ]
+
+    if ctx and modifier < 1.0:
+        lines.append(
+            f"\n  Encounter context: {encounter_name} "
+            f"(modifier {modifier:.2f}"
+            f"{' — ' + ctx.notes if ctx.notes else ''})"
+        )
+        lines.append(
+            f"  Adjusted targets: GCD {adjusted_gcd:.1f}%, "
+            f"CPM {adjusted_cpm:.1f}"
+        )
+
+    if violations:
+        lines.append("\n  Violations:")
+        for v in violations:
+            lines.append(f"    - {v}")
+
+    if notes:
+        lines.append("\n  Notes:")
+        for n in notes:
+            lines.append(f"    - {n}")
+
+    return "\n".join(lines)
+
+
 @db_tool
 async def get_rotation_score(
     session, report_code: str, fight_id: int, player_name: str,
 ) -> str:
     """Get rule-based rotation quality score for a player in a fight.
-    Checks GCD uptime, cooldown efficiency, and casts per minute.
+    Uses spec-specific thresholds and encounter-aware modifiers.
+    Checks GCD uptime, CPM, cooldown efficiency, and key abilities.
     Requires event data ingestion."""
     # Get player info
     pn_like = wildcard(player_name)
@@ -502,83 +696,24 @@ async def get_rotation_score(
             f"{fight_id} of report {report_code}."
         )
 
+    player_class = info_row.player_class
     spec = info_row.player_spec
 
-    # Get cast metrics
-    cm_result = await session.execute(
-        q.FIGHT_CAST_METRICS,
-        {"report_code": report_code, "fight_id": fight_id,
-         "player_name": pn_like},
+    # Look up spec rules, fall back to role defaults
+    rules = SPEC_ROTATION_RULES.get((player_class, spec))
+    if not rules:
+        role = ROLE_BY_SPEC.get(spec, "melee_dps")
+        rules = ROLE_DEFAULT_RULES.get(role, ROLE_DEFAULT_RULES["melee_dps"])
+
+    # Route by role
+    if rules.role == "healer":
+        return _score_healer(player_name, spec)
+    if rules.role == "tank":
+        return _score_tank(player_name, spec)
+
+    return await _score_dps(
+        session, report_code, fight_id, player_name, info_row, rules,
     )
-    cm_row = cm_result.fetchone()
-
-    # Get cooldown usage
-    cd_result = await session.execute(
-        q.FIGHT_COOLDOWNS,
-        {"report_code": report_code, "fight_id": fight_id,
-         "player_name": pn_like},
-    )
-    cd_rows = cd_result.fetchall()
-
-    rules_checked = 0
-    rules_passed = 0
-    violations = []
-
-    # Rule 1: GCD uptime > 85%
-    if cm_row:
-        rules_checked += 1
-        if cm_row.gcd_uptime_pct >= 85.0:
-            rules_passed += 1
-        else:
-            violations.append(
-                f"GCD uptime {cm_row.gcd_uptime_pct:.1f}% < 85%"
-            )
-
-        # Rule 2: CPM > 20
-        rules_checked += 1
-        if cm_row.casts_per_minute >= 20.0:
-            rules_passed += 1
-        else:
-            violations.append(
-                f"CPM {cm_row.casts_per_minute:.1f} < 20"
-            )
-
-    # Rule 3: No cooldown efficiency below 60%
-    for cd in cd_rows:
-        rules_checked += 1
-        if cd.efficiency_pct >= 60.0:
-            rules_passed += 1
-        else:
-            violations.append(
-                f"{cd.ability_name} efficiency "
-                f"{cd.efficiency_pct:.1f}% < 60%"
-            )
-
-    if rules_checked == 0:
-        return (
-            f"No cast/cooldown data found for '{player_name}' in "
-            f"fight {fight_id}. {EVENT_DATA_HINT}"
-        )
-
-    score = rules_passed / rules_checked * 100
-
-    grade = grade_above(
-        score, [(90, "A"), (75, "B"), (60, "C"), (40, "D")], "F",
-    )
-
-    lines = [
-        f"Rotation score for {player_name} ({spec}) in "
-        f"{report_code}#{fight_id}:\n",
-        f"  Grade: {grade} ({score:.0f}%) | "
-        f"Rules passed: {rules_passed}/{rules_checked}",
-    ]
-
-    if violations:
-        lines.append("\n  Violations:")
-        for v in violations:
-            lines.append(f"    - {v}")
-
-    return "\n".join(lines)
 
 
 @db_tool

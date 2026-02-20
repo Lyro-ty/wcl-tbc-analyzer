@@ -209,9 +209,10 @@ CAST_EVENTS_FOR_DOT_ANALYSIS = text("""
 PLAYER_FIGHT_INFO = text("""
     SELECT fp.player_class, fp.player_spec, fp.dps, fp.total_damage,
            (f.end_time - f.start_time) AS fight_duration_ms,
-           f.encounter_id
+           f.encounter_id, e.name AS encounter_name
     FROM fight_performances fp
     JOIN fights f ON fp.fight_id = f.id
+    JOIN encounters e ON f.encounter_id = e.id
     WHERE f.report_code = :report_code
       AND f.fight_id = :fight_id
       AND fp.player_name ILIKE :player_name
