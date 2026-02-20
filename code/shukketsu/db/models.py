@@ -1,10 +1,12 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     CheckConstraint,
     Computed,
+    DateTime,
     Float,
     ForeignKey,
     Index,
@@ -194,6 +196,55 @@ class SpeedRanking(Base):
     fetched_at: Mapped[datetime] = mapped_column(default=func.now())
 
     encounter: Mapped["Encounter"] = relationship(back_populates="speed_rankings")
+
+
+class WatchedGuild(Base):
+    __tablename__ = "watched_guilds"
+    __table_args__ = (
+        UniqueConstraint(
+            "guild_name", "server_slug", "server_region", name="uq_watched_guild"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_name: Mapped[str] = mapped_column(String, nullable=False)
+    wcl_guild_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    server_slug: Mapped[str] = mapped_column(String, nullable=False)
+    server_region: Mapped[str] = mapped_column(String(2), nullable=False)
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class BenchmarkReport(Base):
+    __tablename__ = "benchmark_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    report_code: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    encounter_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("encounters.id", ondelete="CASCADE"), nullable=True
+    )
+    guild_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
+
+
+class EncounterBenchmark(Base):
+    __tablename__ = "encounter_benchmarks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    encounter_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("encounters.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    sample_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    benchmarks: Mapped[dict] = mapped_column(JSON, nullable=False)
 
 
 class ProgressionSnapshot(Base):
