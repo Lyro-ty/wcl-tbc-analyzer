@@ -494,3 +494,33 @@ class TestConsumableExpansion:
                     f"Role '{role}' has generic 'elixir' for {c.name}; "
                     f"should be 'battle_elixir' or 'guardian_elixir'"
                 )
+
+
+class TestWeaponEnhancementIds:
+    """Verify weapon oil/stone spell IDs are correct TBC buff IDs."""
+
+    def test_blessed_wizard_oil_label(self):
+        """28898 is Blessed Wizard Oil, not Brilliant Wizard Oil."""
+        assert 28898 in CONSUMABLE_CATEGORIES
+        assert CONSUMABLE_CATEGORIES[28898][1] == "Blessed Wizard Oil"
+
+    def test_superior_wizard_oil_id(self):
+        """Superior Wizard Oil buff is spell 28019, not 28891."""
+        assert 28019 in CONSUMABLE_CATEGORIES
+        assert CONSUMABLE_CATEGORIES[28019][1] == "Superior Wizard Oil"
+        assert 28891 not in CONSUMABLE_CATEGORIES
+
+    def test_adamantite_sharpening_stone_id(self):
+        """Adamantite Sharpening Stone buff is spell 29656."""
+        assert 29656 in CONSUMABLE_CATEGORIES
+        assert CONSUMABLE_CATEGORIES[29656][1] == "Adamantite Sharpening Stone"
+
+    def test_adamantite_weightstone_id(self):
+        """Adamantite Weightstone buff is spell 34608."""
+        assert 34608 in CONSUMABLE_CATEGORIES
+        assert CONSUMABLE_CATEGORIES[34608][1] == "Adamantite Weightstone"
+
+    def test_brilliant_mana_oil_not_mislabeled(self):
+        """25123 should be Brilliant Mana Oil if present."""
+        if 25123 in CONSUMABLE_CATEGORIES:
+            assert CONSUMABLE_CATEGORIES[25123][1] != "Adamantite Sharpening Stone"

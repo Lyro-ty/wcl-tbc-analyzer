@@ -458,11 +458,14 @@ CONSUMABLE_CATEGORIES: dict[int, tuple[str, str]] = {
     # Food
     33254: ("food", "Well Fed"),
     33257: ("food", "Well Fed"),
-    # Weapon Oils / Stones
-    28898: ("weapon_oil", "Brilliant Wizard Oil"),
-    28891: ("weapon_oil", "Superior Wizard Oil"),
-    25123: ("weapon_oil", "Adamantite Sharpening Stone"),
-    25118: ("weapon_oil", "Adamantite Weightstone"),
+    # Weapon Oils / Stones (buff spell IDs verified on Wowhead TBC)
+    25122: ("weapon_oil", "Brilliant Wizard Oil"),
+    25123: ("weapon_oil", "Brilliant Mana Oil"),
+    28898: ("weapon_oil", "Blessed Wizard Oil"),
+    28019: ("weapon_oil", "Superior Wizard Oil"),
+    28013: ("weapon_oil", "Superior Mana Oil"),
+    29656: ("weapon_stone", "Adamantite Sharpening Stone"),
+    34608: ("weapon_stone", "Adamantite Weightstone"),
 }
 
 GEAR_SLOTS: dict[int, str] = {
