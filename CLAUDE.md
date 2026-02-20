@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Shukketsu Raid Analyzer** — an agentic AI tool that collects Warcraft Logs (WCL) data for World of Warcraft TBC Classic (The Burning Crusade) and provides raid improvement analysis via a LangGraph CRAG agent powered by Nemotron 3 Nano 30B (served via ollama).
 
-**Game context:** WoW TBC Classic (The Burning Crusade). TBC zone IDs: Karazhan (1047), Gruul's Lair/Magtheridon (1048), SSC (1049), TK (1050), Hyjal (1051), BT (1052), Sunwell (1053). Reports may contain fights from multiple zones/raids.
+**Game context:** WoW TBC Classic (The Burning Crusade), Phase 1 only. TBC P1 zone IDs: Karazhan (1047), Gruul's Lair/Magtheridon (1048). Reports may contain fights from multiple zones/raids.
 
 **Architecture:** Three-layer monolith:
 1. **Data pipeline** — Python scripts + pipeline modules pull from WCL GraphQL API v2 into PostgreSQL
@@ -300,7 +300,7 @@ snapshot-progression --character Lyro
 # Test the agent
 curl -X POST http://localhost:8000/api/analyze \
   -H "Content-Type: application/json" \
-  -d '{"question": "What specs top DPS on Patchwerk?"}'
+  -d '{"question": "What specs top DPS on Gruul?"}'
 ```
 
 ## Testing patterns
@@ -320,7 +320,7 @@ curl -X POST http://localhost:8000/api/analyze \
 - Rate limited by points per hour; every response includes `rateLimitData`
 - Rankings API returns `{"data": [{"fightID": N, "roles": {...}}]}` — a list with fightID fields, not a dict keyed by fight ID
 - **GraphQL JSON scalar:** `characterRankings`, `fightRankings`, and report `rankings` may return JSON string OR dict. All parsers handle both via `json.loads()` guard: `if isinstance(data, str): data = json.loads(data)`
-- TBC zone IDs: Karazhan (1047), Gruul's Lair/Magtheridon (1048), and higher tiers (1049+)
+- TBC P1 zone IDs: Karazhan (1047), Gruul's Lair/Magtheridon (1048)
 - Reports may contain fights from other raids — the ingest pipeline auto-inserts unknown encounters as stubs via `session.merge()`
 
 ## Known issues
@@ -329,9 +329,9 @@ curl -X POST http://localhost:8000/api/analyze \
 - **speed_rankings table:** Only populated via `pull-speed-rankings` script, not from report ingestion.
 - **ability_metrics/buff_uptimes tables:** Only populated when `--with-tables` flag is used with `pull-my-logs` or via `pull-table-data` backfill.
 - **Event tables:** `death_details`, `cast_events`, `cast_metrics`, `cooldown_usage`, `cancelled_casts`, `resource_snapshots` only populated when `--with-events` flag is used.
-- **Rotation scoring:** Currently uses 3 universal rules (GCD uptime, CPM, CD efficiency). Spec-specific rules not yet implemented.
+- **Rotation scoring:** Uses 3 rules (GCD uptime, CPM, CD efficiency) with per-spec thresholds via `SPEC_ROTATION_RULES` in constants.py. Spec-specific ability priority checking not yet implemented.
 - **DoT refresh analysis:** Only covers Warlock, Priest, and Druid DoTs (keyed by class name, no spec filtering).
-- **Trinket tracking:** Limited to 10 known Classic/TBC trinkets. Expand `CLASSIC_TRINKETS` for more coverage.
+- **Trinket tracking:** Limited to 5 known TBC P1 trinkets. Expand `CLASSIC_TRINKETS` for more coverage.
 - **Cooldown windows:** DPS gain during burst windows is estimated (20% boost), not computed from actual damage events.
 - **GCD fixed at 1500ms:** `cast_events.py` uses a fixed 1500ms GCD. In WoW, haste reduces GCD to as low as 1.0s for some classes.
 - **Healer DPS field:** `parse_rankings_to_performances()` stores WCL's `amount` in the `dps` column for all players. For healers in report rankings, `amount` is actually HPS but gets stored as `dps`. The `total_healing`/`hps` fields are zero from report ingestion (they'd require a separate WCL API call with `metric: hps`).

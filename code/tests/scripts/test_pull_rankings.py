@@ -47,7 +47,7 @@ def test_parse_args_include_hps():
 
 def test_parse_args_all_options():
     args = parse_args([
-        "--encounter", "Brutallus",
+        "--encounter", "Gruul the Dragonkiller",
         "--zone-id", "1048",
         "--class-name", "Warrior",
         "--spec-name", "Fury",
@@ -56,7 +56,7 @@ def test_parse_args_all_options():
         "--stale-hours", "48",
         "--dry-run",
     ])
-    assert args.encounter == "Brutallus"
+    assert args.encounter == "Gruul the Dragonkiller"
     assert args.zone_id == 1048
     assert args.class_name == "Warrior"
     assert args.spec_name == "Fury"

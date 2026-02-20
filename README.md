@@ -158,15 +158,15 @@ The AI agent has 12 database query tools:
 
 | Tool | What it answers |
 |------|-----------------|
-| `get_my_performance` | "How did I do on Patchwerk?" |
-| `get_top_rankings` | "What are the top Arms Warrior parses on Thaddius?" |
-| `compare_to_top` | "How do I compare to the best rogues on Sapphiron?" |
+| `get_my_performance` | "How did I do on Gruul?" |
+| `get_top_rankings` | "What are the top Arms Warrior parses on Prince Malchezaar?" |
+| `compare_to_top` | "How do I compare to the best rogues on Magtheridon?" |
 | `get_fight_details` | "Show me everyone's DPS on fight #3" |
-| `get_progression` | "Am I improving on Heigan over time?" |
-| `get_deaths_and_mechanics` | "Who died the most on Four Horsemen?" |
+| `get_progression` | "Am I improving on Shade of Aran over time?" |
+| `get_deaths_and_mechanics` | "Who died the most on Nightbane?" |
 | `get_raid_summary` | "Give me an overview of last night's raid" |
-| `search_fights` | "Find all our Loatheb kills" |
-| `get_spec_leaderboard` | "What specs are topping DPS on Patchwerk?" |
+| `search_fights` | "Find all our Gruul kills" |
+| `get_spec_leaderboard` | "What specs are topping DPS on Gruul?" |
 | `compare_raid_to_top` | "How fast are our kills compared to top guilds?" |
 | `compare_two_raids` | "Compare last week's raid to this week's" |
 | `get_raid_execution` | "Where are we losing the most time?" |

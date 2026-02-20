@@ -74,46 +74,6 @@ TBC_ZONES: dict[str, list[str]] = {
     "Magtheridon's Lair": [
         "Magtheridon",
     ],
-    "Serpentshrine Cavern": [
-        "Hydross the Unstable",
-        "The Lurker Below",
-        "Leotheras the Blind",
-        "Fathom-Lord Karathress",
-        "Morogrim Tidewalker",
-        "Lady Vashj",
-    ],
-    "Tempest Keep": [
-        "Al'ar",
-        "Void Reaver",
-        "High Astromancer Solarian",
-        "Kael'thas Sunstrider",
-    ],
-    "Hyjal Summit": [
-        "Rage Winterchill",
-        "Anetheron",
-        "Kaz'rogal",
-        "Azgalor",
-        "Archimonde",
-    ],
-    "Black Temple": [
-        "High Warlord Naj'entus",
-        "Supremus",
-        "Shade of Akama",
-        "Teron Gorefiend",
-        "Gurtogg Bloodboil",
-        "Reliquary of Souls",
-        "Mother Shahraz",
-        "Illidari Council",
-        "Illidan Stormrage",
-    ],
-    "Sunwell Plateau": [
-        "Kalecgos",
-        "Brutallus",
-        "Felmyst",
-        "Eredar Twins",
-        "M'uru",
-        "Kil'jaeden",
-    ],
 }
 
 TBC_BOSS_NAMES: frozenset[str] = frozenset(
@@ -534,15 +494,10 @@ class TrinketDef:
 
 CLASSIC_TRINKETS: dict[int, TrinketDef] = {
     28830: TrinketDef(28830, "Dragonspine Trophy", 22.0),
-    23046: TrinketDef(23046, "The Restrained Essence of Sapphiron", 15.0),
     28789: TrinketDef(28789, "Eye of Magtheridon", 25.0),
-    23207: TrinketDef(23207, "Mark of the Champion", 100.0),
-    23001: TrinketDef(23001, "Eye of the Dead", 30.0),
     28235: TrinketDef(28235, "Pendant of the Violet Eye", 15.0),
     28727: TrinketDef(28727, "Pendant of the Violet Eye", 15.0),
     33649: TrinketDef(33649, "Tome of Fiery Redemption", 20.0),
-    34321: TrinketDef(34321, "Shard of Contempt", 30.0),
-    34472: TrinketDef(34472, "Timbal's Focusing Crystal", 15.0),
 }
 
 
@@ -653,34 +608,5 @@ ENCOUNTER_CONTEXTS: dict[str, EncounterContext] = {
     # --- TBC: Gruul's Lair ---
     "Gruul the Dragonkiller": EncounterContext(
         "Gruul the Dragonkiller", 0.85, 0.80, "Shatter knockback",
-    ),
-    # --- TBC: Serpentshrine Cavern ---
-    "Leotheras the Blind": EncounterContext(
-        "Leotheras the Blind", 0.80, 0.75, "Demon Form untargetable",
-    ),
-    "Lady Vashj": EncounterContext(
-        "Lady Vashj", 0.65, 0.60, "P2 shield = no boss DPS",
-    ),
-    # --- TBC: Tempest Keep ---
-    "Kael'thas Sunstrider": EncounterContext(
-        "Kael'thas Sunstrider", 0.55, 0.50, "P1-P3 no Kael DPS ~50%",
-    ),
-    # --- TBC: Hyjal Summit ---
-    "Archimonde": EncounterContext(
-        "Archimonde", 0.80, notes="Air Burst movement, fire",
-    ),
-    # --- TBC: Black Temple ---
-    "Illidan Stormrage": EncounterContext(
-        "Illidan Stormrage", 0.70, 0.60, "P2 boss airborne, transitions",
-    ),
-    # --- TBC: Sunwell Plateau ---
-    "M'uru": EncounterContext(
-        "M'uru", 0.80, 0.75, "Heavy add management P1",
-    ),
-    "Kil'jaeden": EncounterContext(
-        "Kil'jaeden", 0.70, 0.65, "Multiple transition phases",
-    ),
-    "Brutallus": EncounterContext(
-        "Brutallus", 1.0, notes="Pure DPS race",
     ),
 }

@@ -72,16 +72,16 @@ class TestClassSpecs:
 class TestBossNames:
     def test_zones_present(self):
         assert "Karazhan" in TBC_ZONES
-        assert "Black Temple" in TBC_ZONES
-        assert "Sunwell Plateau" in TBC_ZONES
+        assert "Gruul's Lair" in TBC_ZONES
+        assert "Magtheridon's Lair" in TBC_ZONES
 
     def test_boss_names_nonempty(self):
-        assert len(TBC_BOSS_NAMES) > 40
+        assert len(TBC_BOSS_NAMES) == 14
 
     def test_known_bosses(self):
-        assert "Illidan Stormrage" in TBC_BOSS_NAMES
         assert "Prince Malchezaar" in TBC_BOSS_NAMES
-        assert "Kil'jaeden" in TBC_BOSS_NAMES
+        assert "Gruul the Dragonkiller" in TBC_BOSS_NAMES
+        assert "Magtheridon" in TBC_BOSS_NAMES
 
     def test_boss_names_match_zones(self):
         all_from_zones = set()
@@ -95,7 +95,7 @@ class TestAllBossNames:
         assert ALL_BOSS_NAMES == TBC_BOSS_NAMES
 
     def test_all_boss_names_contains_known(self):
-        assert "Illidan Stormrage" in ALL_BOSS_NAMES
+        assert "Prince Malchezaar" in ALL_BOSS_NAMES
         assert "Gruul the Dragonkiller" in ALL_BOSS_NAMES
 
 
@@ -445,20 +445,11 @@ class TestEncounterContexts:
     def test_encounter_contexts_dict_exists(self):
         assert isinstance(ENCOUNTER_CONTEXTS, dict)
 
-    def test_brutallus_is_1_0(self):
-        ctx = ENCOUNTER_CONTEXTS["Brutallus"]
-        assert ctx.gcd_modifier == 1.0
-        assert ctx.melee_modifier is None  # Pure DPS race
-
     def test_netherspite_has_melee_penalty(self):
         ctx = ENCOUNTER_CONTEXTS["Netherspite"]
         assert ctx.gcd_modifier < 1.0  # Banish phase reduces DPS uptime
         assert ctx.melee_modifier is not None
         assert ctx.melee_modifier < ctx.gcd_modifier  # Melee worse than ranged
-
-    def test_kaelthas_is_low(self):
-        ctx = ENCOUNTER_CONTEXTS["Kael'thas Sunstrider"]
-        assert ctx.gcd_modifier <= 0.60  # No Kael DPS ~50%
 
     def test_unknown_encounter_defaults_to_1(self):
         assert "NonexistentBoss" not in ENCOUNTER_CONTEXTS
