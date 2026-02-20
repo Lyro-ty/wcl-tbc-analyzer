@@ -1,4 +1,4 @@
-"""REST API-only SQL queries (23 queries).
+"""REST API-only SQL queries (19 queries).
 
 Used by: api/routes/data/reports.py, api/routes/data/fights.py,
          api/routes/data/characters.py, api/routes/data/rankings.py
@@ -26,10 +26,6 @@ __all__ = [
     "CHARACTER_REPORT_DETAIL",
     "FIGHT_DEATHS",
     "GEAR_SNAPSHOT",
-    "NIGHT_SUMMARY_FIGHTS",
-    "NIGHT_SUMMARY_PLAYERS",
-    "WEEK_OVER_WEEK",
-    "PLAYER_PARSE_DELTAS",
 ]
 
 REPORTS_LIST = text("""
@@ -259,117 +255,4 @@ GEAR_SNAPSHOT = text("""
     WHERE f.report_code = :report_code AND f.fight_id = :fight_id
       AND gs.player_name ILIKE :player_name
     ORDER BY gs.slot
-""")
-
-NIGHT_SUMMARY_FIGHTS = text("""
-    SELECT r.title AS report_title, r.start_time, r.guild_name,
-           e.name AS encounter_name, f.fight_id,
-           f.kill, f.duration_ms,
-           COUNT(fp.id) AS player_count,
-           COALESCE(SUM(fp.deaths), 0) AS total_deaths,
-           COALESCE(SUM(fp.interrupts), 0) AS total_interrupts,
-           ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse,
-           ROUND(AVG(fp.dps)::numeric, 1) AS avg_dps,
-           ROUND(AVG(fp.hps)::numeric, 1) AS avg_hps
-    FROM fights f
-    JOIN encounters e ON f.encounter_id = e.id
-    JOIN reports r ON f.report_code = r.code
-    LEFT JOIN fight_performances fp ON fp.fight_id = f.id
-    WHERE f.report_code = :report_code
-    GROUP BY r.title, r.start_time, r.guild_name,
-             e.name, f.fight_id, f.kill, f.duration_ms
-    ORDER BY f.fight_id ASC
-""")
-
-NIGHT_SUMMARY_PLAYERS = text("""
-    SELECT fp.player_name, e.name AS encounter_name, f.fight_id,
-           fp.dps, fp.hps, fp.parse_percentile, fp.deaths, fp.interrupts,
-           f.kill
-    FROM fight_performances fp
-    JOIN fights f ON fp.fight_id = f.id
-    JOIN encounters e ON f.encounter_id = e.id
-    WHERE f.report_code = :report_code
-    ORDER BY f.fight_id ASC, fp.dps DESC
-""")
-
-WEEK_OVER_WEEK = text("""
-    WITH current_report AS (
-        SELECT r.code, r.guild_name, r.start_time,
-               SUM(CASE WHEN f.kill THEN f.duration_ms ELSE 0 END) AS clear_time_ms,
-               SUM(CASE WHEN f.kill THEN 1 ELSE 0 END) AS kill_count,
-               ROUND(AVG(fp.parse_percentile) FILTER (WHERE f.kill)::numeric, 1)
-                   AS avg_parse
-        FROM reports r
-        LEFT JOIN fights f ON f.report_code = r.code
-        LEFT JOIN fight_performances fp ON fp.fight_id = f.id
-        WHERE r.code = :report_code
-        GROUP BY r.code, r.guild_name, r.start_time
-    ),
-    prev_report AS (
-        SELECT r.code, r.start_time,
-               SUM(CASE WHEN f.kill THEN f.duration_ms ELSE 0 END) AS clear_time_ms,
-               SUM(CASE WHEN f.kill THEN 1 ELSE 0 END) AS kill_count,
-               ROUND(AVG(fp.parse_percentile) FILTER (WHERE f.kill)::numeric, 1)
-                   AS avg_parse
-        FROM reports r
-        LEFT JOIN fights f ON f.report_code = r.code
-        LEFT JOIN fight_performances fp ON fp.fight_id = f.id
-        WHERE r.guild_name = (SELECT guild_name FROM current_report)
-          AND r.start_time < (SELECT start_time FROM current_report)
-          AND r.code != :report_code
-        GROUP BY r.code, r.start_time
-        ORDER BY r.start_time DESC
-        LIMIT 1
-    )
-    SELECT pr.code AS previous_report,
-           (cr.clear_time_ms - pr.clear_time_ms) AS clear_time_delta_ms,
-           (cr.kill_count - pr.kill_count) AS kills_delta,
-           ROUND((cr.avg_parse - pr.avg_parse)::numeric, 1) AS avg_parse_delta
-    FROM current_report cr, prev_report pr
-""")
-
-PLAYER_PARSE_DELTAS = text("""
-    WITH current_parses AS (
-        SELECT fp.player_name, e.name AS encounter_name,
-               ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse
-        FROM fight_performances fp
-        JOIN fights f ON fp.fight_id = f.id
-        JOIN encounters e ON f.encounter_id = e.id
-        WHERE f.report_code = :report_code
-          AND f.kill = true
-          AND fp.parse_percentile IS NOT NULL
-        GROUP BY fp.player_name, e.name
-    ),
-    prev_report AS (
-        SELECT r.code
-        FROM reports r
-        WHERE r.guild_name = (
-            SELECT guild_name FROM reports WHERE code = :report_code
-        )
-          AND r.start_time < (
-            SELECT start_time FROM reports WHERE code = :report_code
-        )
-          AND r.code != :report_code
-        ORDER BY r.start_time DESC
-        LIMIT 1
-    ),
-    prev_parses AS (
-        SELECT fp.player_name, e.name AS encounter_name,
-               ROUND(AVG(fp.parse_percentile)::numeric, 1) AS avg_parse
-        FROM fight_performances fp
-        JOIN fights f ON fp.fight_id = f.id
-        JOIN encounters e ON f.encounter_id = e.id
-        WHERE f.report_code = (SELECT code FROM prev_report)
-          AND f.kill = true
-          AND fp.parse_percentile IS NOT NULL
-        GROUP BY fp.player_name, e.name
-    )
-    SELECT cp.player_name, cp.encounter_name,
-           cp.avg_parse AS current_parse,
-           pp.avg_parse AS previous_parse,
-           ROUND((cp.avg_parse - pp.avg_parse)::numeric, 1) AS parse_delta
-    FROM current_parses cp
-    JOIN prev_parses pp ON LOWER(cp.player_name) = LOWER(pp.player_name)
-                       AND cp.encounter_name = pp.encounter_name
-    ORDER BY parse_delta DESC
 """)

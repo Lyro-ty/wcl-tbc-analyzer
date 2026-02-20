@@ -96,16 +96,6 @@ class TestRoleAwareQueries:
         query_text = RECENT_REPORTS.text
         assert "hps" in query_text.lower()
 
-    def test_night_summary_fights_has_hps(self):
-        from shukketsu.db.queries.api import NIGHT_SUMMARY_FIGHTS
-        query_text = NIGHT_SUMMARY_FIGHTS.text
-        assert "hps" in query_text.lower()
-
-    def test_night_summary_players_has_hps(self):
-        from shukketsu.db.queries.api import NIGHT_SUMMARY_PLAYERS
-        query_text = NIGHT_SUMMARY_PLAYERS.text
-        assert "fp.hps" in query_text
-
 
 class TestSpecLeaderboardQuery:
     """Verify SPEC_LEADERBOARD includes healers and has median_hps."""

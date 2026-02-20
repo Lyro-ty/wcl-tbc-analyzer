@@ -445,47 +445,6 @@ class AutoIngestStatus(BaseModel):
     stats: dict
 
 
-class FightHighlight(BaseModel):
-    encounter: str
-    duration_ms: int | None = None
-    deaths: int | None = None
-
-
-class PlayerHighlight(BaseModel):
-    player: str
-    dps: float | None = None
-    encounter: str | None = None
-    parse_delta: float | None = None
-    total_interrupts: int | None = None
-
-
-class RaidNightSummary(BaseModel):
-    report_code: str
-    report_title: str
-    date: str
-    guild_name: str | None
-    # Totals
-    total_bosses: int
-    total_kills: int
-    total_wipes: int
-    total_clear_time_ms: int
-    # Fight highlights
-    fastest_kill: FightHighlight | None
-    slowest_kill: FightHighlight | None
-    most_deaths_boss: FightHighlight | None
-    cleanest_kill: FightHighlight | None
-    # Player highlights
-    top_dps_overall: PlayerHighlight | None
-    most_improved: PlayerHighlight | None
-    biggest_regression: PlayerHighlight | None
-    mvp_interrupts: PlayerHighlight | None
-    # Week-over-week comparison
-    previous_report: str | None
-    clear_time_delta_ms: int | None
-    kills_delta: int | None
-    avg_parse_delta: float | None
-
-
 class EventsAvailable(BaseModel):
     has_data: bool
 

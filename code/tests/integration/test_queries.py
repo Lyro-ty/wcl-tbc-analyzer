@@ -335,30 +335,6 @@ async def test_phase_breakdown_query(session):
 
 
 @pytest.mark.integration
-async def test_week_over_week_query(session):
-    """WEEK_OVER_WEEK query with CTEs and subqueries executes."""
-    await session.execute(q.WEEK_OVER_WEEK, {"report_code": "test"})
-
-
-@pytest.mark.integration
-async def test_night_summary_fights_query(session):
-    """NIGHT_SUMMARY_FIGHTS query executes without syntax error."""
-    await session.execute(q.NIGHT_SUMMARY_FIGHTS, {"report_code": "test"})
-
-
-@pytest.mark.integration
-async def test_night_summary_players_query(session):
-    """NIGHT_SUMMARY_PLAYERS query executes without syntax error."""
-    await session.execute(q.NIGHT_SUMMARY_PLAYERS, {"report_code": "test"})
-
-
-@pytest.mark.integration
-async def test_player_parse_deltas_query(session):
-    """PLAYER_PARSE_DELTAS query with CTEs executes."""
-    await session.execute(q.PLAYER_PARSE_DELTAS, {"report_code": "test"})
-
-
-@pytest.mark.integration
 async def test_table_data_exists_query(session):
     """TABLE_DATA_EXISTS query executes without syntax error."""
     await session.execute(q.TABLE_DATA_EXISTS, {"report_code": "test"})
