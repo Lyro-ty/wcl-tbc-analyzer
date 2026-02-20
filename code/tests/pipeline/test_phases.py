@@ -4,34 +4,38 @@ from shukketsu.pipeline.constants import ENCOUNTER_PHASES, PhaseDef
 
 
 class TestPhaseDefinitions:
-    def test_patchwerk_is_single_phase(self):
-        phases = ENCOUNTER_PHASES["Patchwerk"]
+    def test_moroes_is_single_phase(self):
+        phases = ENCOUNTER_PHASES["Moroes"]
         assert len(phases) == 1
         assert phases[0].name == "Full Fight"
         assert phases[0].pct_start == 0.0
         assert phases[0].pct_end == 1.0
 
-    def test_kelthuzad_has_three_phases(self):
-        phases = ENCOUNTER_PHASES["Kel'Thuzad"]
+    def test_prince_has_three_phases(self):
+        phases = ENCOUNTER_PHASES["Prince Malchezaar"]
         assert len(phases) == 3
-        assert phases[0].name == "P1 - Adds"
-        assert phases[1].name == "P2 - Active"
-        assert phases[2].name == "P3 - Ice Tombs"
+        assert phases[0].name == "P1 - Normal"
+        assert phases[1].name == "P2 - Axes"
+        assert phases[2].name == "P3 - Infernals"
 
-    def test_thaddius_has_two_phases(self):
-        phases = ENCOUNTER_PHASES["Thaddius"]
+    def test_magtheridon_has_two_phases(self):
+        phases = ENCOUNTER_PHASES["Magtheridon"]
         assert len(phases) == 2
-        assert phases[0].name == "P1 - Stalagg & Feugen"
-        assert phases[1].name == "P2 - Thaddius"
+        assert phases[0].name == "P1 - Channelers"
+        assert phases[1].name == "P2 - Magtheridon"
 
-    def test_all_naxx_bosses_have_phases(self):
-        """Every Fresh Naxx boss should have phase definitions."""
-        from shukketsu.pipeline.constants import FRESH_ZONES
+    def test_all_tbc_p1_bosses_have_phases(self):
+        """Every TBC P1 boss should have phase definitions."""
+        from shukketsu.pipeline.constants import TBC_ZONES
 
-        for boss in FRESH_ZONES["Naxxramas"]:
-            assert boss in ENCOUNTER_PHASES, f"Missing phase definition for {boss}"
-            phases = ENCOUNTER_PHASES[boss]
-            assert len(phases) >= 1, f"Empty phase list for {boss}"
+        p1_zones = ("Karazhan", "Gruul's Lair", "Magtheridon's Lair")
+        for zone in p1_zones:
+            for boss in TBC_ZONES[zone]:
+                assert boss in ENCOUNTER_PHASES, (
+                    f"Missing phase definition for {boss}"
+                )
+                phases = ENCOUNTER_PHASES[boss]
+                assert len(phases) >= 1, f"Empty phase list for {boss}"
 
     def test_phases_cover_full_fight(self):
         """Each encounter's phases should span from 0.0 to 1.0."""
@@ -80,7 +84,7 @@ class TestPhaseDefinitions:
 class TestPhaseTimeEstimation:
     def test_single_phase_covers_full_duration(self):
         """A single-phase boss should have phase duration == fight duration."""
-        phases = ENCOUNTER_PHASES["Patchwerk"]
+        phases = ENCOUNTER_PHASES["Moroes"]
         fight_duration_ms = 180000
         phase = phases[0]
         estimated_start = int(fight_duration_ms * phase.pct_start)
@@ -90,19 +94,19 @@ class TestPhaseTimeEstimation:
 
     def test_multi_phase_time_splits(self):
         """Multi-phase boss should split time proportionally."""
-        phases = ENCOUNTER_PHASES["Kel'Thuzad"]
+        phases = ENCOUNTER_PHASES["Prince Malchezaar"]
         fight_duration_ms = 300000  # 5 minutes
 
-        # P1: 0.0 - 0.2 = 60s
+        # P1: 0.0 - 0.4 = 120s
         p1_start = int(fight_duration_ms * phases[0].pct_start)
         p1_end = int(fight_duration_ms * phases[0].pct_end)
         assert p1_start == 0
-        assert p1_end == 60000
+        assert p1_end == 120000
 
-        # P2: 0.2 - 0.7 = 150s
+        # P2: 0.4 - 0.7 = 90s
         p2_start = int(fight_duration_ms * phases[1].pct_start)
         p2_end = int(fight_duration_ms * phases[1].pct_end)
-        assert p2_start == 60000
+        assert p2_start == 120000
         assert p2_end == 210000
 
         # P3: 0.7 - 1.0 = 90s

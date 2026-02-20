@@ -102,8 +102,8 @@ class TestParseFights:
         """Verify fight_percentage defaults to None when not present in WCL data."""
         fights_data = [
             {
-                "id": 5, "name": "Patchwerk", "startTime": 0, "endTime": 180000,
-                "kill": True, "encounterID": 201115, "difficulty": 0,
+                "id": 5, "name": "Gruul the Dragonkiller", "startTime": 0, "endTime": 180000,
+                "kill": True, "encounterID": 50652, "difficulty": 0,
             },
         ]
         fights = parse_fights(fights_data, "abc123")
@@ -271,14 +271,15 @@ class TestReingestionIdempotency:
     REPORT_DATA = {
         "reportData": {
             "report": {
-                "title": "Naxx Clear",
+                "title": "Kara Clear",
                 "startTime": 1700000000000,
                 "endTime": 1700003600000,
                 "guild": {"id": 1, "name": "Test"},
                 "fights": [
                     {
-                        "id": 1, "name": "Patchwerk", "startTime": 0, "endTime": 180000,
-                        "kill": True, "encounterID": 201115, "difficulty": 0,
+                        "id": 1, "name": "Gruul the Dragonkiller",
+                        "startTime": 0, "endTime": 180000,
+                        "kill": True, "encounterID": 50652, "difficulty": 0,
                     },
                 ],
                 "rankings": {"data": []},
@@ -349,14 +350,15 @@ class TestSnapshotsRemovedFromIngest:
     REPORT_DATA = {
         "reportData": {
             "report": {
-                "title": "Naxx Clear",
+                "title": "Kara Clear",
                 "startTime": 1700000000000,
                 "endTime": 1700003600000,
                 "guild": {"id": 1, "name": "Test"},
                 "fights": [
                     {
-                        "id": 1, "name": "Patchwerk", "startTime": 0, "endTime": 180000,
-                        "kill": True, "encounterID": 201115, "difficulty": 0,
+                        "id": 1, "name": "Gruul the Dragonkiller",
+                        "startTime": 0, "endTime": 180000,
+                        "kill": True, "encounterID": 50652, "difficulty": 0,
                     },
                 ],
                 "rankings": {"data": []},
@@ -399,7 +401,7 @@ class TestIngestEventsWiring:
     REPORT_DATA = {
         "reportData": {
             "report": {
-                "title": "Naxx Clear",
+                "title": "Kara Clear",
                 "startTime": 1700000000000,
                 "endTime": 1700003600000,
                 "guild": {"id": 1, "name": "Test"},
@@ -417,9 +419,9 @@ class TestIngestEventsWiring:
                 },
                 "fights": [
                     {
-                        "id": 1, "name": "Patchwerk",
+                        "id": 1, "name": "Gruul the Dragonkiller",
                         "startTime": 0, "endTime": 180000,
-                        "kill": True, "encounterID": 201115, "difficulty": 0,
+                        "kill": True, "encounterID": 50652, "difficulty": 0,
                     },
                 ],
                 "rankings": {"data": []},

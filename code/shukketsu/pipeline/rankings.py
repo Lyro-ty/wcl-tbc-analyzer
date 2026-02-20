@@ -144,6 +144,7 @@ async def ingest_all_rankings(
     cutoff = datetime.now(UTC) - timedelta(hours=stale_hours)
 
     for enc_id in encounter_ids:
+        enc_had_error = False
         for spec in specs:
             progress += 1
             metrics = ["dps"]
@@ -209,8 +210,10 @@ async def ingest_all_rankings(
                         "[%d/%d] Error: %s", progress, total_combos, error_msg
                     )
                     await session.rollback()
+                    enc_had_error = True
 
-        # Commit after each encounter batch
-        await session.commit()
+        # Commit after each encounter batch (skip if rollback already occurred)
+        if not enc_had_error:
+            await session.commit()
 
     return result

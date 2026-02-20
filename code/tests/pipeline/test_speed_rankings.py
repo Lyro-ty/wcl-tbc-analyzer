@@ -37,13 +37,13 @@ SAMPLE_SPEED_DATA = {
 
 class TestParseSpeedRankings:
     def test_parses_rankings(self):
-        result = parse_speed_rankings(SAMPLE_SPEED_DATA, 201107)
+        result = parse_speed_rankings(SAMPLE_SPEED_DATA, 50650)
         assert len(result) == 2
 
     def test_sets_fields_correctly(self):
-        result = parse_speed_rankings(SAMPLE_SPEED_DATA, 201107)
+        result = parse_speed_rankings(SAMPLE_SPEED_DATA, 50650)
         first = result[0]
-        assert first.encounter_id == 201107
+        assert first.encounter_id == 50650
         assert first.rank_position == 1
         assert first.report_code == "abc123"
         assert first.fight_id == 10
@@ -51,21 +51,21 @@ class TestParseSpeedRankings:
         assert first.guild_name == "Speed Guild"
 
     def test_sequential_rank_position(self):
-        result = parse_speed_rankings(SAMPLE_SPEED_DATA, 201107)
+        result = parse_speed_rankings(SAMPLE_SPEED_DATA, 50650)
         positions = [r.rank_position for r in result]
         assert positions == [1, 2]
 
     def test_handles_none_guild(self):
-        result = parse_speed_rankings(SAMPLE_SPEED_DATA, 201107)
+        result = parse_speed_rankings(SAMPLE_SPEED_DATA, 50650)
         second = result[1]
         assert second.guild_name is None
 
     def test_empty_rankings(self):
-        result = parse_speed_rankings({"rankings": []}, 201107)
+        result = parse_speed_rankings({"rankings": []}, 50650)
         assert result == []
 
     def test_none_data(self):
-        result = parse_speed_rankings(None, 201107)
+        result = parse_speed_rankings(None, 50650)
         assert result == []
 
     def test_caps_at_100(self):
@@ -79,12 +79,12 @@ class TestParseSpeedRankings:
                 for i in range(120)
             ]
         }
-        result = parse_speed_rankings(data, 201107)
+        result = parse_speed_rankings(data, 50650)
         assert len(result) == 100
 
     def test_handles_json_string(self):
         json_str = json.dumps(SAMPLE_SPEED_DATA)
-        result = parse_speed_rankings(json_str, 201107)
+        result = parse_speed_rankings(json_str, 50650)
         assert len(result) == 2
 
     def test_handles_missing_report(self):
@@ -96,7 +96,7 @@ class TestParseSpeedRankings:
                 }
             ]
         }
-        result = parse_speed_rankings(data, 201107)
+        result = parse_speed_rankings(data, 50650)
         assert len(result) == 1
         assert result[0].report_code == ""
         assert result[0].guild_name is None
@@ -123,12 +123,12 @@ class TestFetchSpeedRankingsForEncounter:
         session = AsyncMock()
         session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
-        count = await fetch_speed_rankings_for_encounter(wcl, session, 201107)
+        count = await fetch_speed_rankings_for_encounter(wcl, session, 50650)
 
         assert count == 2
         wcl.query.assert_called_once()
         call_vars = wcl.query.call_args[1]["variables"]
-        assert call_vars["encounterID"] == 201107
+        assert call_vars["encounterID"] == 50650
         assert call_vars["page"] == 1
 
     async def test_deletes_old_data(self):
@@ -143,7 +143,7 @@ class TestFetchSpeedRankingsForEncounter:
         session = AsyncMock()
         session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
-        await fetch_speed_rankings_for_encounter(wcl, session, 201107)
+        await fetch_speed_rankings_for_encounter(wcl, session, 50650)
 
         # Should have called execute once for the DELETE
         assert session.execute.call_count == 1
@@ -160,7 +160,7 @@ class TestFetchSpeedRankingsForEncounter:
         session = AsyncMock()
         session.add = MagicMock()  # session.add() is sync in SQLAlchemy
 
-        await fetch_speed_rankings_for_encounter(wcl, session, 201107)
+        await fetch_speed_rankings_for_encounter(wcl, session, 50650)
 
         assert session.add.call_count == 2
 
@@ -178,7 +178,7 @@ class TestIngestAllSpeedRankings:
         session = AsyncMock()
 
         result = await ingest_all_speed_rankings(
-            wcl, session, [201107, 201108], force=True
+            wcl, session, [50650, 50651], force=True
         )
 
         assert result.fetched == 2
@@ -193,7 +193,7 @@ class TestIngestAllSpeedRankings:
         session.execute.return_value = mock_result
 
         result = await ingest_all_speed_rankings(
-            wcl, session, [201107], force=False, stale_hours=24
+            wcl, session, [50650], force=False, stale_hours=24
         )
 
         assert result.skipped == 1
@@ -212,7 +212,7 @@ class TestIngestAllSpeedRankings:
         session = AsyncMock()
 
         result = await ingest_all_speed_rankings(
-            wcl, session, [201107], force=True
+            wcl, session, [50650], force=True
         )
 
         assert result.fetched == 1
@@ -230,7 +230,7 @@ class TestIngestAllSpeedRankings:
         session = AsyncMock()
 
         await ingest_all_speed_rankings(
-            wcl, session, [201107, 201108], force=True
+            wcl, session, [50650, 50651], force=True
         )
 
         assert session.commit.call_count == 2
@@ -250,9 +250,9 @@ class TestIngestAllSpeedRankings:
         session = AsyncMock()
 
         result = await ingest_all_speed_rankings(
-            wcl, session, [201107, 201108], force=True
+            wcl, session, [50650, 50651], force=True
         )
 
         assert result.fetched == 1
         assert len(result.errors) == 1
-        assert "201107" in result.errors[0]
+        assert "50650" in result.errors[0]

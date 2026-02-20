@@ -112,7 +112,7 @@ async def test_character_reports_404(client, mock_session):
 async def test_character_report_detail_ok(client, mock_session):
     """Returns fight-by-fight detail for a character in a report."""
     mock_row = make_row(
-        fight_id=1, encounter_name="Patchwerk", kill=True,
+        fight_id=1, encounter_name="Gruul the Dragonkiller", kill=True,
         duration_ms=120000, dps=2500.0, hps=0.0,
         parse_percentile=92.0, deaths=0, interrupts=3, dispels=0,
         item_level=130.0, player_class="Warrior", player_spec="Arms",
@@ -124,7 +124,7 @@ async def test_character_report_detail_ok(client, mock_session):
     resp = await client.get("/api/data/characters/Lyro/reports/abc123")
     assert resp.status_code == 200
     data = resp.json()
-    assert data[0]["encounter_name"] == "Patchwerk"
+    assert data[0]["encounter_name"] == "Gruul the Dragonkiller"
     assert data[0]["dps"] == 2500.0
 
 
@@ -145,7 +145,7 @@ async def test_character_report_detail_404(client, mock_session):
 async def test_character_recent_parses_ok(client, mock_session):
     """Returns recent parse entries for a character."""
     mock_row = make_row(
-        encounter_name="Patchwerk", dps=2500.0, hps=0.0,
+        encounter_name="Gruul the Dragonkiller", dps=2500.0, hps=0.0,
         parse_percentile=92.0, deaths=0, item_level=130.0,
         player_class="Warrior", player_spec="Arms", kill=True,
         duration_ms=120000, report_code="abc123", fight_id=1,
@@ -159,7 +159,7 @@ async def test_character_recent_parses_ok(client, mock_session):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
-    assert data[0]["encounter_name"] == "Patchwerk"
+    assert data[0]["encounter_name"] == "Gruul the Dragonkiller"
     assert data[0]["parse_percentile"] == 92.0
 
 
@@ -181,7 +181,7 @@ async def test_character_recent_parses_empty(client, mock_session):
 async def test_personal_bests_ok(client, mock_session):
     """Returns personal bests for a character."""
     mock_row = make_row(
-        encounter_name="Patchwerk", best_dps=3100.0,
+        encounter_name="Gruul the Dragonkiller", best_dps=3100.0,
         best_parse=99.0, best_hps=0.0, kill_count=20,
         peak_ilvl=132.0,
     )
@@ -209,7 +209,7 @@ async def test_personal_bests_404(client, mock_session):
 async def test_personal_bests_with_encounter_filter(client, mock_session):
     """Filters personal bests by encounter name when query param provided."""
     mock_row = make_row(
-        encounter_name="Patchwerk", best_dps=3100.0,
+        encounter_name="Gruul the Dragonkiller", best_dps=3100.0,
         best_parse=99.0, best_hps=0.0, kill_count=20,
         peak_ilvl=132.0,
     )
@@ -218,7 +218,7 @@ async def test_personal_bests_with_encounter_filter(client, mock_session):
     mock_session.execute = AsyncMock(return_value=mock_result)
 
     resp = await client.get(
-        "/api/data/characters/Lyro/personal-bests?encounter=Patchwerk"
+        "/api/data/characters/Lyro/personal-bests?encounter=Gruul the Dragonkiller"
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -236,14 +236,14 @@ async def test_progression_ok(client, mock_session):
         best_parse=92.0, median_parse=80.0,
         best_dps=2800.0, median_dps=2200.0,
         kill_count=5, avg_deaths=0.2,
-        encounter_name="Patchwerk", character_name="Lyro",
+        encounter_name="Gruul the Dragonkiller", character_name="Lyro",
     )
     mock_result = MagicMock()
     mock_result.fetchall.return_value = [mock_row]
     mock_session.execute = AsyncMock(return_value=mock_result)
 
     resp = await client.get(
-        "/api/data/progression/Lyro?encounter=Patchwerk"
+        "/api/data/progression/Lyro?encounter=Gruul the Dragonkiller"
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -259,7 +259,7 @@ async def test_progression_404(client, mock_session):
     mock_session.execute = AsyncMock(return_value=mock_result)
 
     resp = await client.get(
-        "/api/data/progression/NoSuch?encounter=Patchwerk"
+        "/api/data/progression/NoSuch?encounter=Gruul the Dragonkiller"
     )
     assert resp.status_code == 404
 
@@ -271,7 +271,7 @@ async def test_progression_404(client, mock_session):
 async def test_regressions_ok(client, mock_session):
     """Returns regression entries for all tracked characters."""
     mock_row = make_row(
-        player_name="Lyro", encounter_name="Patchwerk",
+        player_name="Lyro", encounter_name="Gruul the Dragonkiller",
         recent_parse=70.0, baseline_parse=90.0,
         recent_dps=2000.0, baseline_dps=2500.0,
         parse_delta=-20.0, dps_delta_pct=-20.0,
@@ -301,7 +301,7 @@ async def test_regressions_empty(client, mock_session):
 async def test_regressions_with_player_filter(client, mock_session):
     """Filters regressions to a specific player."""
     mock_row = make_row(
-        player_name="Lyro", encounter_name="Patchwerk",
+        player_name="Lyro", encounter_name="Gruul the Dragonkiller",
         recent_parse=70.0, baseline_parse=90.0,
         recent_dps=2000.0, baseline_dps=2500.0,
         parse_delta=-20.0, dps_delta_pct=-20.0,

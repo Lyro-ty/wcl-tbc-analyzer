@@ -43,7 +43,7 @@ class TestPhaseEndpoint:
                 report_code="abc123", fight_id=4,
                 duration_ms=300000, kill=True,
                 fight_percentage=0.0,
-                encounter_name="Kel'Thuzad",
+                encounter_name="Prince Malchezaar",
                 player_name="Lyro", player_class="Warrior",
                 player_spec="Arms", dps=2500.0,
                 total_damage=750000, hps=0.0,
@@ -66,13 +66,13 @@ class TestPhaseEndpoint:
 
         assert data["report_code"] == "abc123"
         assert data["fight_id"] == 4
-        assert data["encounter_name"] == "Kel'Thuzad"
+        assert data["encounter_name"] == "Prince Malchezaar"
         assert data["duration_ms"] == 300000
         assert data["kill"] is True
         assert len(data["phases"]) == 3
-        assert data["phases"][0]["name"] == "P1 - Adds"
-        assert data["phases"][1]["name"] == "P2 - Active"
-        assert data["phases"][2]["name"] == "P3 - Ice Tombs"
+        assert data["phases"][0]["name"] == "P1 - Normal"
+        assert data["phases"][1]["name"] == "P2 - Axes"
+        assert data["phases"][2]["name"] == "P3 - Infernals"
         assert len(data["players"]) == 1
         assert data["players"][0]["player_name"] == "Lyro"
 
@@ -132,7 +132,7 @@ class TestPhaseEndpoint:
                 report_code="abc123", fight_id=4,
                 duration_ms=200000, kill=True,
                 fight_percentage=0.0,
-                encounter_name="Thaddius",
+                encounter_name="Magtheridon",
                 player_name="Lyro", player_class="Warrior",
                 player_spec="Arms", dps=2000.0,
                 total_damage=400000, hps=0.0,
@@ -152,16 +152,16 @@ class TestPhaseEndpoint:
         response = client.get("/api/data/reports/abc123/fights/4/phases")
         data = response.json()
 
-        # Thaddius P1: 0.0-0.35 of 200000ms = 0-70000ms
+        # Magtheridon P1: 0.0-0.3 of 200000ms = 0-60000ms
         p1 = data["phases"][0]
         assert p1["estimated_start_ms"] == 0
-        assert p1["estimated_end_ms"] == 70000
-        assert p1["estimated_duration_ms"] == 70000
+        assert p1["estimated_end_ms"] == 60000
+        assert p1["estimated_duration_ms"] == 60000
 
-        # P2: 0.35-1.0 of 200000ms = 70000-200000ms
+        # P2: 0.3-1.0 of 200000ms = 60000-200000ms
         p2 = data["phases"][1]
-        assert p2["estimated_start_ms"] == 70000
+        assert p2["estimated_start_ms"] == 60000
         assert p2["estimated_end_ms"] == 200000
-        assert p2["estimated_duration_ms"] == 130000
+        assert p2["estimated_duration_ms"] == 140000
 
         app.dependency_overrides.clear()

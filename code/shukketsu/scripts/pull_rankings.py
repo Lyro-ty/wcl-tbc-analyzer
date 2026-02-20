@@ -128,7 +128,6 @@ async def run(
     async with (
         WCLClient(auth, RateLimiter()) as wcl,
         session_factory() as session,
-        session.begin(),
     ):
         result = await ingest_all_rankings(
             wcl,

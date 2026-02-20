@@ -128,7 +128,7 @@ async def test_cast_timeline_ok(client, mock_session):
         make_row(
             player_name="Lyro", timestamp_ms=1000 * i,
             spell_id=12294, ability_name="Mortal Strike",
-            event_type="cast", target_name="Patchwerk",
+            event_type="cast", target_name="Gruul",
         )
         for i in range(1, 4)
     ]
@@ -249,7 +249,7 @@ async def test_rotation_score_ok(client, mock_session):
     # 3. FIGHT_COOLDOWNS
     info_row = make_row(
         player_name="Lyro", player_class="Warrior", player_spec="Arms",
-        dps=2500.0, encounter_id=201101, fight_duration_ms=120000,
+        dps=2500.0, encounter_id=50650, fight_duration_ms=120000,
     )
     cm_row = make_row(
         player_name="Lyro", total_casts=150, casts_per_minute=25.0,
@@ -303,7 +303,7 @@ async def test_rotation_score_violations(client, mock_session):
     """Reports violations when rules fail."""
     info_row = make_row(
         player_name="Lyro", player_class="Warrior", player_spec="Arms",
-        dps=1500.0, encounter_id=201101, fight_duration_ms=120000,
+        dps=1500.0, encounter_id=50650, fight_duration_ms=120000,
     )
     cm_row = make_row(
         player_name="Lyro", total_casts=60, casts_per_minute=10.0,

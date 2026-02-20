@@ -156,15 +156,15 @@ class TestSnapshotAllCharacters:
 
         # Second call: encounter IDs for char1
         enc_result_1 = MagicMock()
-        enc_result_1.all.return_value = [(201115,), (201116,)]
+        enc_result_1.all.return_value = [(50652,), (50653,)]
 
-        # Third call: performances for char1 on enc 201115
+        # Third call: performances for char1 on enc 50652
         perf_result_1a = MagicMock()
         perf_result_1a.scalars.return_value.all.return_value = [
             _make_perf(dps=2000.0, parse=95.0, deaths=0),
         ]
 
-        # Fourth call: performances for char1 on enc 201116
+        # Fourth call: performances for char1 on enc 50653
         perf_result_1b = MagicMock()
         perf_result_1b.scalars.return_value.all.return_value = [
             _make_perf(dps=1800.0, parse=85.0, deaths=1),
@@ -172,9 +172,9 @@ class TestSnapshotAllCharacters:
 
         # Fifth call: encounter IDs for char2
         enc_result_2 = MagicMock()
-        enc_result_2.all.return_value = [(201115,)]
+        enc_result_2.all.return_value = [(50652,)]
 
-        # Sixth call: performances for char2 on enc 201115
+        # Sixth call: performances for char2 on enc 50652
         perf_result_2a = MagicMock()
         perf_result_2a.scalars.return_value.all.return_value = [
             _make_perf(dps=500.0, parse=60.0, deaths=0),

@@ -24,9 +24,9 @@ export default function MessageList({ messages, streaming }: Props) {
           or analyze any encounter.
         </p>
         <div className="mt-2 grid gap-2 text-xs">
-          <span className="rounded bg-zinc-800 px-3 py-1.5">&quot;How did I do on Patchwerk?&quot;</span>
-          <span className="rounded bg-zinc-800 px-3 py-1.5">&quot;Compare our Naxx run to top guilds&quot;</span>
-          <span className="rounded bg-zinc-800 px-3 py-1.5">&quot;What spec tops DPS on Thaddius?&quot;</span>
+          <span className="rounded bg-zinc-800 px-3 py-1.5">&quot;How did I do on Gruul?&quot;</span>
+          <span className="rounded bg-zinc-800 px-3 py-1.5">&quot;Compare our Kara run to top guilds&quot;</span>
+          <span className="rounded bg-zinc-800 px-3 py-1.5">&quot;What spec tops DPS on Prince Malchezaar?&quot;</span>
         </div>
       </div>
     )

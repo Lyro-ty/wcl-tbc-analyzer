@@ -67,7 +67,7 @@ async def test_list_reports_multiple(client, mock_session):
 async def test_report_summary_ok(client, mock_session):
     """GET /api/data/reports/{code}/summary returns raid summary fights."""
     mock_row = make_row(
-        fight_id=1, encounter_name="Patchwerk", kill=True,
+        fight_id=1, encounter_name="Gruul the Dragonkiller", kill=True,
         duration_ms=120000, player_count=25,
     )
     mock_result = MagicMock()
@@ -78,7 +78,7 @@ async def test_report_summary_ok(client, mock_session):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
-    assert data[0]["encounter_name"] == "Patchwerk"
+    assert data[0]["encounter_name"] == "Gruul the Dragonkiller"
     assert data[0]["kill"] is True
     assert data[0]["duration_ms"] == 120000
 
@@ -100,7 +100,7 @@ async def test_report_summary_404(client, mock_session):
 async def test_report_execution_ok(client, mock_session):
     """GET /api/data/reports/{code}/execution returns boss execution data."""
     mock_row = make_row(
-        encounter_name="Patchwerk", fight_id=1, duration_ms=120000,
+        encounter_name="Gruul the Dragonkiller", fight_id=1, duration_ms=120000,
         player_count=25, total_deaths=2, avg_deaths_per_player=0.08,
         total_interrupts=10, total_dispels=5, raid_avg_dps=1500.0,
         raid_total_dps=37500.0, avg_parse=85.0, avg_ilvl=130.5,
@@ -112,7 +112,7 @@ async def test_report_execution_ok(client, mock_session):
     resp = await client.get("/api/data/reports/abc123/execution")
     assert resp.status_code == 200
     data = resp.json()
-    assert data[0]["encounter_name"] == "Patchwerk"
+    assert data[0]["encounter_name"] == "Gruul the Dragonkiller"
     assert data[0]["total_deaths"] == 2
 
 
@@ -133,7 +133,7 @@ async def test_report_execution_404(client, mock_session):
 async def test_report_speed_ok(client, mock_session):
     """GET /api/data/reports/{code}/speed returns speed comparison data."""
     mock_row = make_row(
-        fight_id=1, encounter_name="Patchwerk", duration_ms=120000,
+        fight_id=1, encounter_name="Gruul the Dragonkiller", duration_ms=120000,
         player_count=25, total_deaths=2, total_interrupts=10,
         total_dispels=5, avg_dps=1500.0, world_record_ms=80000,
         top10_avg_ms=90000, top100_median_ms=100000,
@@ -232,7 +232,7 @@ async def test_wipe_progression_ok(client, mock_session):
     mock_session.execute = AsyncMock(return_value=mock_result)
 
     resp = await client.get(
-        "/api/data/reports/abc123/wipe-progression/Patchwerk"
+        "/api/data/reports/abc123/wipe-progression/Gruul the Dragonkiller"
     )
     assert resp.status_code == 200
     data = resp.json()

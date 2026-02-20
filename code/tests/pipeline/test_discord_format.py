@@ -10,7 +10,7 @@ def _full_summary():
     """Return a complete summary dict with all optional fields present."""
     return {
         "report_code": "ABC123",
-        "report_title": "Naxx Clear",
+        "report_title": "Kara Clear",
         "date": "2024-01-15",
         "guild_name": "Test Guild",
         "total_bosses": 15,
@@ -18,15 +18,15 @@ def _full_summary():
         "total_wipes": 2,
         "total_clear_time_ms": 3_600_000,
         "fastest_kill": {
-            "encounter": "Patchwerk",
+            "encounter": "Gruul the Dragonkiller",
             "duration_ms": 95000,
         },
         "slowest_kill": {
-            "encounter": "Sapphiron",
+            "encounter": "Netherspite",
             "duration_ms": 420000,
         },
         "most_deaths_boss": {
-            "encounter": "Heigan",
+            "encounter": "Shade of Aran",
             "deaths": 12,
         },
         "cleanest_kill": {
@@ -36,16 +36,16 @@ def _full_summary():
         "top_dps_overall": {
             "player": "Lyro",
             "dps": 2345.6,
-            "encounter": "Patchwerk",
+            "encounter": "Gruul the Dragonkiller",
         },
         "most_improved": {
             "player": "Healer",
-            "encounter": "Loatheb",
+            "encounter": "Maiden of Virtue",
             "parse_delta": 18.5,
         },
         "biggest_regression": {
             "player": "Tank",
-            "encounter": "Grobbulus",
+            "encounter": "Moroes",
             "parse_delta": -12.3,
         },
         "mvp_interrupts": {
@@ -112,7 +112,7 @@ class TestFormatRaidSummaryDiscord:
         text = format_raid_summary_discord(summary)
 
         # Header
-        assert "## Naxx Clear" in text
+        assert "## Kara Clear" in text
         assert "2024-01-15" in text
 
         # Totals line
@@ -123,7 +123,7 @@ class TestFormatRaidSummaryDiscord:
         # Highlights
         assert "Top DPS: **Lyro**" in text
         assert "2,346" in text  # 2345.6 formatted with comma, 0 decimals
-        assert "Patchwerk" in text
+        assert "Gruul the Dragonkiller" in text
 
         assert "Most Improved: **Healer**" in text
         assert "+19%" in text or "+18%" in text  # 18.5 rounded
@@ -134,7 +134,7 @@ class TestFormatRaidSummaryDiscord:
         assert "Interrupt MVP: **Lyro**" in text
         assert "15 interrupts" in text
 
-        assert "Fastest Kill: Patchwerk" in text
+        assert "Fastest Kill: Gruul the Dragonkiller" in text
         assert "1m 35s" in text
 
         # Week-over-week
@@ -190,7 +190,7 @@ class TestFormatRaidSummaryDiscord:
 
     def test_fastest_kill_without_duration_skipped(self):
         summary = _minimal_summary()
-        summary["fastest_kill"] = {"encounter": "Patchwerk", "duration_ms": None}
+        summary["fastest_kill"] = {"encounter": "Gruul the Dragonkiller", "duration_ms": None}
 
         text = format_raid_summary_discord(summary)
 

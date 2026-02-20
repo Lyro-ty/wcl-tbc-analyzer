@@ -69,8 +69,8 @@ class TestParseCastEvents:
         """Maps raw WCL events to CastEvent ORM objects correctly."""
         actors = {1: "Lyro", 2: "Healer"}
         events = [
-            _make_event(1, "begincast", 25304, "Frostbolt", 1000, "Patchwerk"),
-            _make_event(1, "cast", 25304, "Frostbolt", 2500, "Patchwerk"),
+            _make_event(1, "begincast", 25304, "Frostbolt", 1000, "Gruul the Dragonkiller"),
+            _make_event(1, "cast", 25304, "Frostbolt", 2500, "Gruul the Dragonkiller"),
             _make_event(2, "cast", 9474, "Flash of Light", 1500),
         ]
 
@@ -84,7 +84,7 @@ class TestParseCastEvents:
         assert result[0].spell_id == 25304
         assert result[0].ability_name == "Frostbolt"
         assert result[0].event_type == "begincast"
-        assert result[0].target_name == "Patchwerk"
+        assert result[0].target_name == "Gruul the Dragonkiller"
         # Second event
         assert result[1].event_type == "cast"
         assert result[1].timestamp_ms == 2500

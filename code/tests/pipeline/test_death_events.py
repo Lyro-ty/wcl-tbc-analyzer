@@ -18,7 +18,7 @@ class TestParseDeathEventsBasic:
             {
                 "timestamp": 45000,
                 "sourceID": 1,
-                "source": {"name": "Patchwerk", "id": 1, "type": "NPC"},
+                "source": {"name": "Gruul the Dragonkiller", "id": 1, "type": "NPC"},
                 "targetID": 5,
                 "target": {"name": "Lyro", "id": 5},
                 "ability": {"name": "Hateful Strike", "guid": 28308},
@@ -28,14 +28,14 @@ class TestParseDeathEventsBasic:
                 "events": [
                     {
                         "timestamp": 43000,
-                        "source": {"name": "Patchwerk"},
+                        "source": {"name": "Gruul the Dragonkiller"},
                         "ability": {"name": "Melee", "guid": 1},
                         "amount": 4000,
                         "type": "damage",
                     },
                     {
                         "timestamp": 44000,
-                        "source": {"name": "Patchwerk"},
+                        "source": {"name": "Gruul the Dragonkiller"},
                         "ability": {"name": "Hateful Strike", "guid": 28308},
                         "amount": 8000,
                         "type": "damage",
@@ -53,7 +53,7 @@ class TestParseDeathEventsBasic:
         assert detail.death_index == 0
         assert detail.timestamp_ms == 45000
         assert detail.killing_blow_ability == "Hateful Strike"
-        assert detail.killing_blow_source == "Patchwerk"
+        assert detail.killing_blow_source == "Gruul the Dragonkiller"
         assert detail.damage_taken_total == 12000
         # Verify events_json
         parsed_events = json.loads(detail.events_json)
@@ -61,7 +61,7 @@ class TestParseDeathEventsBasic:
         assert parsed_events[0]["ts"] == 43000
         assert parsed_events[0]["ability"] == "Melee"
         assert parsed_events[0]["amount"] == 4000
-        assert parsed_events[0]["source"] == "Patchwerk"
+        assert parsed_events[0]["source"] == "Gruul the Dragonkiller"
         assert parsed_events[1]["ts"] == 44000
         assert parsed_events[1]["ability"] == "Hateful Strike"
         assert parsed_events[1]["amount"] == 8000
@@ -128,7 +128,7 @@ class TestParseDeathEventsMissingFields:
             {
                 "timestamp": 5000,
                 "ability": {"name": "Shadow Bolt"},
-                "source": {"name": "Kel'Thuzad"},
+                "source": {"name": "Prince Malchezaar"},
                 "events": [],
             },
         ]
@@ -144,7 +144,7 @@ class TestParseDeathEventsMissingFields:
             {
                 "timestamp": 5000,
                 "target": {"name": "Lyro"},
-                "source": {"name": "Patchwerk"},
+                "source": {"name": "Gruul the Dragonkiller"},
                 "events": [],
             },
         ]
@@ -280,13 +280,13 @@ class TestIngestDeathEventsForFight:
         death_events = [
             {
                 "timestamp": 45000,
-                "source": {"name": "Patchwerk"},
+                "source": {"name": "Gruul the Dragonkiller"},
                 "target": {"name": "Lyro"},
                 "ability": {"name": "Hateful Strike"},
                 "events": [
                     {
                         "timestamp": 44000,
-                        "source": {"name": "Patchwerk"},
+                        "source": {"name": "Gruul the Dragonkiller"},
                         "ability": {"name": "Hateful Strike"},
                         "amount": 8000,
                     },
@@ -294,7 +294,7 @@ class TestIngestDeathEventsForFight:
             },
             {
                 "timestamp": 50000,
-                "source": {"name": "Patchwerk"},
+                "source": {"name": "Gruul the Dragonkiller"},
                 "target": {"name": "Warrior"},
                 "ability": {"name": "Melee"},
                 "events": [],

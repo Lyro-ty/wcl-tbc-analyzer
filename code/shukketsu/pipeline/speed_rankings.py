@@ -150,8 +150,9 @@ async def ingest_all_speed_rankings(
             result.errors.append(error_msg)
             logger.error("[%d/%d] Error: %s", i, total, error_msg)
             await session.rollback()
+            continue
 
-        # Commit after each encounter
+        # Commit after each encounter (skip if rollback occurred)
         await session.commit()
 
     return result

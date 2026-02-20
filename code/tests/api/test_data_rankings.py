@@ -11,8 +11,8 @@ from tests.api.conftest import make_row
 async def test_list_encounters_ok(client, mock_session):
     """Returns list of encounter definitions."""
     mock_row = make_row(
-        id=201101, name="Patchwerk", zone_id=2017,
-        zone_name="Naxxramas", fight_count=50,
+        id=50650, name="Gruul the Dragonkiller", zone_id=1048,
+        zone_name="Gruul's Lair", fight_count=50,
     )
     mock_result = MagicMock()
     mock_result.fetchall.return_value = [mock_row]
@@ -22,8 +22,8 @@ async def test_list_encounters_ok(client, mock_session):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
-    assert data[0]["name"] == "Patchwerk"
-    assert data[0]["zone_id"] == 2017
+    assert data[0]["name"] == "Gruul the Dragonkiller"
+    assert data[0]["zone_id"] == 1048
 
 
 async def test_list_encounters_empty(client, mock_session):
@@ -52,7 +52,7 @@ async def test_spec_leaderboard_ok(client, mock_session):
     mock_result.fetchall.return_value = [mock_row]
     mock_session.execute = AsyncMock(return_value=mock_result)
 
-    resp = await client.get("/api/data/leaderboard/Patchwerk")
+    resp = await client.get("/api/data/leaderboard/Gruul the Dragonkiller")
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
@@ -88,7 +88,7 @@ async def test_spec_leaderboard_multiple_specs(client, mock_session):
     mock_result.fetchall.return_value = rows
     mock_session.execute = AsyncMock(return_value=mock_result)
 
-    resp = await client.get("/api/data/leaderboard/Patchwerk")
+    resp = await client.get("/api/data/leaderboard/Gruul the Dragonkiller")
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 3
@@ -101,7 +101,7 @@ async def test_spec_leaderboard_multiple_specs(client, mock_session):
 async def test_compare_raids_ok(client, mock_session):
     """Returns side-by-side raid comparison."""
     mock_row = make_row(
-        encounter_name="Patchwerk",
+        encounter_name="Gruul the Dragonkiller",
         a_duration_ms=120000, b_duration_ms=130000,
         a_deaths=2, b_deaths=5,
         a_interrupts=10, b_interrupts=8,

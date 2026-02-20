@@ -9,7 +9,7 @@ class TestGetPhaseAnalysis:
         mock_rows = [
             MagicMock(
                 report_code="abc123", fight_id=4, duration_ms=300000, kill=True,
-                fight_percentage=0.0, encounter_name="Kel'Thuzad",
+                fight_percentage=0.0, encounter_name="Prince Malchezaar",
                 player_name="Lyro", player_class="Warrior", player_spec="Arms",
                 dps=2500.0, total_damage=750000, hps=0.0, total_healing=0,
                 deaths=0, parse_percentile=92.0,
@@ -28,10 +28,10 @@ class TestGetPhaseAnalysis:
                 {"report_code": "abc123", "fight_id": 4}
             )
 
-        assert "Kel'Thuzad" in result
-        assert "P1 - Adds" in result
-        assert "P2 - Active" in result
-        assert "P3 - Ice Tombs" in result
+        assert "Prince Malchezaar" in result
+        assert "P1 - Normal" in result
+        assert "P2 - Axes" in result
+        assert "P3 - Infernals" in result
         assert "Lyro" in result
 
     async def test_returns_single_phase_for_unknown_encounter(self):
@@ -66,7 +66,7 @@ class TestGetPhaseAnalysis:
         mock_rows = [
             MagicMock(
                 report_code="abc123", fight_id=4, duration_ms=200000, kill=True,
-                fight_percentage=0.0, encounter_name="Thaddius",
+                fight_percentage=0.0, encounter_name="Magtheridon",
                 player_name="Lyro", player_class="Warrior", player_spec="Arms",
                 dps=2000.0, total_damage=400000, hps=0.0, total_healing=0,
                 deaths=0, parse_percentile=85.0,
@@ -85,19 +85,19 @@ class TestGetPhaseAnalysis:
                 {"report_code": "abc123", "fight_id": 4}
             )
 
-        # Thaddius P1: 0.0-0.35 of 200s = 0-70s = 1m 10s
-        # Thaddius P2: 0.35-1.0 of 200s = 70-200s = 2m 10s
-        assert "P1 - Stalagg & Feugen" in result
-        assert "P2 - Thaddius" in result
-        assert "1m 10s" in result
-        assert "2m 10s" in result
+        # Magtheridon P1: 0.0-0.3 of 200s = 0-60s = 1m 0s
+        # Magtheridon P2: 0.3-1.0 of 200s = 60-200s = 2m 20s
+        assert "P1 - Channelers" in result
+        assert "P2 - Magtheridon" in result
+        assert "1m 0s" in result
+        assert "2m 20s" in result
 
     async def test_filters_by_player_name(self):
         """Tool should filter players when player_name is provided."""
         mock_rows = [
             MagicMock(
                 report_code="abc123", fight_id=4, duration_ms=180000, kill=True,
-                fight_percentage=0.0, encounter_name="Patchwerk",
+                fight_percentage=0.0, encounter_name="Moroes",
                 player_name="Lyro", player_class="Warrior", player_spec="Arms",
                 dps=2500.0, total_damage=450000, hps=0.0, total_healing=0,
                 deaths=0, parse_percentile=92.0,
@@ -159,7 +159,7 @@ class TestGetPhaseAnalysis:
         mock_rows = [
             MagicMock(
                 report_code="abc123", fight_id=2, duration_ms=95000, kill=False,
-                fight_percentage=35.2, encounter_name="Patchwerk",
+                fight_percentage=35.2, encounter_name="Moroes",
                 player_name="Lyro", player_class="Warrior", player_spec="Arms",
                 dps=1500.0, total_damage=142500, hps=0.0, total_healing=0,
                 deaths=1, parse_percentile=None,
@@ -185,14 +185,14 @@ class TestGetPhaseAnalysis:
         mock_rows = [
             MagicMock(
                 report_code="abc123", fight_id=4, duration_ms=180000, kill=True,
-                fight_percentage=0.0, encounter_name="Patchwerk",
+                fight_percentage=0.0, encounter_name="Moroes",
                 player_name="Lyro", player_class="Warrior", player_spec="Arms",
                 dps=2500.0, total_damage=450000, hps=0.0, total_healing=0,
                 deaths=0, parse_percentile=92.0,
             ),
             MagicMock(
                 report_code="abc123", fight_id=4, duration_ms=180000, kill=True,
-                fight_percentage=0.0, encounter_name="Patchwerk",
+                fight_percentage=0.0, encounter_name="Moroes",
                 player_name="Healer", player_class="Priest", player_spec="Holy",
                 dps=200.0, total_damage=36000, hps=1500.0, total_healing=270000,
                 deaths=0, parse_percentile=85.0,

@@ -14,7 +14,7 @@ async def test_fight_details_ok(client, mock_session):
         player_name="Lyro", player_class="Warrior", player_spec="Arms",
         dps=2500.0, hps=0.0, parse_percentile=92.0, deaths=0,
         interrupts=3, dispels=0, item_level=130.0, kill=True,
-        duration_ms=120000, encounter_name="Patchwerk",
+        duration_ms=120000, encounter_name="Gruul the Dragonkiller",
         report_title="Raid Night",
     )
     mock_result = MagicMock()
@@ -47,7 +47,7 @@ async def test_fight_details_multiple_players(client, mock_session):
             player_name=name, player_class=cls, player_spec=spec,
             dps=dps, hps=0.0, parse_percentile=80.0, deaths=0,
             interrupts=0, dispels=0, item_level=130.0, kill=True,
-            duration_ms=120000, encounter_name="Patchwerk",
+            duration_ms=120000, encounter_name="Gruul the Dragonkiller",
             report_title="Raid Night",
         )
         for name, cls, spec, dps in [
@@ -72,7 +72,7 @@ async def test_fight_details_multiple_players(client, mock_session):
 async def test_report_deaths_ok(client, mock_session):
     """Returns death entries for all fights in a report."""
     mock_row = make_row(
-        fight_id=1, encounter_name="Patchwerk", player_name="Lyro",
+        fight_id=1, encounter_name="Gruul the Dragonkiller", player_name="Lyro",
         player_class="Warrior", player_spec="Arms",
         deaths=1, interrupts=3, dispels=0,
     )
@@ -85,7 +85,7 @@ async def test_report_deaths_ok(client, mock_session):
     data = resp.json()
     assert len(data) == 1
     assert data[0]["deaths"] == 1
-    assert data[0]["encounter_name"] == "Patchwerk"
+    assert data[0]["encounter_name"] == "Gruul the Dragonkiller"
 
 
 async def test_report_deaths_empty(client, mock_session):
@@ -108,7 +108,7 @@ async def test_fight_deaths_ok(client, mock_session):
     mock_row = make_row(
         player_name="Lyro", death_index=0, timestamp_ms=45000,
         killing_blow_ability="Hateful Strike",
-        killing_blow_source="Patchwerk",
+        killing_blow_source="Gruul the Dragonkiller",
         damage_taken_total=15000,
         events_json='[{"type": "damage", "amount": 15000}]',
     )

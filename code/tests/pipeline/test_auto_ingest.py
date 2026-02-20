@@ -296,13 +296,13 @@ class TestAutoIngestPollOnce:
     @patch("shukketsu.pipeline.auto_ingest.ingest_report")
     async def test_poll_with_zone_ids(self, mock_ingest, mock_snap):
         """When zone_ids configured, queries per zone."""
-        settings = _make_settings(zone_ids=[2017, 2018])
+        settings = _make_settings(zone_ids=[1047, 1048])
         wcl = AsyncMock()
         wcl.query.side_effect = [
             {
                 "reportData": {
                     "reports": {
-                        "data": [{"code": "Z1", "title": "Naxx Run"}]
+                        "data": [{"code": "Z1", "title": "Kara Run"}]
                     }
                 }
             },

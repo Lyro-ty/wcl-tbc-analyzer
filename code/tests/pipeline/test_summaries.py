@@ -8,10 +8,10 @@ from shukketsu.pipeline.summaries import build_raid_night_summary
 
 def _fight_row(
     *,
-    report_title="Naxx Clear",
+    report_title="Kara Clear",
     start_time=1700000000000,
     guild_name="Test Guild",
-    encounter_name="Patchwerk",
+    encounter_name="Gruul the Dragonkiller",
     fight_id=1,
     kill=True,
     duration_ms=120000,
@@ -40,7 +40,7 @@ def _fight_row(
 def _player_row(
     *,
     player_name="Lyro",
-    encounter_name="Patchwerk",
+    encounter_name="Gruul the Dragonkiller",
     fight_id=1,
     dps=2000.0,
     parse_percentile=95.0,
@@ -64,15 +64,15 @@ class TestBuildRaidNightSummary:
     def test_basic_summary_with_kills_and_wipes(self):
         fight_rows = [
             _fight_row(
-                encounter_name="Patchwerk", fight_id=1, kill=False,
+                encounter_name="Gruul the Dragonkiller", fight_id=1, kill=False,
                 duration_ms=180000, total_deaths=8, avg_parse=None,
             ),
             _fight_row(
-                encounter_name="Patchwerk", fight_id=2, kill=True,
+                encounter_name="Gruul the Dragonkiller", fight_id=2, kill=True,
                 duration_ms=120000, total_deaths=2, avg_parse=85.0,
             ),
             _fight_row(
-                encounter_name="Grobbulus", fight_id=3, kill=True,
+                encounter_name="Moroes", fight_id=3, kill=True,
                 duration_ms=90000, total_deaths=0, avg_parse=90.0,
             ),
         ]
@@ -98,7 +98,7 @@ class TestBuildRaidNightSummary:
         result = build_raid_night_summary("ABC123", fight_rows, player_rows)
 
         assert result["report_code"] == "ABC123"
-        assert result["report_title"] == "Naxx Clear"
+        assert result["report_title"] == "Kara Clear"
         assert result["guild_name"] == "Test Guild"
         assert result["total_bosses"] == 3
         assert result["total_kills"] == 2
@@ -106,26 +106,26 @@ class TestBuildRaidNightSummary:
         # Clear time = sum of kill durations only
         assert result["total_clear_time_ms"] == 120000 + 90000
 
-        # Fastest kill = Grobbulus at 90s
-        assert result["fastest_kill"]["encounter"] == "Grobbulus"
+        # Fastest kill = Moroes at 90s
+        assert result["fastest_kill"]["encounter"] == "Moroes"
         assert result["fastest_kill"]["duration_ms"] == 90000
 
-        # Slowest kill = Patchwerk at 120s
-        assert result["slowest_kill"]["encounter"] == "Patchwerk"
+        # Slowest kill = Gruul the Dragonkiller at 120s
+        assert result["slowest_kill"]["encounter"] == "Gruul the Dragonkiller"
         assert result["slowest_kill"]["duration_ms"] == 120000
 
-        # Most deaths boss = Patchwerk wipe (8 deaths)
-        assert result["most_deaths_boss"]["encounter"] == "Patchwerk"
+        # Most deaths boss = Gruul the Dragonkiller wipe (8 deaths)
+        assert result["most_deaths_boss"]["encounter"] == "Gruul the Dragonkiller"
         assert result["most_deaths_boss"]["deaths"] == 8
 
-        # Cleanest kill = Grobbulus (0 deaths)
-        assert result["cleanest_kill"]["encounter"] == "Grobbulus"
+        # Cleanest kill = Moroes (0 deaths)
+        assert result["cleanest_kill"]["encounter"] == "Moroes"
         assert result["cleanest_kill"]["deaths"] == 0
 
-        # Top DPS = Lyro on Patchwerk with 2000
+        # Top DPS = Lyro on Gruul the Dragonkiller with 2000
         assert result["top_dps_overall"]["player"] == "Lyro"
         assert result["top_dps_overall"]["dps"] == 2000.0
-        assert result["top_dps_overall"]["encounter"] == "Patchwerk"
+        assert result["top_dps_overall"]["encounter"] == "Gruul the Dragonkiller"
 
         # MVP interrupts = Lyro with 3+5=8
         assert result["mvp_interrupts"]["player"] == "Lyro"
@@ -134,11 +134,11 @@ class TestBuildRaidNightSummary:
     def test_all_kills_no_wipes(self):
         fight_rows = [
             _fight_row(
-                encounter_name="Patchwerk", fight_id=1, kill=True,
+                encounter_name="Gruul the Dragonkiller", fight_id=1, kill=True,
                 duration_ms=120000, total_deaths=1,
             ),
             _fight_row(
-                encounter_name="Grobbulus", fight_id=2, kill=True,
+                encounter_name="Moroes", fight_id=2, kill=True,
                 duration_ms=90000, total_deaths=0,
             ),
             _fight_row(
@@ -157,13 +157,13 @@ class TestBuildRaidNightSummary:
         assert result["total_kills"] == 3
         assert result["total_wipes"] == 0
         assert result["total_clear_time_ms"] == 120000 + 90000 + 150000
-        assert result["cleanest_kill"]["encounter"] == "Grobbulus"
+        assert result["cleanest_kill"]["encounter"] == "Moroes"
         assert result["cleanest_kill"]["deaths"] == 0
 
     def test_single_fight(self):
         fight_rows = [
             _fight_row(
-                encounter_name="Patchwerk", fight_id=1, kill=True,
+                encounter_name="Gruul the Dragonkiller", fight_id=1, kill=True,
                 duration_ms=100000, total_deaths=1,
             ),
         ]
@@ -177,8 +177,8 @@ class TestBuildRaidNightSummary:
         assert result["total_kills"] == 1
         assert result["total_wipes"] == 0
         # fastest == slowest for single kill
-        assert result["fastest_kill"]["encounter"] == "Patchwerk"
-        assert result["slowest_kill"]["encounter"] == "Patchwerk"
+        assert result["fastest_kill"]["encounter"] == "Gruul the Dragonkiller"
+        assert result["slowest_kill"]["encounter"] == "Gruul the Dragonkiller"
 
     def test_empty_report(self):
         result = build_raid_night_summary("EMPTY1", [], [])
@@ -198,7 +198,7 @@ class TestBuildRaidNightSummary:
     def test_week_over_week_comparison(self):
         fight_rows = [
             _fight_row(
-                encounter_name="Patchwerk", fight_id=1, kill=True,
+                encounter_name="Gruul the Dragonkiller", fight_id=1, kill=True,
                 duration_ms=100000,
             ),
         ]
@@ -223,7 +223,7 @@ class TestBuildRaidNightSummary:
 
     def test_no_week_over_week_defaults_to_none(self):
         fight_rows = [
-            _fight_row(encounter_name="Patchwerk", fight_id=1, kill=True),
+            _fight_row(encounter_name="Gruul the Dragonkiller", fight_id=1, kill=True),
         ]
         player_rows = [
             _player_row(player_name="Lyro", fight_id=1),
@@ -238,7 +238,7 @@ class TestBuildRaidNightSummary:
 
     def test_most_improved_and_biggest_regression(self):
         fight_rows = [
-            _fight_row(encounter_name="Patchwerk", fight_id=1, kill=True),
+            _fight_row(encounter_name="Gruul the Dragonkiller", fight_id=1, kill=True),
         ]
         player_rows = [
             _player_row(
@@ -251,11 +251,11 @@ class TestBuildRaidNightSummary:
         # Parse deltas from previous report
         player_deltas = [
             SimpleNamespace(
-                player_name="Improved", encounter_name="Patchwerk",
+                player_name="Improved", encounter_name="Gruul the Dragonkiller",
                 current_parse=90.0, previous_parse=70.0, parse_delta=20.0,
             ),
             SimpleNamespace(
-                player_name="Regressed", encounter_name="Patchwerk",
+                player_name="Regressed", encounter_name="Gruul the Dragonkiller",
                 current_parse=40.0, previous_parse=75.0, parse_delta=-35.0,
             ),
         ]
@@ -271,7 +271,7 @@ class TestBuildRaidNightSummary:
 
     def test_no_player_deltas_means_no_improved_or_regressed(self):
         fight_rows = [
-            _fight_row(encounter_name="Patchwerk", fight_id=1, kill=True),
+            _fight_row(encounter_name="Gruul the Dragonkiller", fight_id=1, kill=True),
         ]
         player_rows = [
             _player_row(player_name="Lyro", fight_id=1),
@@ -285,11 +285,11 @@ class TestBuildRaidNightSummary:
     def test_all_wipes_no_kills(self):
         fight_rows = [
             _fight_row(
-                encounter_name="Patchwerk", fight_id=1, kill=False,
+                encounter_name="Gruul the Dragonkiller", fight_id=1, kill=False,
                 duration_ms=180000, total_deaths=15,
             ),
             _fight_row(
-                encounter_name="Patchwerk", fight_id=2, kill=False,
+                encounter_name="Gruul the Dragonkiller", fight_id=2, kill=False,
                 duration_ms=160000, total_deaths=12,
             ),
         ]
@@ -311,14 +311,14 @@ class TestBuildRaidNightSummary:
         assert result["slowest_kill"] is None
         assert result["cleanest_kill"] is None
         # Most deaths boss still works for wipes
-        assert result["most_deaths_boss"]["encounter"] == "Patchwerk"
+        assert result["most_deaths_boss"]["encounter"] == "Gruul the Dragonkiller"
         assert result["most_deaths_boss"]["deaths"] == 15
         # Top DPS still reported from kills only (None if no kills)
         assert result["top_dps_overall"] is None
 
     def test_no_interrupts_means_none_mvp(self):
         fight_rows = [
-            _fight_row(encounter_name="Patchwerk", fight_id=1, kill=True),
+            _fight_row(encounter_name="Gruul the Dragonkiller", fight_id=1, kill=True),
         ]
         player_rows = [
             _player_row(
@@ -337,7 +337,7 @@ class TestBuildRaidNightSummary:
         # start_time 1700000000 = 2023-11-14
         fight_rows = [
             _fight_row(
-                encounter_name="Patchwerk", fight_id=1, kill=True,
+                encounter_name="Gruul the Dragonkiller", fight_id=1, kill=True,
                 start_time=1700000000000,
             ),
         ]
