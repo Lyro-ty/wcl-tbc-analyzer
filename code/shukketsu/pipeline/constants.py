@@ -250,19 +250,19 @@ REQUIRED_CONSUMABLES: dict[str, list[ConsumableDef]] = {
     ],
     "caster_dps": [
         ConsumableDef(17628, "Flask of Supreme Power", "flask", 80.0),
-        ConsumableDef(28509, "Elixir of Major Firepower", "elixir", 80.0),
+        ConsumableDef(28501, "Elixir of Major Firepower", "elixir", 80.0),
         ConsumableDef(28503, "Elixir of Major Shadow Power", "elixir", 80.0),
-        ConsumableDef(28501, "Elixir of Major Frost Power", "elixir", 80.0),
+        ConsumableDef(28493, "Elixir of Major Frost Power", "elixir", 80.0),
         ConsumableDef(25122, "Brilliant Wizard Oil", "weapon", 80.0),
     ],
     "healer": [
         ConsumableDef(17627, "Flask of Distilled Wisdom", "flask", 80.0),
-        ConsumableDef(28502, "Elixir of Healing Power", "elixir", 80.0),
+        ConsumableDef(28491, "Elixir of Healing Power", "elixir", 80.0),
         ConsumableDef(25123, "Brilliant Mana Oil", "weapon", 80.0),
     ],
     "tank": [
         ConsumableDef(17546, "Flask of the Titans", "flask", 80.0),
-        ConsumableDef(28502, "Elixir of Healing Power", "elixir", 80.0),
+        ConsumableDef(28491, "Elixir of Healing Power", "elixir", 80.0),
         ConsumableDef(28514, "Elixir of Major Fortitude", "elixir", 80.0),
         ConsumableDef(28509, "Elixir of Major Defense", "elixir", 80.0),
         ConsumableDef(17549, "Ironshield Potion", "potion", 5.0),

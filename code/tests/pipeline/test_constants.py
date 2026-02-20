@@ -6,6 +6,7 @@ from shukketsu.pipeline.constants import (
     ALL_BOSS_NAMES,
     FRESH_BOSS_NAMES,
     FRESH_ZONES,
+    REQUIRED_CONSUMABLES,
     TBC_BOSS_NAMES,
     TBC_DPS_SPECS,
     TBC_HEALER_SPECS,
@@ -103,3 +104,35 @@ class TestFreshBossNames:
     def test_all_boss_names_contains_both(self):
         assert "Illidan Stormrage" in ALL_BOSS_NAMES
         assert "Patchwerk" in ALL_BOSS_NAMES
+
+
+class TestConsumableSpellIds:
+    """Verify REQUIRED_CONSUMABLES spell IDs match CONSUMABLE_CATEGORIES names."""
+
+    def test_caster_dps_has_correct_firepower_id(self):
+        """28501 is Elixir of Major Firepower, not 28509 (Major Defense)."""
+        caster_ids = {c.spell_id for c in REQUIRED_CONSUMABLES["caster_dps"]}
+        assert 28501 in caster_ids, "Caster DPS should have 28501 (Major Firepower)"
+        assert 28509 not in caster_ids, "28509 is Major Defense, not Firepower"
+
+    def test_tank_has_correct_healing_power_id(self):
+        """28491 is Elixir of Healing Power, not 28502 (Major Mageblood)."""
+        tank_ids = {c.spell_id for c in REQUIRED_CONSUMABLES["tank"]}
+        assert 28491 in tank_ids, "Tank should have 28491 (Healing Power)"
+
+    def test_no_defense_elixir_in_caster_dps(self):
+        """caster_dps should not contain Major Defense (28509)."""
+        caster_names = {
+            c.name for c in REQUIRED_CONSUMABLES["caster_dps"]
+        }
+        assert "Elixir of Major Defense" not in caster_names
+
+    def test_no_mageblood_mislabeled_as_healing_power(self):
+        """Healing Power should use 28491, not 28502 (Major Mageblood)."""
+        for role in ("healer", "tank"):
+            for c in REQUIRED_CONSUMABLES[role]:
+                if c.name == "Elixir of Healing Power":
+                    assert c.spell_id == 28491, (
+                        f"{role}: Healing Power has spell_id {c.spell_id},"
+                        f" expected 28491"
+                    )
