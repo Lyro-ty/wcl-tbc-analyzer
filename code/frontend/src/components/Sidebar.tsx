@@ -1,6 +1,5 @@
 import {
   BarChart3,
-  GitCompareArrows,
   LayoutDashboard,
   MessageSquare,
   ScrollText,
@@ -57,21 +56,6 @@ export default function Sidebar({ collapsed }: { collapsed: boolean }) {
         ))}
       </nav>
 
-      <div className="border-t border-zinc-800 p-3">
-        <NavLink
-          to="/compare"
-          className={({ isActive }) =>
-            `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-              isActive
-                ? 'bg-zinc-800 text-zinc-100'
-                : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
-            }`
-          }
-        >
-          <GitCompareArrows className="h-5 w-5 shrink-0" />
-          {!collapsed && <span>Compare</span>}
-        </NavLink>
-      </div>
     </aside>
   )
 }

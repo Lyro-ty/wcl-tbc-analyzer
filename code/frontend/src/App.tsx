@@ -8,7 +8,6 @@ import ProgressionPage from './pages/ProgressionPage'
 import SpeedPage from './pages/SpeedPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 import RosterPage from './pages/RosterPage'
-import ComparePage from './pages/ComparePage'
 import CharactersListPage from './pages/CharactersListPage'
 import CharacterProfilePage from './pages/CharacterProfilePage'
 import CharacterReportsPage from './pages/CharacterReportsPage'
@@ -34,7 +33,6 @@ export default function App() {
           <Route path="/speed" element={<SpeedPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/roster" element={<RosterPage />} />
-          <Route path="/compare" element={<ComparePage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
