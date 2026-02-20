@@ -2509,13 +2509,13 @@ class TestPromptContent:
         assert "Wind Shear" not in SYSTEM_PROMPT
 
     def test_analysis_prompt_has_healer_section(self):
-        from shukketsu.agent.prompts import ANALYSIS_PROMPT
-        assert "overheal" in ANALYSIS_PROMPT.lower()
-        assert "mana" in ANALYSIS_PROMPT.lower()
+        from shukketsu.agent.prompts import SYSTEM_PROMPT
+        assert "overheal" in SYSTEM_PROMPT.lower()
+        assert "mana" in SYSTEM_PROMPT.lower()
 
     def test_analysis_prompt_mentions_encounter_modifiers(self):
-        from shukketsu.agent.prompts import ANALYSIS_PROMPT
-        lower = ANALYSIS_PROMPT.lower()
+        from shukketsu.agent.prompts import SYSTEM_PROMPT
+        lower = SYSTEM_PROMPT.lower()
         assert (
             "encounter modifier" in lower
             or "encounter context" in lower

@@ -148,49 +148,11 @@ Always provide:
 - Context for why a number is good or bad
 - Comparison points when available
 - Encouragement alongside criticism
-"""
 
-GRADER_PROMPT = """\
-You are evaluating whether the retrieved data is relevant and sufficient to answer \
-the user's question about raid performance.
+## Response Structure
 
-Score the retrieved data:
-- **relevant**: The data directly answers the question or provides the key metrics needed.
-- **insufficient**: The data is missing, incomplete, or doesn't address what was asked. \
-A different query or tool might retrieve better data.
-
-Respond with exactly one word: "relevant" or "insufficient".
-"""
-
-ROUTER_PROMPT = """\
-Classify the user's question into one of these categories:
-
-- **my_performance**: Questions about a specific player's own performance, parses, DPS, \
-deaths, or improvement. Example: "Why is my DPS low on Gruul?"
-- **comparison**: Questions comparing a player or raid to top rankings, other players, or other \
-raids. Example: "How do I compare to top rogues on Gruul?" or \
-"How does my raid compare to the top guilds on Prince Malchezaar?"
-- **trend**: Questions about progression over time, improvement trends, or historical data. \
-Example: "Am I improving on Prince Malchezaar?"
-- **rotation**: Questions about rotation, cooldown usage, GCD uptime, ABC uptime, casting \
-efficiency, or "always be casting" analysis. Example: "Am I using my cooldowns efficiently?" \
-or "What's my GCD uptime on Gruul?"
-- **general**: General questions about encounters, raid summaries, or non-player-specific info. \
-Example: "Show me the latest raid summary" or "What's a good DPS for Mage on Magtheridon?"
-
-Respond with exactly one word: my_performance, comparison, trend, rotation, or general.
-"""
-
-REWRITE_PROMPT = """\
-The previous query did not retrieve sufficient data to answer the user's question.
-Reformulate the approach: suggest a different tool or different parameters that might \
-yield more relevant results. Explain your reasoning briefly, then call the appropriate tool.
-"""
-
-ANALYSIS_PROMPT = """\
-Based on the retrieved raid performance data, provide a thorough analysis.
-
-Structure your response:
+When you have gathered sufficient data using the tools above, structure your final \
+response as follows:
 0. **Benchmark Comparison** — Before analyzing, retrieve encounter benchmarks via \
 get_encounter_benchmarks and spec targets via get_spec_benchmark. Compare the player's \
 metrics against these targets:
@@ -250,4 +212,25 @@ Skip if no buff coverage data available.
    Skip if not analyzing a healer or no overheal/resource data available.
 
 Use the player's class/spec context to give spec-specific advice when possible.
+
+## Workflow Patterns
+
+For thorough analysis, chain multiple tools. Common patterns:
+
+- **Full performance review**: resolve_my_fights -> get_my_performance -> \
+get_spec_benchmark -> get_ability_breakdown -> get_activity_report -> \
+get_cooldown_efficiency -> respond with analysis
+
+- **Raid comparison**: get_raid_execution -> compare_raid_to_top -> \
+get_encounter_benchmarks -> respond with analysis
+
+- **Progression check**: get_progression -> get_regressions -> \
+get_my_performance (bests_only=True) -> respond with analysis
+
+- **Gear/prep audit**: get_enchant_gem_check -> get_consumable_check -> \
+get_gear_changes -> respond with analysis
+
+Retrieve all relevant data BEFORE writing your analysis. Call multiple \
+tools if needed — don't stop after one tool call if more data would \
+improve your answer.
 """
