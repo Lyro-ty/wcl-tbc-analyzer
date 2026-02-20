@@ -14,6 +14,9 @@ def _make_settings(
     zone_ids=None,
     with_tables=True,
     with_events=True,
+    benchmark_enabled=False,
+    benchmark_refresh_interval_days=7,
+    benchmark_max_reports=10,
 ):
     """Build a mock settings object."""
     settings = MagicMock()
@@ -30,6 +33,9 @@ def _make_settings(
     settings.wcl.client_secret.get_secret_value.return_value = "test-secret"
     settings.wcl.oauth_url = "https://example.com/oauth"
     settings.wcl.api_url = "https://www.warcraftlogs.com/api/v2/client"
+    settings.benchmark.enabled = benchmark_enabled
+    settings.benchmark.refresh_interval_days = benchmark_refresh_interval_days
+    settings.benchmark.max_reports_per_encounter = benchmark_max_reports
     return settings
 
 
@@ -419,3 +425,58 @@ class TestAutoIngestEnrichmentLogging:
         """auto_ingest must check and log enrichment_errors."""
         source = inspect.getsource(AutoIngestService._poll_once_inner)
         assert "enrichment_errors" in source
+
+
+class TestBenchmarkAutoRefresh:
+    """Tests for benchmark auto-refresh integration."""
+
+    def test_benchmark_config_stored(self):
+        """Verify benchmark config fields are stored from settings."""
+        settings = MagicMock()
+        settings.benchmark.enabled = True
+        settings.benchmark.refresh_interval_days = 7
+        settings.benchmark.max_reports_per_encounter = 10
+        settings.auto_ingest.enabled = False
+        settings.guild.id = 0
+
+        service = AutoIngestService(
+            settings=settings,
+            session_factory=AsyncMock(),
+            wcl_factory=AsyncMock(),
+        )
+        assert service._benchmark_enabled is True
+        assert service._benchmark_interval_days == 7
+        assert service._benchmark_max_reports == 10
+
+    def test_benchmark_disabled(self):
+        """Verify benchmark disabled state is stored."""
+        settings = MagicMock()
+        settings.benchmark.enabled = False
+        settings.auto_ingest.enabled = False
+        settings.guild.id = 0
+
+        service = AutoIngestService(
+            settings=settings,
+            session_factory=AsyncMock(),
+            wcl_factory=AsyncMock(),
+        )
+        assert service._benchmark_enabled is False
+
+    def test_get_status_includes_benchmark(self):
+        """get_status() includes benchmark_enabled and last_benchmark_run."""
+        settings = MagicMock()
+        settings.benchmark.enabled = True
+        settings.benchmark.refresh_interval_days = 7
+        settings.benchmark.max_reports_per_encounter = 10
+        settings.auto_ingest.enabled = False
+        settings.guild.id = 123
+        settings.guild.name = "Test"
+
+        service = AutoIngestService(
+            settings=settings,
+            session_factory=AsyncMock(),
+            wcl_factory=AsyncMock(),
+        )
+        status = service.get_status()
+        assert status["benchmark_enabled"] is True
+        assert status["last_benchmark_run"] is None

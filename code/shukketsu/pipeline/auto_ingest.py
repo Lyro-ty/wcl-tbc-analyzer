@@ -28,6 +28,11 @@ class AutoIngestService:
         self._last_error: str | None = None
         self._stats: dict = {"polls": 0, "reports_ingested": 0, "errors": 0}
         self._consecutive_errors: int = 0
+        self._benchmark_enabled = settings.benchmark.enabled
+        self._benchmark_interval_days = settings.benchmark.refresh_interval_days
+        self._benchmark_max_reports = settings.benchmark.max_reports_per_encounter
+        self._benchmark_task: asyncio.Task | None = None
+        self._last_benchmark_run: datetime | None = None
 
     @property
     def enabled(self) -> bool:
@@ -45,9 +50,19 @@ class AutoIngestService:
             "Auto-ingest started (interval=%dm)",
             self.settings.auto_ingest.poll_interval_minutes,
         )
+        if self._benchmark_enabled:
+            self._benchmark_task = asyncio.create_task(self._benchmark_loop())
+            logger.info(
+                "Benchmark auto-refresh enabled (every %d days)",
+                self._benchmark_interval_days,
+            )
 
     async def stop(self):
         """Stop the background polling loop."""
+        if self._benchmark_task:
+            self._benchmark_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._benchmark_task
         if self._trigger_task and not self._trigger_task.done():
             self._trigger_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -58,6 +73,31 @@ class AutoIngestService:
                 await self._task
         self._status = "idle"
         logger.info("Auto-ingest stopped")
+
+    async def _benchmark_loop(self) -> None:
+        """Weekly benchmark refresh loop."""
+        interval = self._benchmark_interval_days * 86400  # days to seconds
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                from shukketsu.pipeline.benchmarks import run_benchmark_pipeline
+
+                async with (
+                    self._wcl_factory() as wcl,
+                    self._session_factory() as session,
+                ):
+                    result = await run_benchmark_pipeline(
+                        wcl, session,
+                        max_reports_per_encounter=self._benchmark_max_reports,
+                    )
+                    logger.info(
+                        "Benchmark auto-refresh: discovered=%d,"
+                        " ingested=%d, computed=%d",
+                        result.discovered, result.ingested, result.computed,
+                    )
+                self._last_benchmark_run = datetime.now(UTC)
+            except Exception:
+                logger.exception("Benchmark auto-refresh failed")
 
     async def _poll_loop(self):
         """Main polling loop with exponential backoff on errors."""
@@ -238,4 +278,9 @@ class AutoIngestService:
             "poll_interval_minutes": self.settings.auto_ingest.poll_interval_minutes,
             "consecutive_errors": self._consecutive_errors,
             "stats": dict(self._stats),
+            "benchmark_enabled": self._benchmark_enabled,
+            "last_benchmark_run": (
+                self._last_benchmark_run.isoformat()
+                if self._last_benchmark_run else None
+            ),
         }
