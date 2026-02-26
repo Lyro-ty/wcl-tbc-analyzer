@@ -243,7 +243,7 @@ class TestGetRaidExecution:
         mock_rows = [
             MagicMock(
                 encounter_name="Gruul the Dragonkiller", fight_id=1,
-                duration_ms=180000, player_count=25,
+                kill=True, duration_ms=180000, player_count=25,
                 total_deaths=2, avg_deaths_per_player=0.08,
                 total_interrupts=0, total_dispels=0,
                 raid_avg_dps=1500.0, raid_total_dps=37500.0,
@@ -262,6 +262,42 @@ class TestGetRaidExecution:
         assert "Gruul the Dragonkiller" in result
         assert "abc123" in result
         assert "Deaths" in result
+        assert "[KILL]" in result
+        assert "1 kills, 0 wipes" in result
+
+    async def test_kills_and_wipes_separated(self):
+        mock_rows = [
+            MagicMock(
+                encounter_name="Gruul the Dragonkiller", fight_id=1,
+                kill=False, duration_ms=120000, player_count=25,
+                total_deaths=8, avg_deaths_per_player=0.32,
+                total_interrupts=0, total_dispels=0,
+                raid_avg_dps=1200.0, raid_total_dps=30000.0,
+                avg_parse=None, avg_ilvl=None,
+            ),
+            MagicMock(
+                encounter_name="Gruul the Dragonkiller", fight_id=2,
+                kill=True, duration_ms=180000, player_count=25,
+                total_deaths=2, avg_deaths_per_player=0.08,
+                total_interrupts=0, total_dispels=0,
+                raid_avg_dps=1500.0, raid_total_dps=37500.0,
+                avg_parse=75.0, avg_ilvl=142.0,
+            ),
+        ]
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = mock_rows
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with patch("shukketsu.agent.tool_utils._get_session", return_value=mock_session):
+            result = await get_raid_execution.ainvoke({"report_code": "abc123"})
+
+        assert "[KILL]" in result
+        assert "[WIPE]" in result
+        assert "Kills:" in result
+        assert "Wipes:" in result
+        assert "1 kills, 1 wipes" in result
 
     async def test_no_data(self):
         mock_result = MagicMock()
@@ -2503,21 +2539,18 @@ class TestPromptContent:
         assert "HPS" in SYSTEM_PROMPT
         assert "healer" in SYSTEM_PROMPT.lower()
 
-    def test_system_prompt_mentions_earth_shock(self):
+    def test_system_prompt_mentions_rules(self):
         from shukketsu.agent.prompts import SYSTEM_PROMPT
-        assert "Earth Shock" in SYSTEM_PROMPT
-        assert "Wind Shear" not in SYSTEM_PROMPT
+        assert "ANALYZE IT IMMEDIATELY" in SYSTEM_PROMPT
+        assert "NEVER" in SYSTEM_PROMPT
 
     def test_analysis_prompt_has_healer_section(self):
         from shukketsu.agent.prompts import SYSTEM_PROMPT
         assert "overheal" in SYSTEM_PROMPT.lower()
         assert "mana" in SYSTEM_PROMPT.lower()
 
-    def test_analysis_prompt_mentions_encounter_modifiers(self):
+    def test_system_prompt_has_response_format(self):
         from shukketsu.agent.prompts import SYSTEM_PROMPT
-        lower = SYSTEM_PROMPT.lower()
-        assert (
-            "encounter modifier" in lower
-            or "encounter context" in lower
-            or "adjusted" in lower
-        )
+        assert "Overview" in SYSTEM_PROMPT
+        assert "Key Issues" in SYSTEM_PROMPT
+        assert "Actionable Checklist" in SYSTEM_PROMPT

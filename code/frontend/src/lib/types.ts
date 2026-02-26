@@ -30,6 +30,7 @@ export interface RaidSummaryFight {
 export interface ExecutionBoss {
   encounter_name: string
   fight_id: number
+  kill: boolean
   duration_ms: number
   player_count: number
   total_deaths: number | null

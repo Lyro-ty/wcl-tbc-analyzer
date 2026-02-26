@@ -120,42 +120,65 @@ async def compare_two_raids(
 @db_tool
 async def get_raid_execution(session, report_code: str) -> str:
     """Get raid overview and execution quality metrics for a full raid. Shows
-    deaths, interrupts, dispels, DPS, and parse percentiles per boss with
-    raid-wide totals. Also serves as a raid summary -- use this instead of
-    a separate summary tool."""
+    kills AND wipes with deaths, interrupts, dispels, DPS, and parse
+    percentiles per fight. Also serves as a raid summary."""
     result = await session.execute(
         q.RAID_EXECUTION_SUMMARY, {"report_code": report_code},
     )
     rows = result.fetchall()
     if not rows:
-        return f"No kill data found for report {report_code}."
+        return f"No fight data found for report {report_code}."
 
+    kills = [r for r in rows if r.kill]
+    wipes = [r for r in rows if not r.kill]
     total_deaths = sum(r.total_deaths or 0 for r in rows)
     total_interrupts = sum(r.total_interrupts or 0 for r in rows)
     total_dispels = sum(r.total_dispels or 0 for r in rows)
 
     lines = [
         f"Raid Execution Summary — report {report_code}:",
-        f"  Bosses killed: {len(rows)} | Total deaths: {total_deaths}"
+        f"  Fights: {len(rows)} ({len(kills)} kills, {len(wipes)} wipes)"
+        f" | Total deaths: {total_deaths}"
         f" | Total interrupts: {total_interrupts}"
         f" | Total dispels: {total_dispels}\n",
     ]
-    for r in rows:
-        parse_str = (
-            f"{r.avg_parse}%" if r.avg_parse is not None else "N/A"
-        )
-        ilvl_str = (
-            f"{r.avg_ilvl}" if r.avg_ilvl is not None else "N/A"
-        )
-        lines.append(
-            f"  {r.encounter_name} "
-            f"({_format_duration(r.duration_ms)}) | "
-            f"Deaths: {r.total_deaths} "
-            f"(avg {r.avg_deaths_per_player}/player) | "
-            f"Int: {r.total_interrupts} | "
-            f"Disp: {r.total_dispels} | "
-            f"Raid DPS: {r.raid_total_dps:,.1f} "
-            f"(avg {r.raid_avg_dps:,.1f}) | "
-            f"Parse: {parse_str} | iLvl: {ilvl_str}"
-        )
+
+    if kills:
+        lines.append("Kills:")
+        for r in kills:
+            lines.append(_format_fight_line(r))
+
+    if wipes:
+        lines.append("\nWipes:")
+        for r in wipes:
+            lines.append(_format_fight_line(r))
+
     return "\n".join(lines)
+
+
+def _format_fight_line(r) -> str:
+    """Format a single fight row for display."""
+    status = "KILL" if r.kill else "WIPE"
+    parse_str = (
+        f"{r.avg_parse}%" if r.avg_parse is not None else "N/A"
+    )
+    ilvl_str = (
+        f"{r.avg_ilvl}" if r.avg_ilvl is not None else "N/A"
+    )
+    dps_str = (
+        f"Raid DPS: {r.raid_total_dps:,.1f} (avg {r.raid_avg_dps:,.1f})"
+        if r.raid_total_dps else "DPS: N/A"
+    )
+    deaths_str = (
+        f"Deaths: {r.total_deaths} (avg {r.avg_deaths_per_player}/player)"
+        if r.total_deaths is not None else "Deaths: N/A"
+    )
+    return (
+        f"  [{status}] {r.encounter_name} "
+        f"({_format_duration(r.duration_ms)}) | "
+        f"{deaths_str} | "
+        f"Int: {r.total_interrupts or 0} | "
+        f"Disp: {r.total_dispels or 0} | "
+        f"{dps_str} | "
+        f"Parse: {parse_str} | iLvl: {ilvl_str}"
+    )

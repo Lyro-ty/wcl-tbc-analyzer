@@ -100,10 +100,11 @@ async def test_report_summary_404(client, mock_session):
 async def test_report_execution_ok(client, mock_session):
     """GET /api/data/reports/{code}/execution returns boss execution data."""
     mock_row = make_row(
-        encounter_name="Gruul the Dragonkiller", fight_id=1, duration_ms=120000,
-        player_count=25, total_deaths=2, avg_deaths_per_player=0.08,
-        total_interrupts=10, total_dispels=5, raid_avg_dps=1500.0,
-        raid_total_dps=37500.0, avg_parse=85.0, avg_ilvl=130.5,
+        encounter_name="Gruul the Dragonkiller", fight_id=1, kill=True,
+        duration_ms=120000, player_count=25, total_deaths=2,
+        avg_deaths_per_player=0.08, total_interrupts=10, total_dispels=5,
+        raid_avg_dps=1500.0, raid_total_dps=37500.0, avg_parse=85.0,
+        avg_ilvl=130.5,
     )
     mock_result = MagicMock()
     mock_result.fetchall.return_value = [mock_row]

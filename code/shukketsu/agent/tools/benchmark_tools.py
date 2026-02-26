@@ -56,10 +56,14 @@ async def get_encounter_benchmarks(session, encounter_name: str) -> str:
     if composition:
         lines.append("\n## Common Specs (top 10)")
         for entry in composition[:10]:
+            cls = entry.get("class", "Unknown")
+            spec = entry.get("spec", "Unknown")
+            avg_count = entry.get("avg_count", 0)
+            appearances = entry.get("appearances", entry.get("count", 0))
             lines.append(
-                f"  {entry['class']} {entry['spec']}: "
-                f"avg {entry['avg_count']:.1f}/raid "
-                f"({entry['appearances']} appearances)"
+                f"  {cls} {spec}: "
+                f"avg {avg_count:.1f}/raid "
+                f"({appearances} appearances)"
             )
 
     # Spec DPS Targets
@@ -72,7 +76,9 @@ async def get_encounter_benchmarks(session, encounter_name: str) -> str:
             reverse=True,
         )
         for spec_key, spec_data in sorted_specs:
-            cls, spec = spec_key.split("_", 1)
+            parts = spec_key.split("_", 1)
+            cls = parts[0]
+            spec = parts[1] if len(parts) > 1 else ""
             avg_dps = spec_data.get("avg_dps", 0)
             gcd = spec_data.get("avg_gcd_uptime")
             cpm = spec_data.get("avg_cpm")

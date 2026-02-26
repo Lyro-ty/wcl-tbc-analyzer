@@ -185,6 +185,8 @@ async def analyze_stream(request: AnalyzeRequest):
                             yield {"data": json.dumps({"token": after})}
                     continue
 
+                # Best-effort per-token stripping; multi-token tool names
+                # (e.g. "get" + "_raid" + "_execution") may slip through.
                 cleaned_token = _strip_tool_refs(token)
                 if cleaned_token:
                     yield {"data": json.dumps({"token": cleaned_token})}

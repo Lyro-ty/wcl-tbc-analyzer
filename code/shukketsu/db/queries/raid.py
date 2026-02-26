@@ -120,6 +120,7 @@ COMPARE_TWO_RAIDS = text("""
 
 RAID_EXECUTION_SUMMARY = text("""
     SELECT e.name AS encounter_name, f.fight_id,
+           f.kill,
            f.duration_ms,
            COUNT(fp.id) AS player_count,
            SUM(fp.deaths) AS total_deaths,
@@ -136,8 +137,7 @@ RAID_EXECUTION_SUMMARY = text("""
     JOIN encounters e ON f.encounter_id = e.id
     LEFT JOIN fight_performances fp ON fp.fight_id = f.id
     WHERE f.report_code = :report_code
-      AND f.kill = true
-    GROUP BY e.name, f.fight_id, f.duration_ms
+    GROUP BY e.name, f.fight_id, f.kill, f.duration_ms
     ORDER BY f.fight_id ASC
-    LIMIT 25
+    LIMIT 50
 """)

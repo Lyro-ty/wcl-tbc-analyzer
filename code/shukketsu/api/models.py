@@ -24,6 +24,7 @@ class RaidSummaryFight(BaseModel):
 class ExecutionBoss(BaseModel):
     encounter_name: str
     fight_id: int
+    kill: bool
     duration_ms: int
     player_count: int
     total_deaths: int | None

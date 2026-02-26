@@ -14,8 +14,8 @@ class TestAnalyzerState:
 
 class TestSystemPrompt:
     def test_contains_domain_context(self):
-        assert "World of Warcraft" in SYSTEM_PROMPT
-        assert "Burning Crusade" in SYSTEM_PROMPT
+        assert "TBC" in SYSTEM_PROMPT
+        assert "Karazhan" in SYSTEM_PROMPT
 
     def test_contains_class_names(self):
         for cls in ["Warrior", "Rogue", "Mage", "Warlock", "Hunter", "Priest"]:
@@ -24,8 +24,7 @@ class TestSystemPrompt:
     def test_contains_raid_context(self):
         assert "raid" in SYSTEM_PROMPT.lower()
         assert "DPS" in SYSTEM_PROMPT
-        assert "parse" in SYSTEM_PROMPT.lower()
 
-    def test_describes_tools(self):
-        assert "get_my_performance" in SYSTEM_PROMPT
-        assert "get_top_rankings" in SYSTEM_PROMPT
+    def test_describes_analysis_focus(self):
+        assert "ANALYZE" in SYSTEM_PROMPT
+        assert "Overview" in SYSTEM_PROMPT

@@ -67,7 +67,7 @@ async def report_execution(
         rows = result.fetchall()
         if not rows:
             raise HTTPException(
-                status_code=404, detail=f"No kill data for report {report_code}"
+                status_code=404, detail=f"No fight data for report {report_code}"
             )
         return [ExecutionBoss(**dict(r._mapping)) for r in rows]
     except HTTPException:

@@ -106,7 +106,12 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://localhost:8000"],
+        allow_origins=[
+            "http://localhost:5173",
+            "http://localhost:8000",
+            "http://100.110.218.34:5173",
+            "http://100.110.218.34:8000",
+        ],
         allow_credentials=False,
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["X-API-Key", "Content-Type"],
