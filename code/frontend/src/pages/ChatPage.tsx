@@ -17,6 +17,7 @@ const MAX_MESSAGES = 200
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [threadId] = useState(() => generateId())
   const [streaming, setStreaming] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const abortRef = useRef<AbortController | null>(null)
@@ -41,6 +42,7 @@ export default function ChatPage() {
 
       abortRef.current = postAnalyzeStream(
         question,
+        threadId,
         (token) => {
           setMessages((prev) =>
             prev.map((m) =>
@@ -63,7 +65,7 @@ export default function ChatPage() {
         },
       )
     },
-    [],
+    [threadId],
   )
 
   useEffect(() => {

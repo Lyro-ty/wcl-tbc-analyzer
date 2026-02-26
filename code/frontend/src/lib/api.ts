@@ -31,16 +31,17 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
-export async function postAnalyze(question: string): Promise<AnalyzeResponse> {
+export async function postAnalyze(question: string, threadId: string): Promise<AnalyzeResponse> {
   return fetchJson<AnalyzeResponse>('/api/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, thread_id: threadId }),
   })
 }
 
 export function postAnalyzeStream(
   question: string,
+  threadId: string,
   onToken: (token: string) => void,
   onDone: () => void,
   onError: (message: string) => void,
@@ -52,7 +53,7 @@ export function postAnalyzeStream(
       const res = await fetch('/api/analyze/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, thread_id: threadId }),
         signal: controller.signal,
       })
 
