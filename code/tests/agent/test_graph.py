@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from shukketsu.agent.graph import (
+    _SPECIFIC_TOOL_KEYWORDS,
     _extract_report_code,
     _fix_tool_name,
     _normalize_tool_args,
@@ -124,6 +125,60 @@ class TestPrefetchNode:
         }
         result = await prefetch_node(state)
         assert result == {}
+
+    async def test_skips_when_specific_tool_keyword_present(self):
+        """Prefetch should not fire when user asks for rotation, death, etc."""
+        state = {
+            "messages": [
+                HumanMessage(
+                    content="Pull a rotation score on report fb61030ba5a20fd5f51475a7533b57aa for Lyroo"
+                ),
+            ]
+        }
+        result = await prefetch_node(state)
+        assert result == {}
+
+    async def test_skips_cooldown_keyword(self):
+        state = {
+            "messages": [
+                HumanMessage(
+                    content="Show cooldown efficiency for report fb61030ba5a20fd5f51475a7533b57aa"
+                ),
+            ]
+        }
+        result = await prefetch_node(state)
+        assert result == {}
+
+    async def test_skips_death_keyword(self):
+        state = {
+            "messages": [
+                HumanMessage(
+                    content="Analyze deaths in report fb61030ba5a20fd5f51475a7533b57aa"
+                ),
+            ]
+        }
+        result = await prefetch_node(state)
+        assert result == {}
+
+    async def test_still_prefetches_for_general_analysis(self):
+        """General 'analyze report X' should still trigger prefetch."""
+        state = {
+            "messages": [
+                HumanMessage(
+                    content="Analyze report fb61030ba5a20fd5f51475a7533b57aa"
+                ),
+            ]
+        }
+        mock_tool = AsyncMock()
+        mock_tool.ainvoke = AsyncMock(return_value="Raid data: 5 bosses killed")
+        with patch(
+            "shukketsu.agent.tools.raid_tools.get_raid_execution",
+            mock_tool,
+        ):
+            result = await prefetch_node(state)
+
+        msgs = result.get("messages", [])
+        assert len(msgs) == 2
 
 
 class TestAgentNode:
@@ -289,3 +344,32 @@ class TestFixToolName:
     def test_close_match_for_performance(self):
         result = _fix_tool_name("get_performance", _TOOL_NAMES)
         assert result == "get_my_performance"
+
+
+class TestSpecificToolKeywords:
+    def test_matches_rotation(self):
+        assert _SPECIFIC_TOOL_KEYWORDS.search("pull a rotation score")
+
+    def test_matches_death(self):
+        assert _SPECIFIC_TOOL_KEYWORDS.search("analyze deaths")
+
+    def test_matches_cooldown(self):
+        assert _SPECIFIC_TOOL_KEYWORDS.search("show cooldown efficiency")
+
+    def test_matches_consumable(self):
+        assert _SPECIFIC_TOOL_KEYWORDS.search("check consumable usage")
+
+    def test_matches_buff(self):
+        assert _SPECIFIC_TOOL_KEYWORDS.search("buff uptimes for Lyroo")
+
+    def test_matches_gear(self):
+        assert _SPECIFIC_TOOL_KEYWORDS.search("compare gear between raids")
+
+    def test_matches_enchant(self):
+        assert _SPECIFIC_TOOL_KEYWORDS.search("check enchant and gem slots")
+
+    def test_no_match_for_general_analysis(self):
+        assert not _SPECIFIC_TOOL_KEYWORDS.search("analyze report abc123")
+
+    def test_no_match_for_performance(self):
+        assert not _SPECIFIC_TOOL_KEYWORDS.search("how is my DPS on Gruul?")

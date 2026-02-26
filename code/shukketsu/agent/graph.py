@@ -29,6 +29,14 @@ logger = logging.getLogger(__name__)
 # Also matches codes inside URLs like /reports/CODE
 _REPORT_CODE_RE = re.compile(r'(?:reports/)?([a-zA-Z0-9]{16,40})')
 
+# Keywords indicating user wants a specific tool, not general raid analysis.
+# When present, skip prefetch and let the LLM choose the right tool.
+_SPECIFIC_TOOL_KEYWORDS = re.compile(
+    r'\b(rotation|deaths?|cooldown|consumable|buff|ability|gear|enchant|gem|'
+    r'resource|mana|cast|cancel|dot|phase|overheal|wipe)\b',
+    re.IGNORECASE,
+)
+
 
 def _extract_report_code(text: str) -> str | None:
     """Extract a WCL report code from user text."""
@@ -88,7 +96,12 @@ async def prefetch_node(state: dict[str, Any]) -> dict[str, Any]:
     if any(isinstance(m, ToolMessage) for m in messages):
         return {}
 
-    report_code = _extract_report_code(messages[-1].content)
+    # Skip when user asks for a specific tool (rotation, deaths, etc.)
+    user_text = messages[-1].content
+    if _SPECIFIC_TOOL_KEYWORDS.search(user_text):
+        return {}
+
+    report_code = _extract_report_code(user_text)
     if not report_code:
         return {}
 
