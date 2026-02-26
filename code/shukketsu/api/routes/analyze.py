@@ -9,6 +9,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from shukketsu.agent.utils import THINK_PATTERN
 from shukketsu.agent.utils import strip_think_tags as _strip_think_tags
+from shukketsu.agent.utils import strip_tool_references as _strip_tool_refs
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ def _get_langfuse_handler():
 
 class AnalyzeRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
+    thread_id: str = Field(..., min_length=1, max_length=100)
 
 
 # Limit concurrent LLM invocations
@@ -79,7 +81,7 @@ async def analyze(request: AnalyzeRequest):
         ) from None
 
     try:
-        config = {}
+        config = {"configurable": {"thread_id": request.thread_id}}
         handler = _get_langfuse_handler()
         if handler:
             config["callbacks"] = [handler]
@@ -97,7 +99,7 @@ async def analyze(request: AnalyzeRequest):
 
     messages = result.get("messages", [])
     raw = messages[-1].content if messages else "No response generated."
-    answer = _strip_think_tags(raw)
+    answer = _strip_tool_refs(_strip_think_tags(raw))
 
     return AnalyzeResponse(answer=answer)
 
@@ -126,7 +128,7 @@ async def analyze_stream(request: AnalyzeRequest):
             return
 
         try:
-            config = {}
+            config = {"configurable": {"thread_id": request.thread_id}}
             handler = _get_langfuse_handler()
             if handler:
                 config["callbacks"] = [handler]
@@ -161,7 +163,9 @@ async def analyze_stream(request: AnalyzeRequest):
                 if not think_done:
                     buffer += token
                     if len(buffer) > _MAX_THINK_BUFFER:
-                        cleaned = _strip_think_tags(buffer)
+                        cleaned = _strip_tool_refs(
+                            _strip_think_tags(buffer)
+                        )
                         if cleaned.strip():
                             yield {
                                 "data": json.dumps(
@@ -172,14 +176,18 @@ async def analyze_stream(request: AnalyzeRequest):
                         think_done = True
                         continue
                     if "</think>" in buffer:
-                        after = THINK_PATTERN.sub("", buffer)
+                        after = _strip_tool_refs(
+                            THINK_PATTERN.sub("", buffer)
+                        )
                         think_done = True
                         buffer = ""
                         if after.strip():
                             yield {"data": json.dumps({"token": after})}
                     continue
 
-                yield {"data": json.dumps({"token": token})}
+                cleaned_token = _strip_tool_refs(token)
+                if cleaned_token:
+                    yield {"data": json.dumps({"token": cleaned_token})}
 
             # If we buffered but never saw </think>, flush as content
             if buffer and not think_done:

@@ -33,7 +33,7 @@ async def test_analyze_returns_200(app, mock_graph):
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze",
-                json={"question": "How is my DPS on Gruul?"},
+                json={"question": "How is my DPS on Gruul?", "thread_id": "t1"},
             )
     assert resp.status_code == 200
 
@@ -52,7 +52,7 @@ async def test_analyze_returns_analysis(app, mock_graph):
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze",
-                json={"question": "How is my DPS on Gruul?"},
+                json={"question": "How is my DPS on Gruul?", "thread_id": "t1"},
             )
     body = resp.json()
     assert "answer" in body
@@ -70,7 +70,7 @@ async def test_analyze_handles_llm_unavailable():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze",
-                json={"question": "How is my DPS?"},
+                json={"question": "How is my DPS?", "thread_id": "t1"},
             )
     assert resp.status_code == 503
 
@@ -117,7 +117,7 @@ async def test_analyze_strips_think_tags():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze",
-                json={"question": "How is my DPS?"},
+                json={"question": "How is my DPS?", "thread_id": "t1"},
             )
     assert resp.status_code == 200
     body = resp.json()
@@ -138,7 +138,7 @@ async def test_analyze_handles_no_data():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze",
-                json={"question": "Show me my latest parses"},
+                json={"question": "Show me my latest parses", "thread_id": "t1"},
             )
     assert resp.status_code == 200
     body = resp.json()
@@ -166,7 +166,7 @@ async def test_stream_returns_sse_events():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze/stream",
-                json={"question": "How is my DPS?"},
+                json={"question": "How is my DPS?", "thread_id": "t1"},
             )
 
     assert resp.status_code == 200
@@ -211,7 +211,7 @@ async def test_stream_strips_think_tags():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze/stream",
-                json={"question": "Analyze my performance"},
+                json={"question": "Analyze my performance", "thread_id": "t1"},
             )
 
     body = resp.text
@@ -250,7 +250,7 @@ async def test_stream_skips_non_agent_nodes():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze/stream",
-                json={"question": "How are my parses?"},
+                json={"question": "How are my parses?", "thread_id": "t1"},
             )
 
     body = resp.text
@@ -284,7 +284,7 @@ async def test_stream_handles_error():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze/stream",
-                json={"question": "What is my DPS?"},
+                json={"question": "What is my DPS?", "thread_id": "t1"},
             )
 
     assert resp.status_code == 200
@@ -316,7 +316,7 @@ async def test_analyze_passes_langfuse_callbacks():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             await client.post(
                 "/api/analyze",
-                json={"question": "Test question"},
+                json={"question": "Test question", "thread_id": "t1"},
             )
 
     # Verify callbacks were passed in the config dict
@@ -345,7 +345,7 @@ async def test_analyze_no_callbacks_without_handler():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             await client.post(
                 "/api/analyze",
-                json={"question": "Test question"},
+                json={"question": "Test question", "thread_id": "t1"},
             )
 
     call_kwargs = graph.ainvoke.call_args
@@ -382,7 +382,7 @@ async def test_stream_passes_langfuse_callbacks():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             await client.post(
                 "/api/analyze/stream",
-                json={"question": "Test question"},
+                json={"question": "Test question", "thread_id": "t1"},
             )
 
     assert mock_handler in astream_config_capture["config"].get("callbacks", [])
@@ -524,7 +524,7 @@ async def test_stream_resets_buffer_between_agent_turns():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze/stream",
-                json={"question": "How is my DPS?"},
+                json={"question": "How is my DPS?", "thread_id": "t1"},
             )
 
     body = resp.text
@@ -571,7 +571,7 @@ async def test_stream_skips_tool_call_chunks():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze/stream",
-                json={"question": "How is my DPS?"},
+                json={"question": "How is my DPS?", "thread_id": "t1"},
             )
 
     body = resp.text
@@ -586,6 +586,53 @@ async def test_stream_skips_tool_call_chunks():
 
     assert "DPS is great" in all_tokens
     assert "get_my_performance" not in all_tokens
+
+
+async def test_analyze_passes_thread_id_in_config():
+    """thread_id from request must be passed as configurable to graph."""
+    graph = AsyncMock()
+    graph.ainvoke.return_value = {
+        "messages": [AIMessage(content="Analysis result.")],
+    }
+
+    with (
+        patch("shukketsu.api.routes.analyze._get_graph", return_value=graph),
+        patch(
+            "shukketsu.api.routes.analyze._get_langfuse_handler",
+            return_value=None,
+        ),
+    ):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.post(
+                "/api/analyze",
+                json={"question": "Hello", "thread_id": "test-thread-123"},
+            )
+
+    call_kwargs = graph.ainvoke.call_args
+    config = call_kwargs.kwargs.get("config") or call_kwargs[1].get("config", {})
+    assert config["configurable"]["thread_id"] == "test-thread-123"
+
+
+async def test_analyze_requires_thread_id():
+    """Request without thread_id should be rejected with 422."""
+    graph = AsyncMock()
+    graph.ainvoke.return_value = {
+        "messages": [AIMessage(content="ok")],
+    }
+
+    with patch("shukketsu.api.routes.analyze._get_graph", return_value=graph):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/analyze",
+                json={"question": "Hello"},
+            )
+    assert resp.status_code == 422
 
 
 async def test_analyze_503_when_semaphore_full():
@@ -611,7 +658,7 @@ async def test_analyze_503_when_semaphore_full():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze",
-                json={"question": "Hello"},
+                json={"question": "Hello", "thread_id": "t1"},
             )
 
     assert resp.status_code == 503
@@ -643,7 +690,7 @@ async def test_stream_503_when_semaphore_full():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/analyze/stream",
-                json={"question": "Hello"},
+                json={"question": "Hello", "thread_id": "t1"},
             )
 
     assert resp.status_code == 200  # SSE always returns 200
