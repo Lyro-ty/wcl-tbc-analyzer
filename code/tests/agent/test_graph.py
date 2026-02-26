@@ -131,7 +131,8 @@ class TestPrefetchNode:
         state = {
             "messages": [
                 HumanMessage(
-                    content="Pull a rotation score on report fb61030ba5a20fd5f51475a7533b57aa for Lyroo"
+                    content="Pull a rotation score on report "
+                    "fb61030ba5a20fd5f51475a7533b57aa for Lyroo"
                 ),
             ]
         }
