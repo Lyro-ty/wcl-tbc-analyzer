@@ -409,7 +409,8 @@ class TestAgentNode:
         state = {"messages": [HumanMessage(content="How is my DPS?")]}
         await agent_node(
             state,
-            llm_with_tools=mock_llm,
+            llm=mock_llm,
+            all_tools=[],
             tool_names=_TOOL_NAMES,
         )
 
@@ -424,7 +425,8 @@ class TestAgentNode:
         state = {"messages": [HumanMessage(content="How is my DPS?")]}
         result = await agent_node(
             state,
-            llm_with_tools=mock_llm,
+            llm=mock_llm,
+            all_tools=[],
             tool_names=_TOOL_NAMES,
         )
 
@@ -447,7 +449,8 @@ class TestAgentNode:
         state = {"messages": [HumanMessage(content="My DPS on Gruul?")]}
         result = await agent_node(
             state,
-            llm_with_tools=mock_llm,
+            llm=mock_llm,
+            all_tools=[],
             tool_names=_TOOL_NAMES,
         )
 
@@ -473,7 +476,8 @@ class TestAgentNode:
         }
         await agent_node(
             state,
-            llm_with_tools=mock_llm,
+            llm=mock_llm,
+            all_tools=[],
             tool_names=_TOOL_NAMES,
         )
 
@@ -498,7 +502,8 @@ class TestAgentNode:
         state = {"messages": [HumanMessage(content="analyze report abc")]}
         result = await agent_node(
             state,
-            llm_with_tools=mock_llm,
+            llm=mock_llm,
+            all_tools=[],
             tool_names=_TOOL_NAMES,
         )
 
@@ -528,7 +533,8 @@ class TestAgentNode:
         }
         result = await agent_node(
             state,
-            llm_with_tools=mock_llm,
+            llm=mock_llm,
+            all_tools=[],
             tool_names=_TOOL_NAMES,
         )
 
@@ -613,3 +619,89 @@ class TestExtractPlayerNames:
         assert "Lyroo" in names
         assert "Tankboy" in names
         assert "Gruul" not in names
+
+
+class TestContextualToolFiltering:
+    def test_report_analysis_tools(self):
+        from shukketsu.agent.graph import _get_tools_for_intent
+
+        mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
+        for t, n in zip(mock_tools, _TOOL_NAMES):
+            t.name = n
+
+        tools = _get_tools_for_intent("report_analysis", mock_tools)
+        names = {t.name for t in tools}
+        assert "get_deaths_and_mechanics" in names
+        assert "get_encounter_benchmarks" in names
+        assert "search_fights" in names
+        assert len(names) <= 12
+
+    def test_player_analysis_tools(self):
+        from shukketsu.agent.graph import _get_tools_for_intent
+
+        mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
+        for t, n in zip(mock_tools, _TOOL_NAMES):
+            t.name = n
+
+        tools = _get_tools_for_intent("player_analysis", mock_tools)
+        names = {t.name for t in tools}
+        assert "get_activity_report" in names
+        assert "compare_to_top" in names
+        assert len(names) <= 12
+
+    def test_benchmarks_tools(self):
+        from shukketsu.agent.graph import _get_tools_for_intent
+
+        mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
+        for t, n in zip(mock_tools, _TOOL_NAMES):
+            t.name = n
+
+        tools = _get_tools_for_intent("benchmarks", mock_tools)
+        names = {t.name for t in tools}
+        assert "get_encounter_benchmarks" in names
+        assert "get_spec_benchmark" in names
+        assert len(names) <= 6
+
+    def test_unknown_intent_gets_all_tools(self):
+        from shukketsu.agent.graph import _get_tools_for_intent
+
+        mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
+        for t, n in zip(mock_tools, _TOOL_NAMES):
+            t.name = n
+
+        tools = _get_tools_for_intent(None, mock_tools)
+        assert len(tools) == len(_TOOL_NAMES)
+
+    def test_specific_tool_gets_all_tools(self):
+        from shukketsu.agent.graph import _get_tools_for_intent
+
+        mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
+        for t, n in zip(mock_tools, _TOOL_NAMES):
+            t.name = n
+
+        tools = _get_tools_for_intent("specific_tool", mock_tools)
+        assert len(tools) == len(_TOOL_NAMES)
+
+    def test_compare_to_top_tools(self):
+        from shukketsu.agent.graph import _get_tools_for_intent
+
+        mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
+        for t, n in zip(mock_tools, _TOOL_NAMES):
+            t.name = n
+
+        tools = _get_tools_for_intent("compare_to_top", mock_tools)
+        names = {t.name for t in tools}
+        assert "compare_raid_to_top" in names
+        assert "get_encounter_benchmarks" in names
+
+    def test_progression_tools(self):
+        from shukketsu.agent.graph import _get_tools_for_intent
+
+        mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
+        for t, n in zip(mock_tools, _TOOL_NAMES):
+            t.name = n
+
+        tools = _get_tools_for_intent("progression", mock_tools)
+        names = {t.name for t in tools}
+        assert "get_progression" in names
+        assert "get_regressions" in names

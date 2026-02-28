@@ -102,6 +102,55 @@ _TOOL_MODULE_MAP: dict[str, str] = {
 }
 
 
+# Intent → allowed tool names (reduces hallucination by limiting choices)
+_INTENT_TOOLS: dict[str, set[str]] = {
+    "report_analysis": {
+        "get_deaths_and_mechanics", "get_encounter_benchmarks",
+        "search_fights", "get_fight_details", "get_raid_execution",
+        "compare_raid_to_top", "get_wipe_progression",
+        "get_spec_leaderboard",
+    },
+    "player_analysis": {
+        "get_activity_report", "compare_to_top", "get_rotation_score",
+        "get_cooldown_efficiency", "get_ability_breakdown",
+        "get_buff_analysis", "get_consumable_check",
+        "get_enchant_gem_check", "search_fights",
+        "get_death_analysis", "get_resource_usage",
+    },
+    "compare_to_top": {
+        "compare_raid_to_top", "get_encounter_benchmarks",
+        "get_spec_benchmark", "compare_two_raids",
+        "get_spec_leaderboard",
+    },
+    "benchmarks": {
+        "get_encounter_benchmarks", "get_spec_benchmark",
+        "get_spec_leaderboard",
+    },
+    "progression": {
+        "get_progression", "get_regressions", "resolve_my_fights",
+        "get_my_performance",
+    },
+    "leaderboard": {
+        "get_spec_leaderboard", "get_encounter_benchmarks",
+        "get_top_rankings",
+    },
+    # "specific_tool" and None → all tools (LLM needs full access)
+}
+
+
+def _get_tools_for_intent(intent: str | None, all_tools: list) -> list:
+    """Filter tools based on detected intent.
+
+    Returns a subset of tools relevant to the intent, reducing the chance
+    of hallucinated tool calls. Unknown intent or specific_tool intent
+    returns all tools.
+    """
+    allowed = _INTENT_TOOLS.get(intent)
+    if allowed is None:
+        return all_tools
+    return [t for t in all_tools if t.name in allowed]
+
+
 def _lookup_tool(name: str) -> Any | None:
     """Lazy-import a tool function by name to avoid circular imports."""
     module_name = _TOOL_MODULE_MAP.get(name)
@@ -473,23 +522,31 @@ async def prefetch_node(state: dict[str, Any]) -> dict[str, Any]:
 async def agent_node(
     state: dict[str, Any],
     *,
-    llm_with_tools: Any,
+    llm: Any,
+    all_tools: list,
     tool_names: set[str],
 ) -> dict[str, Any]:
     """Invoke the LLM with tools and the system prompt.
 
+    Dynamically binds a filtered tool set based on the detected intent.
     After the prefetch node has injected data, the LLM receives it and
     can analyze directly. For follow-up questions, tools remain available.
     """
     messages = state["messages"]
-    full_messages = [SystemMessage(content=SYSTEM_PROMPT)] + messages
+    intent = state.get("intent")
 
+    # Filter tools based on intent (reduces hallucination)
+    filtered_tools = _get_tools_for_intent(intent, all_tools)
+    llm_with_tools = llm.bind_tools(filtered_tools) if filtered_tools else llm
+    filtered_names = {t.name for t in filtered_tools} if filtered_tools else tool_names
+
+    full_messages = [SystemMessage(content=SYSTEM_PROMPT)] + messages
     response = await llm_with_tools.ainvoke(full_messages)
 
     # Fix hallucinated tool names and normalize PascalCase args
     if isinstance(response, AIMessage) and response.tool_calls:
         for tc in response.tool_calls:
-            tc["name"] = _fix_tool_name(tc["name"], tool_names)
+            tc["name"] = _fix_tool_name(tc["name"], filtered_names)
             tc["args"] = _normalize_tool_args(tc["args"])
 
     return {"messages": [response]}
@@ -504,16 +561,19 @@ def create_graph(llm: Any, tools: list) -> CompiledStateGraph:
     """Create and compile the ReAct agent graph.
 
     Graph: prefetch → agent ⇄ tools → END
+
+    Tools are bound dynamically per turn based on detected intent,
+    reducing the number of tools the LLM sees for focused queries.
     """
     tool_names = {t.name for t in tools} if tools else set()
-    llm_with_tools = llm.bind_tools(tools) if tools else llm
 
     graph = StateGraph(AnalyzerState)
 
     graph.add_node("prefetch", prefetch_node)
     graph.add_node("agent", partial(
         agent_node,
-        llm_with_tools=llm_with_tools,
+        llm=llm,
+        all_tools=tools,
         tool_names=tool_names,
     ))
     graph.add_node("tools", ToolNode(tools) if tools else _noop_tool_node)

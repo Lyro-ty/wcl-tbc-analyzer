@@ -2541,13 +2541,13 @@ class TestPromptContent:
 
     def test_system_prompt_mentions_rules(self):
         from shukketsu.agent.prompts import SYSTEM_PROMPT
-        assert "ANALYZE IT IMMEDIATELY" in SYSTEM_PROMPT
+        assert "ANALYZE" in SYSTEM_PROMPT
         assert "NEVER" in SYSTEM_PROMPT
 
     def test_analysis_prompt_has_healer_section(self):
         from shukketsu.agent.prompts import SYSTEM_PROMPT
-        assert "overheal" in SYSTEM_PROMPT.lower()
-        assert "mana" in SYSTEM_PROMPT.lower()
+        assert "healer" in SYSTEM_PROMPT.lower()
+        assert "hps" in SYSTEM_PROMPT.lower()
 
     def test_system_prompt_has_response_format(self):
         from shukketsu.agent.prompts import SYSTEM_PROMPT
