@@ -44,7 +44,7 @@ _CLASSES_SPECS = [
     ("Priest", "Shadow"), ("Priest", "Holy"),
     ("Paladin", "Retribution"), ("Paladin", "Holy"), ("Paladin", "Protection"),
     ("Shaman", "Enhancement"), ("Shaman", "Elemental"), ("Shaman", "Restoration"),
-    ("Druid", "Feral Combat"), ("Druid", "Balance"), ("Druid", "Restoration"),
+    ("Druid", "Feral"), ("Druid", "Balance"), ("Druid", "Restoration"),
 ]
 _FIGHT_IDS = [3, 5, 8, 10, 12, 15, 18, 21]
 

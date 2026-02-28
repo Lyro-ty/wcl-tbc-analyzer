@@ -597,9 +597,10 @@ class TestNormalizeToolArgs:
         result = _normalize_tool_args({"playername": "Lyroo"})
         assert result == {"player_name": "Lyroo"}
 
-    def test_alias_name_to_player_name(self):
+    def test_unknown_key_name_kept_as_is(self):
+        """'name' is too ambiguous to alias — keep it for the LLM to handle."""
         result = _normalize_tool_args({"name": "Lyroo"})
-        assert result == {"player_name": "Lyroo"}
+        assert result == {"name": "Lyroo"}
 
     def test_alias_is_id(self):
         result = _normalize_tool_args({"is_id": "ABC123"})

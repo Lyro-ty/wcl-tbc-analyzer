@@ -25,7 +25,12 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from sqlalchemy import text
 
-from shukketsu.agent.intent import IntentResult, classify_intent
+from shukketsu.agent.intent import (
+    IntentResult,
+    _extract_encounter_name,
+    _extract_player_names,
+    classify_intent,
+)
 from shukketsu.agent.prompts import SYSTEM_PROMPT
 from shukketsu.agent.state import AnalyzerState
 
@@ -38,21 +43,7 @@ _MAX_PREFETCH_FIGHTS = 5
 # Also matches codes inside URLs like /reports/CODE
 _REPORT_CODE_RE = re.compile(r'(?:reports/)?([a-zA-Z0-9]{16,40})')
 
-# Player name detection: capitalized words 3-15 chars, excluding common
-# English words and boss names that would produce false positives.
-_PLAYER_NAME_RE = re.compile(r'\b([A-Z][a-z]{2,15})\b')
-_COMMON_WORDS = frozenset({
-    "The", "Can", "Please", "What", "How", "Did", "Does", "Show",
-    "Tell", "Analyze", "Report", "Check", "Compare", "Pull", "Get",
-    "Could", "Would", "Should", "Have", "Been", "Will", "Also",
-    "Now", "Then", "Just", "Still", "Only", "Next", "Last", "Both",
-    "High", "King", "Gruul", "Magtheridon", "Prince", "Maiden",
-    "Moroes", "Nightbane", "Netherspite", "Curator", "Aran",
-    "Attumen", "Opera", "Illhoof", "Shade", "Malchezaar",
-    "Karazhan", "Raid", "Execution", "Summary", "Kills", "Wipes",
-    "Better", "Where", "When", "Which", "Help", "With", "From",
-    "About", "Their", "They", "That", "This", "These", "Those",
-})
+# _extract_player_names imported from intent.py (single source of truth)
 
 # Tools that require fight_id as an argument
 _TOOLS_NEEDING_FIGHT_ID = frozenset({
@@ -174,7 +165,6 @@ _ARG_ALIASES: dict[str, str] = {
     "term": "encounter_name",
     "playername": "player_name",
     "player": "player_name",
-    "name": "player_name",
     "reportcode": "report_code",
     "report_id": "report_code",
     "is_id": "report_code",
@@ -335,21 +325,11 @@ def _auto_repair_args(
             repaired["player_name"] = names[0]
 
     if "encounter_name" not in repaired:
-        from shukketsu.agent.intent import _extract_encounter_name
-
         enc = _extract_encounter_name(all_text)
         if enc:
             repaired["encounter_name"] = enc
 
     return repaired
-
-
-def _extract_player_names(text: str) -> list[str]:
-    """Extract candidate player names from user text."""
-    return [
-        m.group(1) for m in _PLAYER_NAME_RE.finditer(text)
-        if m.group(1) not in _COMMON_WORDS
-    ]
 
 
 def _inject_tool_result(

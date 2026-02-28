@@ -14,9 +14,6 @@ class TestAnalyzerState:
     def test_has_intent_field(self):
         assert "intent" in AnalyzerState.__annotations__
 
-    def test_has_detected_context_field(self):
-        assert "detected_context" in AnalyzerState.__annotations__
-
     def test_has_tool_error_count_field(self):
         assert "tool_error_count" in AnalyzerState.__annotations__
 

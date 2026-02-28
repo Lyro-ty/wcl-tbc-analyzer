@@ -19,29 +19,12 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from shukketsu.agent.tool_utils import VALID_ARGS, VALID_TOOLS
+
 logger = logging.getLogger(__name__)
 
-# All valid tool names — must match agent/tools/ definitions exactly
-_VALID_TOOLS = frozenset({
-    "get_my_performance", "get_top_rankings", "compare_to_top",
-    "get_fight_details", "get_progression", "get_deaths_and_mechanics",
-    "search_fights", "get_spec_leaderboard", "resolve_my_fights",
-    "get_wipe_progression", "get_regressions", "compare_raid_to_top",
-    "compare_two_raids", "get_raid_execution", "get_ability_breakdown",
-    "get_buff_analysis", "get_overheal_analysis", "get_death_analysis",
-    "get_activity_report", "get_cooldown_efficiency", "get_cancelled_casts",
-    "get_consumable_check", "get_resource_usage", "get_dot_management",
-    "get_rotation_score", "get_gear_changes", "get_phase_analysis",
-    "get_enchant_gem_check", "get_encounter_benchmarks", "get_spec_benchmark",
-})
-
-# All valid argument names across all tools
-_VALID_ARGS = frozenset({
-    "report_code", "fight_id", "player_name", "encounter_name",
-    "class_name", "spec_name", "character_name", "count",
-    "bests_only", "report_a", "report_b", "zone_id",
-    "report_code_old", "report_code_new",
-})
+_VALID_TOOLS = VALID_TOOLS
+_VALID_ARGS = VALID_ARGS
 
 
 def _user_message_hash(messages: list[dict]) -> str:

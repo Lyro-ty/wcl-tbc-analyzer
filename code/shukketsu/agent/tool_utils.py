@@ -10,6 +10,40 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
+# All valid tool names — single source of truth for training data pipelines
+VALID_TOOLS = frozenset({
+    "get_my_performance", "get_top_rankings", "compare_to_top",
+    "get_fight_details", "get_progression", "get_deaths_and_mechanics",
+    "search_fights", "get_spec_leaderboard", "resolve_my_fights",
+    "get_wipe_progression", "get_regressions", "compare_raid_to_top",
+    "compare_two_raids", "get_raid_execution", "get_ability_breakdown",
+    "get_buff_analysis", "get_overheal_analysis", "get_death_analysis",
+    "get_activity_report", "get_cooldown_efficiency", "get_cancelled_casts",
+    "get_consumable_check", "get_resource_usage", "get_dot_management",
+    "get_rotation_score", "get_gear_changes", "get_phase_analysis",
+    "get_enchant_gem_check", "get_encounter_benchmarks", "get_spec_benchmark",
+})
+
+# All valid argument names across all tools
+VALID_ARGS = frozenset({
+    "report_code", "fight_id", "player_name", "encounter_name",
+    "class_name", "spec_name", "character_name", "count",
+    "bests_only", "report_a", "report_b",
+    "report_code_old", "report_code_new",
+})
+
+# Phrases indicating the model gave up instead of retrying
+GIVE_UP_PHRASES = [
+    "i need you to provide",
+    "could you provide",
+    "please provide",
+    "what report",
+    "which report",
+    "i'm sorry",
+    "i apologize",
+    "unfortunately, i",
+]
+
 # Module-level session provider, set during app startup
 _session_factory = None
 

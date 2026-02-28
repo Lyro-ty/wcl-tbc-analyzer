@@ -18,6 +18,7 @@ _COMMON_WORDS = frozenset({
     "The", "Can", "Please", "What", "How", "Did", "Does", "Show",
     "Tell", "Analyze", "Report", "Check", "Compare", "Pull", "Get",
     "Could", "Would", "Should", "Have", "Been", "Will", "Also",
+    "Now", "Then", "Just", "Still", "Only", "Next", "Last", "Both",
     "High", "King", "Gruul", "Magtheridon", "Prince", "Maiden",
     "Moroes", "Nightbane", "Netherspite", "Curator", "Aran",
     "Attumen", "Opera", "Illhoof", "Shade", "Malchezaar",
