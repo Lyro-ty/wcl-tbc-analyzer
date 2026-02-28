@@ -45,6 +45,7 @@ snapshot-progression = "shukketsu.scripts.snapshot_progression:main"
 pull-table-data = "shukketsu.scripts.pull_table_data:main"
 pull-benchmarks = "shukketsu.scripts.pull_benchmarks:main"
 manage-watched-guilds = "shukketsu.scripts.manage_watched_guilds:main"
+export-training-data = "shukketsu.scripts.export_training_data:main"
 
 [tool.setuptools.packages.find]
 where = ["code"]
