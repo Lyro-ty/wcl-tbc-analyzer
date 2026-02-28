@@ -598,6 +598,47 @@ class TestFixToolName:
         result = _fix_tool_name("get_performance", _TOOL_NAMES)
         assert result == "get_my_performance"
 
+    # Alias map tests (Task 6)
+    def test_alias_analyze_report(self):
+        assert (
+            _fix_tool_name("analyze_report", _TOOL_NAMES)
+            == "get_raid_execution"
+        )
+
+    def test_alias_get_analysis(self):
+        assert _fix_tool_name("get_analysis", _TOOL_NAMES) in {
+            "get_raid_execution", "get_activity_report",
+        }
+
+    def test_alias_get_analysis_metrics(self):
+        assert (
+            _fix_tool_name("get_analysis_metrics", _TOOL_NAMES)
+            == "get_activity_report"
+        )
+
+    def test_alias_search(self):
+        assert (
+            _fix_tool_name("search", _TOOL_NAMES) == "search_fights"
+        )
+
+    def test_alias_get_character_profile(self):
+        assert (
+            _fix_tool_name("get_character_profile", _TOOL_NAMES)
+            == "get_progression"
+        )
+
+    def test_alias_get_report(self):
+        assert (
+            _fix_tool_name("get_report", _TOOL_NAMES)
+            == "get_raid_execution"
+        )
+
+    def test_alias_get_player_performance(self):
+        assert (
+            _fix_tool_name("get_player_performance", _TOOL_NAMES)
+            == "get_my_performance"
+        )
+
 
 class TestExtractPlayerNames:
     def test_extracts_player_name(self):

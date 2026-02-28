@@ -180,28 +180,74 @@ def _normalize_tool_args(args: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _fix_tool_name(name: str, valid_names: set[str]) -> str:
-    """Fix hallucinated tool names via fuzzy matching.
+# Semantic alias map: hallucinated name → correct tool name
+_TOOL_ALIASES: dict[str, str] = {
+    "analyze_report": "get_raid_execution",
+    "analyze_fight": "get_raid_execution",
+    "get_analysis": "get_raid_execution",
+    "get_analysis_metrics": "get_activity_report",
+    "get_analysis_report": "get_activity_report",
+    "get_player_progression_over_time": "get_progression",
+    "get_character_profile": "get_progression",
+    "search": "search_fights",
+    "find_fights": "search_fights",
+    "get_report": "get_raid_execution",
+    "get_report_analysis": "get_raid_execution",
+    "get_player_performance": "get_my_performance",
+    "get_benchmarks": "get_encounter_benchmarks",
+    "get_leaderboard": "get_spec_leaderboard",
+    "get_rankings": "get_top_rankings",
+    "get_deaths": "get_death_analysis",
+    "get_rotation": "get_rotation_score",
+    "get_cooldowns": "get_cooldown_efficiency",
+    "get_consumables": "get_consumable_check",
+    "get_buffs": "get_buff_analysis",
+    "get_abilities": "get_ability_breakdown",
+    "get_gear": "get_gear_changes",
+    "get_enchants": "get_enchant_gem_check",
+    "get_resources": "get_resource_usage",
+    "get_dots": "get_dot_management",
+    "get_phases": "get_phase_analysis",
+    "get_cancels": "get_cancelled_casts",
+}
 
-    Nemotron sometimes invents tool names (e.g. 'get_analysis' instead of
-    'get_raid_execution'). This attempts to recover by matching to the
-    closest valid tool name.
+
+def _fix_tool_name(name: str, valid_names: set[str]) -> str:
+    """Fix hallucinated tool names via alias map + fuzzy matching.
+
+    Priority: exact match → alias map → camelCase conversion → alias of
+    snake version → fuzzy match (high cutoff) → return original.
     """
     if name in valid_names:
         return name
+
+    # Check alias map
+    alias = _TOOL_ALIASES.get(name)
+    if alias and alias in valid_names:
+        logger.info("Fixed aliased tool name: %s → %s", name, alias)
+        return alias
+
     # Try snake_case conversion (e.g. getMyPerformance → get_my_performance)
     snake = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", name).lower()
     if snake in valid_names:
         logger.info("Fixed camelCase tool name: %s → %s", name, snake)
         return snake
-    # Fuzzy match
-    matches = get_close_matches(name, list(valid_names), n=1, cutoff=0.5)
-    if matches:
-        logger.warning(
-            "Fixed hallucinated tool name: %s → %s", name, matches[0]
+
+    # Check alias for snake_case version too
+    alias = _TOOL_ALIASES.get(snake)
+    if alias and alias in valid_names:
+        logger.info(
+            "Fixed aliased tool name (via snake): %s → %s", name, alias
         )
+        return alias
+
+    # Fuzzy match with higher cutoff (last resort)
+    matches = get_close_matches(name, list(valid_names), n=1, cutoff=0.7)
+    if matches:
+        logger.warning("Fuzzy-matched tool name: %s → %s", name, matches[0])
         return matches[0]
-    logger.warning("Unknown tool name '%s', no close match found", name)
+
+    logger.warning("Unknown tool name '%s', no match found", name)
     return name
 
 
