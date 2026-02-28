@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, field
 
 # WCL report codes: 16+ alphanumeric chars
-_REPORT_CODE_RE = re.compile(r'(?:reports/)?([a-zA-Z0-9]{16,40})')
+_REPORT_CODE_RE = re.compile(r'(?:reports/)?([a-zA-Z0-9]{14,40})')
 
 # Player name: capitalized word 3-15 chars, excluding common words/bosses
 _PLAYER_NAME_RE = re.compile(r'\b([A-Z][a-z]{2,15})\b')
@@ -149,6 +149,9 @@ _PLAYER_ANALYSIS_RE = re.compile(
     r'\b(better|improve|could have|what.+wrong|feedback|analyze\s+\w+\s+in)\b',
     re.IGNORECASE,
 )
+# Fight ID patterns: "fight 8", "fight #8", "fight_id 8"
+_FIGHT_ID_RE = re.compile(r'\bfight(?:_id)?\s*#?\s*(\d+)\b', re.IGNORECASE)
+
 # "Beast Mastery" as two words → BeastMastery
 _BEAST_MASTERY_RE = re.compile(r'\bbeast\s+mastery\b', re.IGNORECASE)
 
@@ -162,6 +165,15 @@ class IntentResult:
     class_name: str | None = None
     spec_name: str | None = None
     specific_tool: str | None = None
+    fight_id: int | None = None
+
+
+def _extract_fight_id(text: str) -> int | None:
+    """Extract fight ID from text like 'fight 8', 'fight #3', 'fight_id 12'."""
+    match = _FIGHT_ID_RE.search(text)
+    if match:
+        return int(match.group(1))
+    return None
 
 
 def _extract_report_codes(text: str) -> list[str]:
@@ -230,6 +242,7 @@ def classify_intent(text: str) -> IntentResult:
     result.player_names = _extract_player_names(text)
     result.encounter_name = _extract_encounter_name(text)
     result.class_name, result.spec_name = _extract_class_spec(text)
+    result.fight_id = _extract_fight_id(text)
 
     # Priority order: specific tool > player analysis > compare > benchmarks
     # > leaderboard > progression > report analysis > unknown

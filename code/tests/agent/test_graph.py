@@ -70,6 +70,14 @@ class TestExtractReportCode:
         code = _extract_report_code("report a1B2c3D4e5F6g7H8")
         assert code == "a1B2c3D4e5F6g7H8"
 
+    def test_extracts_15_char_code(self):
+        code = _extract_report_code("report xHZ4Vd7WpGBTp7q")
+        assert code == "xHZ4Vd7WpGBTp7q"
+
+    def test_extracts_14_char_code(self):
+        code = _extract_report_code("report aBcDeFgHiJkLmN")
+        assert code == "aBcDeFgHiJkLmN"
+
     def test_extracts_from_url(self):
         code = _extract_report_code(
             "https://www.warcraftlogs.com/reports/fb61030ba5a20fd5f51475a7533b57aa"
@@ -381,6 +389,59 @@ class TestPrefetchNode:
         ]
         assert len(detail_calls) == _MAX_PREFETCH_FIGHTS
 
+    async def test_prefetch_specific_uses_user_fight_id(self):
+        """When user specifies fight_id, prefetch uses it instead of DB lookup."""
+        msg = HumanMessage(
+            content="Show death analysis for Gruul in Fn2ACKZtyzc1QLJP fight 8"
+        )
+        mock_death = AsyncMock()
+        mock_death.ainvoke = AsyncMock(return_value="death data")
+
+        with (
+            patch(
+                "shukketsu.agent.tools.event_tools.get_death_analysis",
+                mock_death,
+            ),
+            patch(
+                "shukketsu.agent.graph._get_kill_fight_ids",
+                return_value=[3, 5, 8],
+            ) as mock_kill_ids,
+        ):
+            await prefetch_node({"messages": [msg]})
+
+        # Should NOT have called _get_kill_fight_ids since user specified fight 8
+        mock_kill_ids.assert_not_called()
+        # Tool should have been called with fight_id=8
+        mock_death.ainvoke.assert_called_once()
+        call_args = mock_death.ainvoke.call_args[0][0]
+        assert call_args["fight_id"] == 8
+
+    async def test_prefetch_specific_failure_injects_hint(self):
+        """When prefetch tool fails, inject a hint so LLM knows what to try."""
+        msg = HumanMessage(
+            content="Show wipe progression for Prince in xHZ4Vd7WpGBTp7q"
+        )
+        mock_wipe = AsyncMock()
+        mock_wipe.ainvoke = AsyncMock(side_effect=Exception("No data"))
+
+        with patch(
+            "shukketsu.agent.tools.player_tools.get_wipe_progression",
+            mock_wipe,
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        # Should still return the intent
+        assert result.get("intent") == "specific_tool"
+        # Should have injected messages with a hint about what was tried
+        msgs = result.get("messages", [])
+        assert len(msgs) > 0
+        # At least one message should mention the tool name
+        all_content = " ".join(
+            m.content for m in msgs
+            if hasattr(m, "content") and isinstance(m.content, str)
+        )
+        assert "get_wipe_progression" in all_content
+
     async def test_prefetch_specific_without_report_code(self):
         """Specific tool without report code → call tool with available args."""
         msg = HumanMessage(content="Check for performance regressions")
@@ -655,6 +716,40 @@ class TestNormalizeToolArgs:
     def test_invalid_int_string_unchanged(self):
         result = _normalize_tool_args({"fight_id": "not_a_number"})
         assert result == {"fight_id": "not_a_number"}
+
+    def test_report_code_hash_suffix_stripped(self):
+        """LLM sometimes appends #fight_id to report_code — strip it."""
+        result = _normalize_tool_args({
+            "report_code": "Fn2ACKZtyzc1QLJP#3",
+        })
+        assert result["report_code"] == "Fn2ACKZtyzc1QLJP"
+        # fight_id is also extracted from the #N suffix
+        assert result["fight_id"] == 3
+
+    def test_report_code_hash_suffix_extracts_fight_id(self):
+        """When report_code has #N, extract fight_id if not already present."""
+        result = _normalize_tool_args({
+            "report_code": "Fn2ACKZtyzc1QLJP#8",
+        })
+        assert result == {"report_code": "Fn2ACKZtyzc1QLJP", "fight_id": 8}
+
+    def test_report_code_hash_no_clobber_fight_id(self):
+        """Don't overwrite an existing fight_id from the #N extraction."""
+        result = _normalize_tool_args({
+            "report_code": "Fn2ACKZtyzc1QLJP#3",
+            "fight_id": 8,
+        })
+        assert result == {
+            "report_code": "Fn2ACKZtyzc1QLJP",
+            "fight_id": 8,
+        }
+
+    def test_clean_report_code_untouched(self):
+        """Report codes without # suffix are preserved."""
+        result = _normalize_tool_args({
+            "report_code": "Fn2ACKZtyzc1QLJP",
+        })
+        assert result == {"report_code": "Fn2ACKZtyzc1QLJP"}
 
 
 class TestFixToolName:

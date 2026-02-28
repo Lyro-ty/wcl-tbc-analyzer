@@ -41,7 +41,7 @@ _MAX_PREFETCH_FIGHTS = 5
 
 # WCL report codes: 16+ alphanumeric chars (typically 16 or 32 hex).
 # Also matches codes inside URLs like /reports/CODE
-_REPORT_CODE_RE = re.compile(r'(?:reports/)?([a-zA-Z0-9]{16,40})')
+_REPORT_CODE_RE = re.compile(r'(?:reports/)?([a-zA-Z0-9]{14,40})')
 
 # _extract_player_names imported from intent.py (single source of truth)
 
@@ -186,12 +186,17 @@ _INT_FIELDS = frozenset({"fight_id", "count"})
 _BOOL_FIELDS = frozenset({"bests_only"})
 
 
+# Regex to detect report_code with #N fight_id suffix (e.g. "ABC123#3")
+_REPORT_CODE_HASH_RE = re.compile(r'^(.+?)#(\d+)$')
+
+
 def _normalize_tool_args(args: dict[str, Any]) -> dict[str, Any]:
     """Normalize tool argument keys and coerce value types.
 
     1. PascalCase → snake_case (e.g. EncounterName → encounter_name)
     2. Alias map (e.g. term → encounter_name, reportcode → report_code)
     3. Type coercion (fight_id: "8" → 8, bests_only: "true" → True)
+    4. Sanitize report_code: strip #N suffix (extract fight_id if missing)
     """
     normalized = {}
     for key, value in args.items():
@@ -207,6 +212,17 @@ def _normalize_tool_args(args: dict[str, Any]) -> dict[str, Any]:
         if final_key in _BOOL_FIELDS and isinstance(value, str):
             value = value.lower() in ("true", "1", "yes")
         normalized[final_key] = value
+
+    # Sanitize report_code: strip #N suffix (LLM sometimes appends fight ID)
+    if "report_code" in normalized and isinstance(normalized["report_code"], str):
+        match = _REPORT_CODE_HASH_RE.match(normalized["report_code"])
+        if match:
+            normalized["report_code"] = match.group(1)
+            # Extract fight_id from suffix if not already present
+            if "fight_id" not in normalized:
+                with contextlib.suppress(ValueError):
+                    normalized["fight_id"] = int(match.group(2))
+
     return normalized
 
 
@@ -544,6 +560,35 @@ async def _prefetch_leaderboard(intent: IntentResult) -> list:
     )
 
 
+def _inject_prefetch_failure_hint(
+    tool_name: str, args: dict[str, Any], error: str | None = None,
+) -> list:
+    """Inject a ToolMessage hint when prefetch fails, so the LLM knows what to try.
+
+    Without this, the LLM doesn't know the tool exists and gives up.
+    """
+    args_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
+    if error:
+        hint = (
+            f"Prefetch attempted {tool_name}({args_str}) but it failed: "
+            f"{error}. You can retry {tool_name} with corrected arguments, "
+            f"or inform the user that the requested data is not available."
+        )
+    else:
+        hint = (
+            f"Prefetch attempted {tool_name}({args_str}) but returned no data. "
+            f"You can retry {tool_name} with different arguments, "
+            f"or inform the user that the requested data is not available."
+        )
+    call_id = f"prefetch_{tool_name}_hint"
+    ai_msg = AIMessage(
+        content="",
+        tool_calls=[{"name": tool_name, "args": args, "id": call_id}],
+    )
+    tool_msg = ToolMessage(content=hint, tool_call_id=call_id)
+    return [ai_msg, tool_msg]
+
+
 async def _prefetch_specific(intent: IntentResult) -> list:
     """Prefetch a specific tool's results with available context.
 
@@ -565,8 +610,10 @@ async def _prefetch_specific(intent: IntentResult) -> list:
     if intent.encounter_name:
         args["encounter_name"] = intent.encounter_name
 
-    # Resolve fight_id if needed
-    if (intent.specific_tool in _TOOLS_NEEDING_FIGHT_ID
+    # Use user-specified fight_id if present, otherwise resolve from DB
+    if intent.fight_id is not None:
+        args["fight_id"] = intent.fight_id
+    elif (intent.specific_tool in _TOOLS_NEEDING_FIGHT_ID
             and intent.report_code and "fight_id" not in args):
         fight_ids = await _get_kill_fight_ids(intent.report_code)
         if fight_ids:
@@ -574,13 +621,18 @@ async def _prefetch_specific(intent: IntentResult) -> list:
 
     try:
         result = await tool_fn.ainvoke(args)
-        return _inject_tool_result(intent.specific_tool, args, result)
+        if result:
+            return _inject_tool_result(intent.specific_tool, args, result)
+        # Tool returned empty/None — inject a hint
+        return _inject_prefetch_failure_hint(intent.specific_tool, args)
     except Exception as e:
         logger.warning(
-            "Prefetch %s failed: %s — deferring to LLM",
+            "Prefetch %s failed: %s — injecting hint for LLM",
             intent.specific_tool, e,
         )
-        return []
+        return _inject_prefetch_failure_hint(
+            intent.specific_tool, args, str(e),
+        )
 
 
 _PREFETCH_DISPATCH = {

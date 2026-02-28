@@ -222,3 +222,58 @@ class TestEdgeCases:
         result = classify_intent("Show deaths on Gruul")
         assert result.intent == "specific_tool"
         assert result.specific_tool == "get_death_analysis"
+
+
+class TestFightIdExtraction:
+    """Test fight_id extraction from user text."""
+
+    def test_extracts_fight_n(self):
+        result = classify_intent(
+            "Show death analysis for Gruul in Fn2ACKZtyzc1QLJP fight 8"
+        )
+        assert result.fight_id == 8
+
+    def test_extracts_fight_hash_n(self):
+        result = classify_intent(
+            "Check rotation for fight #3 in Fn2ACKZtyzc1QLJP"
+        )
+        assert result.fight_id == 3
+
+    def test_extracts_fight_id_n(self):
+        result = classify_intent(
+            "Cooldowns for Lyroo, fight_id 12 in Fn2ACKZtyzc1QLJP"
+        )
+        assert result.fight_id == 12
+
+    def test_no_fight_id_returns_none(self):
+        result = classify_intent("Show death analysis for Gruul")
+        assert result.fight_id is None
+
+    def test_fight_id_coexists_with_other_fields(self):
+        result = classify_intent(
+            "Show death analysis for Gruul in Fn2ACKZtyzc1QLJP fight 8"
+        )
+        assert result.intent == "specific_tool"
+        assert result.specific_tool == "get_death_analysis"
+        assert result.report_code == "Fn2ACKZtyzc1QLJP"
+        assert result.encounter_name == "Gruul the Dragonkiller"
+        assert result.fight_id == 8
+
+
+class TestShortReportCode:
+    """Test that 14-15 char report codes are extracted."""
+
+    def test_15_char_report_code(self):
+        result = classify_intent(
+            "Show wipe progression for Prince in xHZ4Vd7WpGBTp7q"
+        )
+        assert result.report_code == "xHZ4Vd7WpGBTp7q"
+
+    def test_14_char_report_code(self):
+        result = classify_intent("Analyze report aBcDeFgHiJkLmN")
+        assert result.report_code == "aBcDeFgHiJkLmN"
+
+    def test_13_char_not_matched(self):
+        """13 chars is too short to be a report code."""
+        result = classify_intent("Check aBcDeFgHiJkLm")
+        assert result.report_code is None
