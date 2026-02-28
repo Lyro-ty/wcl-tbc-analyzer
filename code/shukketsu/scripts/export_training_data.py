@@ -40,7 +40,8 @@ _VALID_TOOLS = frozenset({
 _VALID_ARGS = frozenset({
     "report_code", "fight_id", "player_name", "encounter_name",
     "class_name", "spec_name", "character_name", "count",
-    "bests_only", "report_code_a", "report_code_b", "zone_id",
+    "bests_only", "report_a", "report_b", "zone_id",
+    "report_code_old", "report_code_new",
 })
 
 # Phrases indicating the model gave up instead of retrying

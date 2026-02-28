@@ -47,6 +47,7 @@ pull-benchmarks = "shukketsu.scripts.pull_benchmarks:main"
 manage-watched-guilds = "shukketsu.scripts.manage_watched_guilds:main"
 export-training-data = "shukketsu.scripts.export_training_data:main"
 generate-synthetic-data = "shukketsu.scripts.generate_synthetic_data:main"
+prepare-training-data = "shukketsu.scripts.prepare_training_data:main"
 
 [tool.setuptools.packages.find]
 where = ["code"]
