@@ -2,10 +2,13 @@
 
 Architecture: prefetch → agent ⇄ tools → END
 
-The prefetch node detects report codes in the user's first message and
-auto-fetches raid data BEFORE the LLM runs. This makes the initial analysis
-deterministic and reliable — the LLM receives data and analyzes it instead
-of choosing which tool to call (which Nemotron does poorly).
+The prefetch node classifies intent from the user's first message and
+auto-fetches relevant data BEFORE the LLM runs. This makes the initial
+analysis deterministic and reliable — the LLM receives data and analyzes
+it instead of choosing which tool to call (which Nemotron does poorly).
+
+Intent routing covers 7 intents: report_analysis, player_analysis,
+compare_to_top, benchmarks, progression, specific_tool, leaderboard.
 """
 
 import logging
@@ -21,25 +24,21 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from sqlalchemy import text
 
+from shukketsu.agent.intent import IntentResult, classify_intent
 from shukketsu.agent.prompts import SYSTEM_PROMPT
 from shukketsu.agent.state import AnalyzerState
 
 logger = logging.getLogger(__name__)
 
+# Maximum fight details to prefetch (prevents slow prefetch for large raids)
+_MAX_PREFETCH_FIGHTS = 5
+
 # WCL report codes: 16+ alphanumeric chars (typically 16 or 32 hex).
 # Also matches codes inside URLs like /reports/CODE
 _REPORT_CODE_RE = re.compile(r'(?:reports/)?([a-zA-Z0-9]{16,40})')
 
-# Keywords indicating user wants a specific tool, not general raid analysis.
-# When present, skip prefetch and let the LLM choose the right tool.
-_SPECIFIC_TOOL_KEYWORDS = re.compile(
-    r'\b(rotation|deaths?|cooldown|consumable|buff|ability|gear|enchant|gem|'
-    r'resource|mana|cast|cancel|dot|phase|overheal|wipe)\b',
-    re.IGNORECASE,
-)
-
-# Player name detection: capitalized words 3-15 chars, excluding common English
-# words and boss names that would produce false positives.
+# Player name detection: capitalized words 3-15 chars, excluding common
+# English words and boss names that would produce false positives.
 _PLAYER_NAME_RE = re.compile(r'\b([A-Z][a-z]{2,15})\b')
 _COMMON_WORDS = frozenset({
     "The", "Can", "Please", "What", "How", "Did", "Does", "Show",
@@ -52,6 +51,65 @@ _COMMON_WORDS = frozenset({
     "Better", "Where", "When", "Which", "Help", "With", "From",
     "About", "Their", "They", "That", "This", "These", "Those",
 })
+
+# Tools that require fight_id as an argument
+_TOOLS_NEEDING_FIGHT_ID = frozenset({
+    "get_fight_details", "get_deaths_and_mechanics",
+    "get_death_analysis", "get_activity_report", "get_cooldown_efficiency",
+    "get_cancelled_casts", "get_consumable_check", "get_resource_usage",
+    "get_dot_management", "get_rotation_score", "get_phase_analysis",
+    "get_enchant_gem_check", "get_ability_breakdown", "get_buff_analysis",
+    "get_overheal_analysis",
+})
+
+# Tool name → module path for lazy lookup
+_TOOL_MODULE_MAP: dict[str, str] = {
+    # Player tools
+    "get_my_performance": "player_tools",
+    "get_top_rankings": "player_tools",
+    "compare_to_top": "player_tools",
+    "get_fight_details": "player_tools",
+    "get_progression": "player_tools",
+    "get_deaths_and_mechanics": "player_tools",
+    "search_fights": "player_tools",
+    "get_spec_leaderboard": "player_tools",
+    "resolve_my_fights": "player_tools",
+    "get_wipe_progression": "player_tools",
+    "get_regressions": "player_tools",
+    # Raid tools
+    "compare_raid_to_top": "raid_tools",
+    "compare_two_raids": "raid_tools",
+    "get_raid_execution": "raid_tools",
+    # Table tools
+    "get_ability_breakdown": "table_tools",
+    "get_buff_analysis": "table_tools",
+    "get_overheal_analysis": "table_tools",
+    # Event tools
+    "get_death_analysis": "event_tools",
+    "get_activity_report": "event_tools",
+    "get_cooldown_efficiency": "event_tools",
+    "get_cancelled_casts": "event_tools",
+    "get_consumable_check": "event_tools",
+    "get_resource_usage": "event_tools",
+    "get_dot_management": "event_tools",
+    "get_rotation_score": "event_tools",
+    "get_gear_changes": "event_tools",
+    "get_phase_analysis": "event_tools",
+    "get_enchant_gem_check": "event_tools",
+    # Benchmark tools
+    "get_encounter_benchmarks": "benchmark_tools",
+    "get_spec_benchmark": "benchmark_tools",
+}
+
+
+def _lookup_tool(name: str) -> Any | None:
+    """Lazy-import a tool function by name to avoid circular imports."""
+    module_name = _TOOL_MODULE_MAP.get(name)
+    if not module_name:
+        return None
+    import importlib
+    mod = importlib.import_module(f"shukketsu.agent.tools.{module_name}")
+    return getattr(mod, name, None)
 
 
 def _extract_report_code(text: str) -> str | None:
@@ -90,7 +148,9 @@ def _fix_tool_name(name: str, valid_names: set[str]) -> str:
     # Fuzzy match
     matches = get_close_matches(name, list(valid_names), n=1, cutoff=0.5)
     if matches:
-        logger.warning("Fixed hallucinated tool name: %s → %s", name, matches[0])
+        logger.warning(
+            "Fixed hallucinated tool name: %s → %s", name, matches[0]
+        )
         return matches[0]
     logger.warning("Unknown tool name '%s', no close match found", name)
     return name
@@ -102,6 +162,19 @@ def _extract_player_names(text: str) -> list[str]:
         m.group(1) for m in _PLAYER_NAME_RE.finditer(text)
         if m.group(1) not in _COMMON_WORDS
     ]
+
+
+def _inject_tool_result(
+    tool_name: str, args: dict[str, Any], result: str,
+) -> list:
+    """Create synthetic AIMessage + ToolMessage pair for prefetched data."""
+    call_id = f"prefetch_{tool_name}_{hash(str(args)) % 100000}"
+    ai_msg = AIMessage(
+        content="",
+        tool_calls=[{"name": tool_name, "args": args, "id": call_id}],
+    )
+    tool_msg = ToolMessage(content=result, tool_call_id=call_id)
+    return [ai_msg, tool_msg]
 
 
 async def _get_kill_fight_ids(report_code: str) -> list[int]:
@@ -127,87 +200,274 @@ async def _get_kill_fight_ids(report_code: str) -> list[int]:
         await session.close()
 
 
+# --------------------------------------------------------------------------- #
+# Intent-based prefetch dispatch
+# --------------------------------------------------------------------------- #
+
+
+async def _prefetch_report(intent: IntentResult) -> list:
+    """Prefetch raid execution + fight details for report analysis."""
+    if not intent.report_code:
+        return []
+
+    from shukketsu.agent.tools.player_tools import get_fight_details
+    from shukketsu.agent.tools.raid_tools import get_raid_execution
+
+    code = intent.report_code
+    result = await get_raid_execution.ainvoke({"report_code": code})
+    injected = _inject_tool_result(
+        "get_raid_execution", {"report_code": code}, result,
+    )
+
+    fight_ids = await _get_kill_fight_ids(code)
+    for fight_id in fight_ids[:_MAX_PREFETCH_FIGHTS]:
+        detail = await get_fight_details.ainvoke({
+            "report_code": code, "fight_id": fight_id,
+        })
+        injected.extend(_inject_tool_result(
+            "get_fight_details",
+            {"report_code": code, "fight_id": fight_id},
+            detail,
+        ))
+
+    return injected
+
+
+async def _prefetch_player(intent: IntentResult) -> list:
+    """Prefetch raid + fight details + activity reports for player analysis."""
+    if not intent.report_code:
+        return []
+
+    from shukketsu.agent.tools.event_tools import get_activity_report
+    from shukketsu.agent.tools.player_tools import get_fight_details
+    from shukketsu.agent.tools.raid_tools import get_raid_execution
+
+    code = intent.report_code
+    result = await get_raid_execution.ainvoke({"report_code": code})
+    injected = _inject_tool_result(
+        "get_raid_execution", {"report_code": code}, result,
+    )
+
+    fight_ids = await _get_kill_fight_ids(code)
+    for fight_id in fight_ids[:_MAX_PREFETCH_FIGHTS]:
+        detail = await get_fight_details.ainvoke({
+            "report_code": code, "fight_id": fight_id,
+        })
+        injected.extend(_inject_tool_result(
+            "get_fight_details",
+            {"report_code": code, "fight_id": fight_id},
+            detail,
+        ))
+
+        # Fetch activity report for each named player on each fight
+        for player in intent.player_names:
+            activity = await get_activity_report.ainvoke({
+                "report_code": code,
+                "fight_id": fight_id,
+                "player_name": player,
+            })
+            injected.extend(_inject_tool_result(
+                "get_activity_report",
+                {
+                    "report_code": code,
+                    "fight_id": fight_id,
+                    "player_name": player,
+                },
+                activity,
+            ))
+
+    return injected
+
+
+async def _prefetch_compare(intent: IntentResult) -> list:
+    """Prefetch comparison data."""
+    if intent.report_code:
+        from shukketsu.agent.tools.raid_tools import compare_raid_to_top
+
+        result = await compare_raid_to_top.ainvoke({
+            "report_code": intent.report_code,
+        })
+        return _inject_tool_result(
+            "compare_raid_to_top",
+            {"report_code": intent.report_code},
+            result,
+        )
+
+    if intent.encounter_name:
+        from shukketsu.agent.tools.benchmark_tools import (
+            get_encounter_benchmarks,
+        )
+
+        result = await get_encounter_benchmarks.ainvoke({
+            "encounter_name": intent.encounter_name,
+        })
+        return _inject_tool_result(
+            "get_encounter_benchmarks",
+            {"encounter_name": intent.encounter_name},
+            result,
+        )
+
+    return []
+
+
+async def _prefetch_benchmarks(intent: IntentResult) -> list:
+    """Prefetch benchmark data."""
+    injected: list = []
+
+    if intent.encounter_name:
+        from shukketsu.agent.tools.benchmark_tools import (
+            get_encounter_benchmarks,
+        )
+
+        result = await get_encounter_benchmarks.ainvoke({
+            "encounter_name": intent.encounter_name,
+        })
+        injected.extend(_inject_tool_result(
+            "get_encounter_benchmarks",
+            {"encounter_name": intent.encounter_name},
+            result,
+        ))
+
+    if intent.class_name and intent.spec_name and intent.encounter_name:
+        from shukketsu.agent.tools.benchmark_tools import get_spec_benchmark
+
+        args = {
+            "encounter_name": intent.encounter_name,
+            "class_name": intent.class_name,
+            "spec_name": intent.spec_name,
+        }
+        result = await get_spec_benchmark.ainvoke(args)
+        injected.extend(_inject_tool_result(
+            "get_spec_benchmark", args, result,
+        ))
+
+    return injected
+
+
+async def _prefetch_progression(intent: IntentResult) -> list:
+    """Prefetch progression data for a player."""
+    if not intent.player_names:
+        return []
+
+    from shukketsu.agent.tools.player_tools import get_progression
+
+    args: dict[str, Any] = {"character_name": intent.player_names[0]}
+    if intent.encounter_name:
+        args["encounter_name"] = intent.encounter_name
+
+    result = await get_progression.ainvoke(args)
+    return _inject_tool_result("get_progression", args, result)
+
+
+async def _prefetch_leaderboard(intent: IntentResult) -> list:
+    """Prefetch spec leaderboard for an encounter."""
+    if not intent.encounter_name:
+        return []
+
+    from shukketsu.agent.tools.player_tools import get_spec_leaderboard
+
+    result = await get_spec_leaderboard.ainvoke({
+        "encounter_name": intent.encounter_name,
+    })
+    return _inject_tool_result(
+        "get_spec_leaderboard",
+        {"encounter_name": intent.encounter_name},
+        result,
+    )
+
+
+async def _prefetch_specific(intent: IntentResult) -> list:
+    """Prefetch a specific tool's results with available context.
+
+    Resolves fight_id from DB when the tool needs it and we have a report code.
+    Builds args from intent context (report_code, player_name, encounter_name).
+    """
+    if not intent.specific_tool:
+        return []
+
+    tool_fn = _lookup_tool(intent.specific_tool)
+    if tool_fn is None:
+        return []
+
+    args: dict[str, Any] = {}
+    if intent.report_code:
+        args["report_code"] = intent.report_code
+    if intent.player_names:
+        args["player_name"] = intent.player_names[0]
+    if intent.encounter_name:
+        args["encounter_name"] = intent.encounter_name
+
+    # Resolve fight_id if needed
+    if (intent.specific_tool in _TOOLS_NEEDING_FIGHT_ID
+            and intent.report_code and "fight_id" not in args):
+        fight_ids = await _get_kill_fight_ids(intent.report_code)
+        if fight_ids:
+            args["fight_id"] = fight_ids[0]
+
+    try:
+        result = await tool_fn.ainvoke(args)
+        return _inject_tool_result(intent.specific_tool, args, result)
+    except Exception as e:
+        logger.warning(
+            "Prefetch %s failed: %s — deferring to LLM",
+            intent.specific_tool, e,
+        )
+        return []
+
+
+_PREFETCH_DISPATCH = {
+    "report_analysis": _prefetch_report,
+    "player_analysis": _prefetch_player,
+    "compare_to_top": _prefetch_compare,
+    "benchmarks": _prefetch_benchmarks,
+    "progression": _prefetch_progression,
+    "specific_tool": _prefetch_specific,
+    "leaderboard": _prefetch_leaderboard,
+}
+
+
 async def prefetch_node(state: dict[str, Any]) -> dict[str, Any]:
-    """Auto-fetch report data when a report code is detected.
+    """Intent-based prefetch: classify what the user wants and fetch it.
 
-    Runs before the LLM agent. If the user's first message contains a report
-    code, this node calls get_raid_execution directly and injects the results
-    into the message history. The LLM then sees the data and can analyze it
-    immediately without needing to select tools.
-
-    When a player name is also detected, additionally fetches per-fight details
-    for all kill fights so the LLM has player-level data to analyze.
+    Runs before the LLM agent. Classifies the user's first message into
+    one of 7 intents and fetches the relevant data deterministically.
+    The LLM then sees the data and can analyze it immediately.
     """
     messages = state["messages"]
 
-    # Only on first turn (single user message, no prior tool results)
+    # Only on first turn (no prior tool results)
     if not messages or not isinstance(messages[-1], HumanMessage):
         return {}
     if any(isinstance(m, ToolMessage) for m in messages):
         return {}
 
-    # Skip when user asks for a specific tool (rotation, deaths, etc.)
     user_text = messages[-1].content
-    if _SPECIFIC_TOOL_KEYWORDS.search(user_text):
+    intent = classify_intent(user_text)
+
+    if intent.intent is None:
         return {}
 
-    report_code = _extract_report_code(user_text)
-    if not report_code:
+    handler = _PREFETCH_DISPATCH.get(intent.intent)
+    if handler is None:
         return {}
 
-    # Import here to avoid circular dependency (tools → tool_utils → graph)
-    from shukketsu.agent.tools.raid_tools import get_raid_execution
-
-    logger.info("Prefetching raid data for report %s", report_code)
-    result = await get_raid_execution.ainvoke({"report_code": report_code})
-
-    # Inject as a synthetic tool call + result so the LLM sees the data
-    tool_call_id = f"prefetch_{report_code}"
-    ai_msg = AIMessage(
-        content="",
-        tool_calls=[{
-            "name": "get_raid_execution",
-            "args": {"report_code": report_code},
-            "id": tool_call_id,
-        }],
+    logger.info(
+        "Prefetch: intent=%s, report=%s, players=%s, tool=%s",
+        intent.intent, intent.report_code,
+        intent.player_names, intent.specific_tool,
     )
-    tool_msg = ToolMessage(content=result, tool_call_id=tool_call_id)
-    injected: list = [ai_msg, tool_msg]
 
-    # If player names detected, also fetch per-fight details for kills
-    player_names = _extract_player_names(user_text)
-    if player_names:
-        fight_ids = await _get_kill_fight_ids(report_code)
-        if fight_ids:
-            from shukketsu.agent.tools.player_tools import get_fight_details
+    injected = await handler(intent)
 
-            logger.info(
-                "Prefetching fight details for %d kills (players: %s)",
-                len(fight_ids), ", ".join(player_names),
-            )
-            for fight_id in fight_ids:
-                detail_result = await get_fight_details.ainvoke({
-                    "report_code": report_code,
-                    "fight_id": fight_id,
-                })
-                detail_id = f"prefetch_fight_{fight_id}"
-                detail_ai = AIMessage(
-                    content="",
-                    tool_calls=[{
-                        "name": "get_fight_details",
-                        "args": {
-                            "report_code": report_code,
-                            "fight_id": fight_id,
-                        },
-                        "id": detail_id,
-                    }],
-                )
-                detail_tool = ToolMessage(
-                    content=detail_result, tool_call_id=detail_id,
-                )
-                injected.extend([detail_ai, detail_tool])
+    result: dict[str, Any] = {"intent": intent.intent}
+    if injected:
+        result["messages"] = injected
+    return result
 
-    return {"messages": injected}
+
+# --------------------------------------------------------------------------- #
+# Agent node
+# --------------------------------------------------------------------------- #
 
 
 async def agent_node(
@@ -218,8 +478,8 @@ async def agent_node(
 ) -> dict[str, Any]:
     """Invoke the LLM with tools and the system prompt.
 
-    After the prefetch node has injected raid data, the LLM receives data
-    to analyze directly. For follow-up questions, tools remain available.
+    After the prefetch node has injected data, the LLM receives it and
+    can analyze directly. For follow-up questions, tools remain available.
     """
     messages = state["messages"]
     full_messages = [SystemMessage(content=SYSTEM_PROMPT)] + messages
@@ -233,6 +493,11 @@ async def agent_node(
             tc["args"] = _normalize_tool_args(tc["args"])
 
     return {"messages": [response]}
+
+
+# --------------------------------------------------------------------------- #
+# Graph construction
+# --------------------------------------------------------------------------- #
 
 
 def create_graph(llm: Any, tools: list) -> CompiledStateGraph:

@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from shukketsu.agent.graph import (
-    _SPECIFIC_TOOL_KEYWORDS,
     _extract_player_names,
     _extract_report_code,
     _fix_tool_name,
@@ -93,26 +92,36 @@ class TestPrefetchNode:
             ]
         }
 
-        mock_tool = AsyncMock()
-        mock_tool.ainvoke = AsyncMock(return_value="Raid data: 5 bosses killed")
-        with patch(
-            "shukketsu.agent.tools.raid_tools.get_raid_execution",
-            mock_tool,
+        mock_raid_tool = AsyncMock()
+        mock_raid_tool.ainvoke = AsyncMock(
+            return_value="Raid data: 5 bosses killed"
+        )
+        with (
+            patch(
+                "shukketsu.agent.tools.raid_tools.get_raid_execution",
+                mock_raid_tool,
+            ),
+            patch(
+                "shukketsu.agent.graph._get_kill_fight_ids",
+                return_value=[],
+            ),
         ):
             result = await prefetch_node(state)
 
         msgs = result.get("messages", [])
-        assert len(msgs) == 2
+        assert len(msgs) >= 2
         assert isinstance(msgs[0], AIMessage)
         assert msgs[0].tool_calls[0]["name"] == "get_raid_execution"
         assert isinstance(msgs[1], ToolMessage)
+        assert result.get("intent") == "report_analysis"
 
-    async def test_skips_when_no_report_code(self):
-        state = {"messages": [HumanMessage(content="How is my DPS?")]}
+    async def test_skips_when_no_report_code_and_no_intent(self):
+        state = {"messages": [HumanMessage(content="Hello, how are you?")]}
         result = await prefetch_node(state)
         assert result == {}
 
     async def test_skips_when_tool_results_exist(self):
+        """Follow-up turns with existing ToolMessages skip prefetch."""
         state = {
             "messages": [
                 HumanMessage(
@@ -122,48 +131,14 @@ class TestPrefetchNode:
                     "name": "get_raid_execution", "args": {}, "id": "1",
                 }]),
                 ToolMessage(content="data", tool_call_id="1"),
+                HumanMessage(content="Now check Lyroo's rotation"),
             ]
         }
         result = await prefetch_node(state)
         assert result == {}
 
-    async def test_skips_when_specific_tool_keyword_present(self):
-        """Prefetch should not fire when user asks for rotation, death, etc."""
-        state = {
-            "messages": [
-                HumanMessage(
-                    content="Pull a rotation score on report "
-                    "fb61030ba5a20fd5f51475a7533b57aa for Lyroo"
-                ),
-            ]
-        }
-        result = await prefetch_node(state)
-        assert result == {}
-
-    async def test_skips_cooldown_keyword(self):
-        state = {
-            "messages": [
-                HumanMessage(
-                    content="Show cooldown efficiency for report fb61030ba5a20fd5f51475a7533b57aa"
-                ),
-            ]
-        }
-        result = await prefetch_node(state)
-        assert result == {}
-
-    async def test_skips_death_keyword(self):
-        state = {
-            "messages": [
-                HumanMessage(
-                    content="Analyze deaths in report fb61030ba5a20fd5f51475a7533b57aa"
-                ),
-            ]
-        }
-        result = await prefetch_node(state)
-        assert result == {}
-
-    async def test_still_prefetches_for_general_analysis(self):
-        """General 'analyze report X' should still trigger prefetch."""
+    async def test_prefetch_report_analysis(self):
+        """Report analysis prefetches raid execution + fight details."""
         state = {
             "messages": [
                 HumanMessage(
@@ -171,16 +146,259 @@ class TestPrefetchNode:
                 ),
             ]
         }
-        mock_tool = AsyncMock()
-        mock_tool.ainvoke = AsyncMock(return_value="Raid data: 5 bosses killed")
-        with patch(
-            "shukketsu.agent.tools.raid_tools.get_raid_execution",
-            mock_tool,
+
+        mock_raid = AsyncMock()
+        mock_raid.ainvoke = AsyncMock(return_value="raid data")
+        mock_details = AsyncMock()
+        mock_details.ainvoke = AsyncMock(return_value="fight data")
+
+        with (
+            patch(
+                "shukketsu.agent.tools.raid_tools.get_raid_execution",
+                mock_raid,
+            ),
+            patch(
+                "shukketsu.agent.tools.player_tools.get_fight_details",
+                mock_details,
+            ),
+            patch(
+                "shukketsu.agent.graph._get_kill_fight_ids",
+                return_value=[8, 10, 12],
+            ),
         ):
             result = await prefetch_node(state)
 
-        msgs = result.get("messages", [])
-        assert len(msgs) == 2
+        msgs = result["messages"]
+        tool_names = [
+            m.tool_calls[0]["name"]
+            for m in msgs
+            if hasattr(m, "tool_calls") and m.tool_calls
+        ]
+        assert "get_raid_execution" in tool_names
+        assert "get_fight_details" in tool_names
+        assert result.get("intent") == "report_analysis"
+
+    async def test_prefetch_player_analysis_fetches_activity_report(self):
+        """When intent=player_analysis, prefetch activity_report for kills."""
+        msg = HumanMessage(
+            content="What could Lyroo do better in Fn2ACKZtyzc1QLJP?"
+        )
+        mock_raid = AsyncMock()
+        mock_raid.ainvoke = AsyncMock(return_value="raid data")
+        mock_details = AsyncMock()
+        mock_details.ainvoke = AsyncMock(return_value="fight data")
+        mock_activity = AsyncMock()
+        mock_activity.ainvoke = AsyncMock(return_value="activity data")
+
+        with (
+            patch(
+                "shukketsu.agent.tools.raid_tools.get_raid_execution",
+                mock_raid,
+            ),
+            patch(
+                "shukketsu.agent.tools.player_tools.get_fight_details",
+                mock_details,
+            ),
+            patch(
+                "shukketsu.agent.tools.event_tools.get_activity_report",
+                mock_activity,
+            ),
+            patch(
+                "shukketsu.agent.graph._get_kill_fight_ids",
+                return_value=[8, 10, 12],
+            ),
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        messages = result["messages"]
+        tool_names = [
+            m.tool_calls[0]["name"]
+            for m in messages
+            if hasattr(m, "tool_calls") and m.tool_calls
+        ]
+        assert "get_raid_execution" in tool_names
+        assert "get_fight_details" in tool_names
+        assert "get_activity_report" in tool_names
+        assert result.get("intent") == "player_analysis"
+
+    async def test_prefetch_benchmarks(self):
+        """When intent=benchmarks, prefetch encounter benchmarks."""
+        msg = HumanMessage(
+            content="Show me encounter benchmarks for Gruul the Dragonkiller"
+        )
+        mock_bench = AsyncMock()
+        mock_bench.ainvoke = AsyncMock(return_value="benchmark data")
+
+        with patch(
+            "shukketsu.agent.tools.benchmark_tools.get_encounter_benchmarks",
+            mock_bench,
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        messages = result["messages"]
+        tool_names = [
+            m.tool_calls[0]["name"]
+            for m in messages
+            if hasattr(m, "tool_calls") and m.tool_calls
+        ]
+        assert "get_encounter_benchmarks" in tool_names
+        assert result.get("intent") == "benchmarks"
+
+    async def test_prefetch_specific_tool_with_report(self):
+        """Specific tool + report code → prefetch resolves fight and calls it."""
+        msg = HumanMessage(
+            content="Pull a rotation score for Lyroo on Fn2ACKZtyzc1QLJP"
+        )
+        mock_rotation = AsyncMock()
+        mock_rotation.ainvoke = AsyncMock(return_value="rotation data")
+
+        with (
+            patch(
+                "shukketsu.agent.tools.event_tools.get_rotation_score",
+                mock_rotation,
+            ),
+            patch(
+                "shukketsu.agent.graph._get_kill_fight_ids",
+                return_value=[8, 10],
+            ),
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        messages = result["messages"]
+        tool_names = [
+            m.tool_calls[0]["name"]
+            for m in messages
+            if hasattr(m, "tool_calls") and m.tool_calls
+        ]
+        assert "get_rotation_score" in tool_names
+        assert result.get("intent") == "specific_tool"
+
+    async def test_prefetch_progression(self):
+        """When intent=progression, prefetch get_progression."""
+        msg = HumanMessage(content="Show me Lyroo's progression over time")
+        mock_prog = AsyncMock()
+        mock_prog.ainvoke = AsyncMock(return_value="progression data")
+
+        with patch(
+            "shukketsu.agent.tools.player_tools.get_progression",
+            mock_prog,
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        messages = result["messages"]
+        tool_names = [
+            m.tool_calls[0]["name"]
+            for m in messages
+            if hasattr(m, "tool_calls") and m.tool_calls
+        ]
+        assert "get_progression" in tool_names
+        assert result.get("intent") == "progression"
+
+    async def test_prefetch_leaderboard(self):
+        """When intent=leaderboard, prefetch spec_leaderboard."""
+        msg = HumanMessage(content="What specs top DPS on Gruul?")
+        mock_lb = AsyncMock()
+        mock_lb.ainvoke = AsyncMock(return_value="leaderboard data")
+
+        with patch(
+            "shukketsu.agent.tools.player_tools.get_spec_leaderboard",
+            mock_lb,
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        messages = result["messages"]
+        tool_names = [
+            m.tool_calls[0]["name"]
+            for m in messages
+            if hasattr(m, "tool_calls") and m.tool_calls
+        ]
+        assert "get_spec_leaderboard" in tool_names
+        assert result.get("intent") == "leaderboard"
+
+    async def test_prefetch_compare_to_top(self):
+        """When intent=compare_to_top with report, prefetch compare_raid."""
+        msg = HumanMessage(
+            content="How does our raid compare to top guilds? "
+            "Report Fn2ACKZtyzc1QLJP"
+        )
+        mock_compare = AsyncMock()
+        mock_compare.ainvoke = AsyncMock(return_value="comparison data")
+
+        with patch(
+            "shukketsu.agent.tools.raid_tools.compare_raid_to_top",
+            mock_compare,
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        messages = result["messages"]
+        tool_names = [
+            m.tool_calls[0]["name"]
+            for m in messages
+            if hasattr(m, "tool_calls") and m.tool_calls
+        ]
+        assert "compare_raid_to_top" in tool_names
+        assert result.get("intent") == "compare_to_top"
+
+    async def test_prefetch_caps_fight_details_at_max(self):
+        """Prefetch should not fetch more than MAX_PREFETCH_FIGHTS fights."""
+        from shukketsu.agent.graph import _MAX_PREFETCH_FIGHTS
+
+        state = {
+            "messages": [
+                HumanMessage(
+                    content="Analyze report fb61030ba5a20fd5f51475a7533b57aa"
+                ),
+            ]
+        }
+        mock_raid = AsyncMock()
+        mock_raid.ainvoke = AsyncMock(return_value="raid data")
+        mock_details = AsyncMock()
+        mock_details.ainvoke = AsyncMock(return_value="fight data")
+
+        many_fights = list(range(1, 15))  # 14 fights
+        with (
+            patch(
+                "shukketsu.agent.tools.raid_tools.get_raid_execution",
+                mock_raid,
+            ),
+            patch(
+                "shukketsu.agent.tools.player_tools.get_fight_details",
+                mock_details,
+            ),
+            patch(
+                "shukketsu.agent.graph._get_kill_fight_ids",
+                return_value=many_fights,
+            ),
+        ):
+            result = await prefetch_node(state)
+
+        # Count get_fight_details calls
+        detail_calls = [
+            m for m in result["messages"]
+            if hasattr(m, "tool_calls") and m.tool_calls
+            and m.tool_calls[0]["name"] == "get_fight_details"
+        ]
+        assert len(detail_calls) == _MAX_PREFETCH_FIGHTS
+
+    async def test_prefetch_specific_without_report_code(self):
+        """Specific tool without report code → call tool with available args."""
+        msg = HumanMessage(content="Check for performance regressions")
+        mock_reg = AsyncMock()
+        mock_reg.ainvoke = AsyncMock(return_value="regression data")
+
+        with patch(
+            "shukketsu.agent.tools.player_tools.get_regressions",
+            mock_reg,
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        messages = result["messages"]
+        tool_names = [
+            m.tool_calls[0]["name"]
+            for m in messages
+            if hasattr(m, "tool_calls") and m.tool_calls
+        ]
+        assert "get_regressions" in tool_names
 
 
 class TestAgentNode:
@@ -215,7 +433,11 @@ class TestAgentNode:
 
     async def test_normalizes_pascal_case_tool_args(self):
         tool_calls = [
-            {"name": "get_my_performance", "args": {"EncounterName": "Gruul"}, "id": "1"}
+            {
+                "name": "get_my_performance",
+                "args": {"EncounterName": "Gruul"},
+                "id": "1",
+            }
         ]
         mock_llm = AsyncMock()
         mock_llm.ainvoke.return_value = AIMessage(
@@ -242,7 +464,9 @@ class TestAgentNode:
                 HumanMessage(content="My DPS?"),
                 AIMessage(
                     content="",
-                    tool_calls=[{"name": "get_my_performance", "args": {}, "id": "1"}],
+                    tool_calls=[{
+                        "name": "get_my_performance", "args": {}, "id": "1",
+                    }],
                 ),
                 ToolMessage(content="DPS: 1500", tool_call_id="1"),
             ]
@@ -260,7 +484,11 @@ class TestAgentNode:
     async def test_fixes_hallucinated_tool_name(self):
         """Hallucinated tool names should be fuzzy-matched to valid ones."""
         tool_calls = [
-            {"name": "get_analysis", "args": {"report_code": "abc"}, "id": "1"}
+            {
+                "name": "get_analysis",
+                "args": {"report_code": "abc"},
+                "id": "1",
+            }
         ]
         mock_llm = AsyncMock()
         mock_llm.ainvoke.return_value = AIMessage(
@@ -304,23 +532,34 @@ class TestAgentNode:
             tool_names=_TOOL_NAMES,
         )
 
-        # LLM should produce analysis text, not tool calls
         msg = result["messages"][0]
         assert isinstance(msg, AIMessage)
-        assert msg.content  # Has text content
-        assert not msg.tool_calls  # No tool calls
+        assert msg.content
+        assert not msg.tool_calls
 
 
 class TestToolArgNormalization:
     def test_normalize_converts_pascal_to_snake(self):
-        args = {"EncounterName": "Gruul the Dragonkiller", "PlayerName": "Lyro"}
+        args = {
+            "EncounterName": "Gruul the Dragonkiller",
+            "PlayerName": "Lyro",
+        }
         result = _normalize_tool_args(args)
-        assert result == {"encounter_name": "Gruul the Dragonkiller", "player_name": "Lyro"}
+        assert result == {
+            "encounter_name": "Gruul the Dragonkiller",
+            "player_name": "Lyro",
+        }
 
     def test_normalize_preserves_snake_case(self):
-        args = {"encounter_name": "Gruul the Dragonkiller", "player_name": "Lyro"}
+        args = {
+            "encounter_name": "Gruul the Dragonkiller",
+            "player_name": "Lyro",
+        }
         result = _normalize_tool_args(args)
-        assert result == {"encounter_name": "Gruul the Dragonkiller", "player_name": "Lyro"}
+        assert result == {
+            "encounter_name": "Gruul the Dragonkiller",
+            "player_name": "Lyro",
+        }
 
     def test_normalize_handles_mixed_case(self):
         args = {"ClassName": "Warrior", "spec_name": "Arms"}
@@ -330,10 +569,16 @@ class TestToolArgNormalization:
 
 class TestFixToolName:
     def test_valid_name_unchanged(self):
-        assert _fix_tool_name("get_raid_execution", _TOOL_NAMES) == "get_raid_execution"
+        assert (
+            _fix_tool_name("get_raid_execution", _TOOL_NAMES)
+            == "get_raid_execution"
+        )
 
     def test_camel_case_converted(self):
-        assert _fix_tool_name("getMyPerformance", _TOOL_NAMES) == "get_my_performance"
+        assert (
+            _fix_tool_name("getMyPerformance", _TOOL_NAMES)
+            == "get_my_performance"
+        )
 
     def test_hallucinated_name_fuzzy_matched(self):
         result = _fix_tool_name("get_death_analys", _TOOL_NAMES)
@@ -348,35 +593,6 @@ class TestFixToolName:
         assert result == "get_my_performance"
 
 
-class TestSpecificToolKeywords:
-    def test_matches_rotation(self):
-        assert _SPECIFIC_TOOL_KEYWORDS.search("pull a rotation score")
-
-    def test_matches_death(self):
-        assert _SPECIFIC_TOOL_KEYWORDS.search("analyze deaths")
-
-    def test_matches_cooldown(self):
-        assert _SPECIFIC_TOOL_KEYWORDS.search("show cooldown efficiency")
-
-    def test_matches_consumable(self):
-        assert _SPECIFIC_TOOL_KEYWORDS.search("check consumable usage")
-
-    def test_matches_buff(self):
-        assert _SPECIFIC_TOOL_KEYWORDS.search("buff uptimes for Lyroo")
-
-    def test_matches_gear(self):
-        assert _SPECIFIC_TOOL_KEYWORDS.search("compare gear between raids")
-
-    def test_matches_enchant(self):
-        assert _SPECIFIC_TOOL_KEYWORDS.search("check enchant and gem slots")
-
-    def test_no_match_for_general_analysis(self):
-        assert not _SPECIFIC_TOOL_KEYWORDS.search("analyze report abc123")
-
-    def test_no_match_for_performance(self):
-        assert not _SPECIFIC_TOOL_KEYWORDS.search("how is my DPS on Gruul?")
-
-
 class TestExtractPlayerNames:
     def test_extracts_player_name(self):
         names = _extract_player_names("what could Lyroo have done better")
@@ -387,7 +603,9 @@ class TestExtractPlayerNames:
         assert names == []
 
     def test_ignores_boss_names(self):
-        names = _extract_player_names("How did we do on Gruul and Magtheridon")
+        names = _extract_player_names(
+            "How did we do on Gruul and Magtheridon"
+        )
         assert names == []
 
     def test_extracts_multiple_names(self):
@@ -395,89 +613,3 @@ class TestExtractPlayerNames:
         assert "Lyroo" in names
         assert "Tankboy" in names
         assert "Gruul" not in names
-
-
-class TestPrefetchPlayerData:
-    async def test_prefetches_player_fight_details(self):
-        """When player name detected, also fetch fight details for kills."""
-        state = {
-            "messages": [
-                HumanMessage(
-                    content="Analyze report fb61030ba5a20fd5f51475a7533b57aa "
-                    "and tell me what Lyroo could have done better"
-                ),
-            ]
-        }
-
-        mock_raid_tool = AsyncMock()
-        mock_raid_tool.ainvoke = AsyncMock(return_value="Raid data: 3 kills")
-        mock_fight_tool = AsyncMock()
-        mock_fight_tool.ainvoke = AsyncMock(
-            return_value="Fight details: Lyroo DPS 800"
-        )
-
-        with patch(
-            "shukketsu.agent.tools.raid_tools.get_raid_execution",
-            mock_raid_tool,
-        ), patch(
-            "shukketsu.agent.tools.player_tools.get_fight_details",
-            mock_fight_tool,
-        ), patch(
-            "shukketsu.agent.graph._get_kill_fight_ids",
-            return_value=[101, 102],
-        ):
-            result = await prefetch_node(state)
-
-        msgs = result.get("messages", [])
-        # 2 (raid) + 2*2 (fight details for 2 kills) = 6
-        assert len(msgs) == 6
-        assert msgs[0].tool_calls[0]["name"] == "get_raid_execution"
-        assert msgs[2].tool_calls[0]["name"] == "get_fight_details"
-        assert msgs[4].tool_calls[0]["name"] == "get_fight_details"
-
-    async def test_no_player_prefetch_without_player_name(self):
-        """Generic 'analyze report X' should NOT fetch fight details."""
-        state = {
-            "messages": [
-                HumanMessage(
-                    content="Analyze report fb61030ba5a20fd5f51475a7533b57aa"
-                ),
-            ]
-        }
-
-        mock_tool = AsyncMock()
-        mock_tool.ainvoke = AsyncMock(return_value="Raid data")
-        with patch(
-            "shukketsu.agent.tools.raid_tools.get_raid_execution",
-            mock_tool,
-        ):
-            result = await prefetch_node(state)
-
-        msgs = result.get("messages", [])
-        assert len(msgs) == 2  # Only raid execution, no fight details
-
-    async def test_no_fight_details_when_no_kills(self):
-        """Player name present but no kill fights → only raid execution."""
-        state = {
-            "messages": [
-                HumanMessage(
-                    content="Analyze report fb61030ba5a20fd5f51475a7533b57aa "
-                    "for Lyroo"
-                ),
-            ]
-        }
-
-        mock_raid_tool = AsyncMock()
-        mock_raid_tool.ainvoke = AsyncMock(return_value="Raid data")
-
-        with patch(
-            "shukketsu.agent.tools.raid_tools.get_raid_execution",
-            mock_raid_tool,
-        ), patch(
-            "shukketsu.agent.graph._get_kill_fight_ids",
-            return_value=[],
-        ):
-            result = await prefetch_node(state)
-
-        msgs = result.get("messages", [])
-        assert len(msgs) == 2  # Only raid execution
