@@ -7,8 +7,9 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from shukketsu.db.models import Report
+from shukketsu.db.models import Encounter, Report
 from shukketsu.pipeline.ingest import ingest_report
+from shukketsu.pipeline.speed_rankings import ingest_all_speed_rankings
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class AutoIngestService:
         self._benchmark_max_reports = settings.benchmark.max_reports_per_encounter
         self._benchmark_task: asyncio.Task | None = None
         self._last_benchmark_run: datetime | None = None
+        self._last_speed_rankings_run: datetime | None = None
 
     @property
     def enabled(self) -> bool:
@@ -76,21 +78,32 @@ class AutoIngestService:
         logger.info("Auto-ingest stopped")
 
     async def _benchmark_loop(self) -> None:
-        """Weekly benchmark refresh loop."""
+        """Weekly benchmark refresh loop: speed rankings then benchmarks."""
         interval = self._benchmark_interval_days * 86400  # days to seconds
         while True:
             await asyncio.sleep(interval)
             try:
-                from shukketsu.pipeline.benchmarks import run_benchmark_pipeline
+                async with self._ingest_lock, self._wcl_factory() as wcl:
+                    # Step 1: Refresh speed rankings
+                    try:
+                        await self._refresh_speed_rankings(wcl)
+                    except Exception:
+                        logger.exception(
+                            "Speed rankings refresh failed,"
+                            " continuing with benchmarks"
+                        )
 
-                async with (
-                    self._ingest_lock,
-                    self._wcl_factory() as wcl,
-                    self._session_factory() as session,
-                ):
+                    # Step 2: Run benchmark pipeline
+                    from shukketsu.pipeline.benchmarks import (
+                        run_benchmark_pipeline,
+                    )
+
+                    async with self._session_factory() as session:
                         result = await run_benchmark_pipeline(
                             wcl, session,
-                            max_reports_per_encounter=self._benchmark_max_reports,
+                            max_reports_per_encounter=(
+                                self._benchmark_max_reports
+                            ),
                         )
                         logger.info(
                             "Benchmark auto-refresh: discovered=%d,"
@@ -101,6 +114,36 @@ class AutoIngestService:
                 self._last_benchmark_run = datetime.now(UTC)
             except Exception:
                 logger.exception("Benchmark auto-refresh failed")
+
+    async def _refresh_speed_rankings(self, wcl) -> None:
+        """Refresh speed rankings for all encounters in benchmark zones."""
+        zone_ids = self.settings.benchmark.zone_ids
+
+        async with self._session_factory() as session:
+            query = select(Encounter)
+            if zone_ids:
+                query = query.where(Encounter.zone_id.in_(zone_ids))
+            result = await session.execute(query)
+            encounter_ids = [e.id for e in result.scalars().all()]
+
+        if not encounter_ids:
+            logger.warning("No encounters found for speed rankings refresh")
+            return
+
+        logger.info(
+            "Refreshing speed rankings for %d encounters",
+            len(encounter_ids),
+        )
+
+        async with self._session_factory() as session:
+            sr_result = await ingest_all_speed_rankings(
+                wcl, session, encounter_ids,
+            )
+            logger.info(
+                "Speed rankings refresh: fetched=%d, skipped=%d, errors=%d",
+                sr_result.fetched, sr_result.skipped, len(sr_result.errors),
+            )
+        self._last_speed_rankings_run = datetime.now(UTC)
 
     async def _poll_loop(self):
         """Main polling loop with exponential backoff on errors."""
@@ -289,5 +332,9 @@ class AutoIngestService:
             "last_benchmark_run": (
                 self._last_benchmark_run.isoformat()
                 if self._last_benchmark_run else None
+            ),
+            "last_speed_rankings_run": (
+                self._last_speed_rankings_run.isoformat()
+                if self._last_speed_rankings_run else None
             ),
         }

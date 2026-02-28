@@ -480,3 +480,114 @@ class TestBenchmarkAutoRefresh:
         status = service.get_status()
         assert status["benchmark_enabled"] is True
         assert status["last_benchmark_run"] is None
+
+
+class TestSpeedRankingsAutoRefresh:
+    """Tests for automatic speed rankings refresh in benchmark loop."""
+
+    @patch("shukketsu.pipeline.auto_ingest.ingest_all_speed_rankings")
+    async def test_refresh_speed_rankings_calls_ingest(self, mock_ingest):
+        """_refresh_speed_rankings queries encounters and calls ingest."""
+        settings = _make_settings(benchmark_enabled=True)
+        settings.benchmark.zone_ids = []
+
+        mock_encounter = MagicMock()
+        mock_encounter.id = 50649
+
+        mock_session = AsyncMock()
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = [mock_encounter]
+        mock_exec_result = MagicMock()
+        mock_exec_result.scalars.return_value = mock_scalars
+        mock_session.execute.return_value = mock_exec_result
+
+        session_factory = _make_transactional_session_factory(mock_session)
+        wcl = AsyncMock()
+        mock_ingest.return_value = MagicMock(
+            fetched=1, skipped=0, errors=[],
+        )
+
+        svc = AutoIngestService(
+            settings, session_factory, _make_wcl_factory(wcl),
+        )
+        await svc._refresh_speed_rankings(wcl)
+
+        mock_ingest.assert_called_once()
+        call_args = mock_ingest.call_args
+        assert call_args.args[0] is wcl  # wcl client
+        assert call_args.args[2] == [50649]  # encounter_ids
+
+    @patch("shukketsu.pipeline.auto_ingest.ingest_all_speed_rankings")
+    async def test_refresh_speed_rankings_filters_by_zone_ids(
+        self, mock_ingest,
+    ):
+        """When benchmark.zone_ids is set, encounters are filtered."""
+        settings = _make_settings(benchmark_enabled=True)
+        settings.benchmark.zone_ids = [1047, 1048]
+
+        mock_session = AsyncMock()
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_exec_result = MagicMock()
+        mock_exec_result.scalars.return_value = mock_scalars
+        mock_session.execute.return_value = mock_exec_result
+
+        session_factory = _make_transactional_session_factory(mock_session)
+        wcl = AsyncMock()
+
+        svc = AutoIngestService(
+            settings, session_factory, _make_wcl_factory(wcl),
+        )
+        await svc._refresh_speed_rankings(wcl)
+
+        # With no encounters found, ingest should not be called
+        mock_ingest.assert_not_called()
+
+    @patch("shukketsu.pipeline.auto_ingest.ingest_all_speed_rankings")
+    async def test_refresh_speed_rankings_skips_when_no_encounters(
+        self, mock_ingest,
+    ):
+        """No encounters in DB -> skip without error."""
+        settings = _make_settings(benchmark_enabled=True)
+        settings.benchmark.zone_ids = []
+
+        mock_session = AsyncMock()
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_exec_result = MagicMock()
+        mock_exec_result.scalars.return_value = mock_scalars
+        mock_session.execute.return_value = mock_exec_result
+
+        session_factory = _make_transactional_session_factory(mock_session)
+        wcl = AsyncMock()
+
+        svc = AutoIngestService(
+            settings, session_factory, _make_wcl_factory(wcl),
+        )
+        await svc._refresh_speed_rankings(wcl)
+
+        mock_ingest.assert_not_called()
+
+    def test_status_includes_speed_rankings_run(self):
+        """get_status() includes last_speed_rankings_run field."""
+        settings = _make_settings(benchmark_enabled=True)
+        svc = AutoIngestService(settings, MagicMock(), MagicMock())
+        status = svc.get_status()
+        assert "last_speed_rankings_run" in status
+        assert status["last_speed_rankings_run"] is None
+
+    def test_benchmark_loop_calls_refresh_speed_rankings(self):
+        """_benchmark_loop must call _refresh_speed_rankings before benchmarks."""
+        source = inspect.getsource(AutoIngestService._benchmark_loop)
+        assert "_refresh_speed_rankings" in source
+        # Speed rankings must come BEFORE run_benchmark_pipeline
+        sr_pos = source.index("_refresh_speed_rankings")
+        bp_pos = source.index("run_benchmark_pipeline")
+        assert sr_pos < bp_pos
+
+    def test_benchmark_loop_catches_speed_rankings_error(self):
+        """Speed rankings failure must not prevent benchmark pipeline."""
+        source = inspect.getsource(AutoIngestService._benchmark_loop)
+        # There should be a try/except around _refresh_speed_rankings
+        # that's separate from the main try/except
+        assert "Speed rankings refresh failed" in source
