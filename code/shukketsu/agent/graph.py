@@ -44,6 +44,7 @@ _COMMON_WORDS = frozenset({
     "The", "Can", "Please", "What", "How", "Did", "Does", "Show",
     "Tell", "Analyze", "Report", "Check", "Compare", "Pull", "Get",
     "Could", "Would", "Should", "Have", "Been", "Will", "Also",
+    "Now", "Then", "Just", "Still", "Only", "Next", "Last", "Both",
     "High", "King", "Gruul", "Magtheridon", "Prince", "Maiden",
     "Moroes", "Nightbane", "Netherspite", "Curator", "Aran",
     "Attumen", "Opera", "Illhoof", "Shade", "Malchezaar",
@@ -289,6 +290,59 @@ def _fix_tool_name(name: str, valid_names: set[str]) -> str:
 
     logger.warning("Unknown tool name '%s', no match found", name)
     return name
+
+
+def _auto_repair_args(
+    tool_name: str,
+    args: dict[str, Any],
+    messages: list,
+) -> dict[str, Any]:
+    """Fill missing required args from conversation context.
+
+    Scans prior messages (human text, tool call args, tool results) to find
+    report_code, player_name, and encounter_name that the LLM forgot to include.
+    Never overwrites args that are already present.
+    """
+    repaired = dict(args)
+
+    # First, try to extract from prior tool_call args (most reliable source)
+    if "report_code" not in repaired or "player_name" not in repaired:
+        for m in reversed(messages):
+            if (isinstance(m, AIMessage) and hasattr(m, "tool_calls")
+                    and m.tool_calls):
+                for tc in m.tool_calls:
+                    tc_args = tc.get("args", {})
+                    if ("report_code" not in repaired
+                            and "report_code" in tc_args):
+                        repaired["report_code"] = tc_args["report_code"]
+                    if ("player_name" not in repaired
+                            and "player_name" in tc_args):
+                        repaired["player_name"] = tc_args["player_name"]
+
+    # Fall back to scanning all message text content
+    all_text = " ".join(
+        m.content for m in messages
+        if hasattr(m, "content") and isinstance(m.content, str)
+    )
+
+    if "report_code" not in repaired:
+        code = _extract_report_code(all_text)
+        if code:
+            repaired["report_code"] = code
+
+    if "player_name" not in repaired:
+        names = _extract_player_names(all_text)
+        if names:
+            repaired["player_name"] = names[0]
+
+    if "encounter_name" not in repaired:
+        from shukketsu.agent.intent import _extract_encounter_name
+
+        enc = _extract_encounter_name(all_text)
+        if enc:
+            repaired["encounter_name"] = enc
+
+    return repaired
 
 
 def _extract_player_names(text: str) -> list[str]:
@@ -629,11 +683,14 @@ async def agent_node(
     full_messages = [SystemMessage(content=SYSTEM_PROMPT)] + messages
     response = await llm_with_tools.ainvoke(full_messages)
 
-    # Fix hallucinated tool names and normalize PascalCase args
+    # Fix hallucinated tool names, normalize args, and auto-repair missing args
     if isinstance(response, AIMessage) and response.tool_calls:
         for tc in response.tool_calls:
             tc["name"] = _fix_tool_name(tc["name"], filtered_names)
             tc["args"] = _normalize_tool_args(tc["args"])
+            tc["args"] = _auto_repair_args(
+                tc["name"], tc["args"], messages,
+            )
 
     return {"messages": [response]}
 

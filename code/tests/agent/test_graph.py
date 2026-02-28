@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from shukketsu.agent.graph import (
+    _auto_repair_args,
     _extract_player_names,
     _extract_report_code,
     _fix_tool_name,
@@ -828,3 +829,94 @@ class TestContextualToolFiltering:
         names = {t.name for t in tools}
         assert "get_progression" in names
         assert "get_regressions" in names
+
+
+class TestAutoRepairArgs:
+    """Tests for _auto_repair_args filling missing args from conversation."""
+
+    def test_fills_missing_report_code_from_messages(self):
+        messages = [
+            HumanMessage(content="Analyze report Fn2ACKZtyzc1QLJP"),
+            AIMessage(content="data"),
+        ]
+        args = {"fight_id": 8, "player_name": "Lyroo"}
+        repaired = _auto_repair_args("get_activity_report", args, messages)
+        assert repaired["report_code"] == "Fn2ACKZtyzc1QLJP"
+
+    def test_fills_missing_player_name_from_messages(self):
+        messages = [
+            HumanMessage(
+                content="What could Lyroo do better in Fn2ACKZtyzc1QLJP?"
+            ),
+        ]
+        args = {"report_code": "Fn2ACKZtyzc1QLJP", "fight_id": 8}
+        repaired = _auto_repair_args("get_activity_report", args, messages)
+        assert repaired["player_name"] == "Lyroo"
+
+    def test_fills_missing_encounter_name_from_messages(self):
+        messages = [
+            HumanMessage(content="Show me the benchmarks for Gruul"),
+        ]
+        args = {}
+        repaired = _auto_repair_args(
+            "get_encounter_benchmarks", args, messages,
+        )
+        assert "gruul" in repaired.get("encounter_name", "").lower()
+
+    def test_does_not_overwrite_existing_args(self):
+        messages = [
+            HumanMessage(content="Check Flasheal in Fn2ACKZtyzc1QLJP"),
+        ]
+        args = {
+            "report_code": "Fn2ACKZtyzc1QLJP",
+            "fight_id": 8,
+            "player_name": "Lyroo",
+        }
+        repaired = _auto_repair_args("get_activity_report", args, messages)
+        assert repaired["player_name"] == "Lyroo"  # not overwritten
+
+    def test_no_repair_when_nothing_to_extract(self):
+        messages = [HumanMessage(content="Hello")]
+        args = {"fight_id": 8}
+        repaired = _auto_repair_args("get_activity_report", args, messages)
+        assert "report_code" not in repaired
+
+    def test_extracts_from_prior_tool_results(self):
+        """Should find report codes in ToolMessage content too."""
+        messages = [
+            HumanMessage(content="analyze this report"),
+            AIMessage(content="", tool_calls=[{
+                "name": "get_raid_execution",
+                "args": {"report_code": "Fn2ACKZtyzc1QLJP"},
+                "id": "1",
+            }]),
+            ToolMessage(
+                content="Raid Fn2ACKZtyzc1QLJP: 5 kills",
+                tool_call_id="1",
+            ),
+            HumanMessage(content="Now check Lyroo's cooldowns"),
+        ]
+        args = {"fight_id": 8}
+        repaired = _auto_repair_args(
+            "get_cooldown_efficiency", args, messages,
+        )
+        assert repaired["report_code"] == "Fn2ACKZtyzc1QLJP"
+        assert repaired["player_name"] == "Lyroo"
+
+    def test_extracts_from_prior_tool_call_args(self):
+        """Should find args from prior AIMessage tool_calls."""
+        messages = [
+            HumanMessage(content="analyze this"),
+            AIMessage(content="", tool_calls=[{
+                "name": "get_raid_execution",
+                "args": {"report_code": "Fn2ACKZtyzc1QLJP"},
+                "id": "1",
+            }]),
+            ToolMessage(content="data", tool_call_id="1"),
+            HumanMessage(content="Now check Lyroo"),
+        ]
+        args = {"fight_id": 8}
+        repaired = _auto_repair_args(
+            "get_activity_report", args, messages,
+        )
+        assert repaired["report_code"] == "Fn2ACKZtyzc1QLJP"
