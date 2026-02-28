@@ -573,6 +573,88 @@ class TestToolArgNormalization:
         assert result == {"class_name": "Warrior", "spec_name": "Arms"}
 
 
+class TestNormalizeToolArgs:
+    """Tests for _normalize_tool_args with alias map and type coercion."""
+
+    def test_pascal_case_conversion(self):
+        result = _normalize_tool_args({"EncounterName": "Gruul"})
+        assert result == {"encounter_name": "Gruul"}
+
+    def test_alias_term_to_encounter_name(self):
+        result = _normalize_tool_args({"term": "Gruul"})
+        assert result == {"encounter_name": "Gruul"}
+
+    def test_alias_reportcode(self):
+        result = _normalize_tool_args({"reportcode": "ABC123"})
+        assert result == {"report_code": "ABC123"}
+
+    def test_alias_report_id(self):
+        result = _normalize_tool_args({"report_id": "ABC123"})
+        assert result == {"report_code": "ABC123"}
+
+    def test_alias_playername(self):
+        result = _normalize_tool_args({"playername": "Lyroo"})
+        assert result == {"player_name": "Lyroo"}
+
+    def test_alias_name_to_player_name(self):
+        result = _normalize_tool_args({"name": "Lyroo"})
+        assert result == {"player_name": "Lyroo"}
+
+    def test_alias_is_id(self):
+        result = _normalize_tool_args({"is_id": "ABC123"})
+        assert result == {"report_code": "ABC123"}
+
+    def test_fight_id_string_to_int(self):
+        result = _normalize_tool_args({"fight_id": "8"})
+        assert result == {"fight_id": 8}
+
+    def test_fight_id_int_unchanged(self):
+        result = _normalize_tool_args({"fight_id": 8})
+        assert result == {"fight_id": 8}
+
+    def test_combined_fixes(self):
+        """PascalCase + alias + type coercion all at once."""
+        result = _normalize_tool_args({
+            "ReportCode": "ABC123",
+            "FightId": "8",
+            "PlayerName": "Lyroo",
+        })
+        assert result == {
+            "report_code": "ABC123",
+            "fight_id": 8,
+            "player_name": "Lyroo",
+        }
+
+    def test_alias_boss_to_encounter_name(self):
+        result = _normalize_tool_args({"boss": "Gruul"})
+        assert result == {"encounter_name": "Gruul"}
+
+    def test_alias_encounter_to_encounter_name(self):
+        result = _normalize_tool_args({"encounter": "Gruul"})
+        assert result == {"encounter_name": "Gruul"}
+
+    def test_character_name_preserved(self):
+        """character_name should NOT be aliased to player_name."""
+        result = _normalize_tool_args({"character_name": "Lyroo"})
+        assert result == {"character_name": "Lyroo"}
+
+    def test_bests_only_string_to_bool(self):
+        result = _normalize_tool_args({"bests_only": "true"})
+        assert result == {"bests_only": True}
+
+    def test_bests_only_false_string(self):
+        result = _normalize_tool_args({"bests_only": "false"})
+        assert result == {"bests_only": False}
+
+    def test_count_string_to_int(self):
+        result = _normalize_tool_args({"count": "10"})
+        assert result == {"count": 10}
+
+    def test_invalid_int_string_unchanged(self):
+        result = _normalize_tool_args({"fight_id": "not_a_number"})
+        assert result == {"fight_id": "not_a_number"}
+
+
 class TestFixToolName:
     def test_valid_name_unchanged(self):
         assert (

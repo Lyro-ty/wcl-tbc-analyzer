@@ -167,16 +167,56 @@ def _extract_report_code(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _normalize_tool_args(args: dict[str, Any]) -> dict[str, Any]:
-    """Convert PascalCase tool argument keys to snake_case.
+# Argument name alias map: hallucinated arg name → correct arg name
+_ARG_ALIASES: dict[str, str] = {
+    "term": "encounter_name",
+    "playername": "player_name",
+    "player": "player_name",
+    "name": "player_name",
+    "reportcode": "report_code",
+    "report_id": "report_code",
+    "is_id": "report_code",
+    "code": "report_code",
+    "fight_id_str": "fight_id",
+    "fightid": "fight_id",
+    "encounter": "encounter_name",
+    "boss": "encounter_name",
+    "boss_name": "encounter_name",
+    "classname": "class_name",
+    "specname": "spec_name",
+    "charactername": "character_name",
+}
 
-    Nemotron sometimes generates PascalCase keys (e.g. EncounterName
-    instead of encounter_name). This normalizes them.
+# Fields that should be coerced to int when passed as string
+_INT_FIELDS = frozenset({"fight_id", "count"})
+
+# Fields that should be coerced to bool when passed as string
+_BOOL_FIELDS = frozenset({"bests_only"})
+
+
+def _normalize_tool_args(args: dict[str, Any]) -> dict[str, Any]:
+    """Normalize tool argument keys and coerce value types.
+
+    1. PascalCase → snake_case (e.g. EncounterName → encounter_name)
+    2. Alias map (e.g. term → encounter_name, reportcode → report_code)
+    3. Type coercion (fight_id: "8" → 8, bests_only: "true" → True)
     """
     normalized = {}
     for key, value in args.items():
+        # PascalCase → snake_case
         snake_key = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", key).lower()
-        normalized[snake_key] = value
+        # Apply alias
+        final_key = _ARG_ALIASES.get(snake_key, snake_key)
+        # Type coercion for int fields
+        if final_key in _INT_FIELDS and isinstance(value, str):
+            try:
+                value = int(value)
+            except ValueError:
+                pass
+        # Type coercion for bool fields
+        if final_key in _BOOL_FIELDS and isinstance(value, str):
+            value = value.lower() in ("true", "1", "yes")
+        normalized[final_key] = value
     return normalized
 
 
