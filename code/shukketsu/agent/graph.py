@@ -105,16 +105,20 @@ def _extract_player_names(text: str) -> list[str]:
 
 
 async def _get_kill_fight_ids(report_code: str) -> list[int]:
-    """Get fight IDs for kill fights in a report (lightweight DB query)."""
+    """Get WCL fight IDs for kill fights in a report (lightweight DB query).
+
+    Returns fight_id (WCL's per-report fight number), NOT the DB primary key,
+    since get_fight_details queries by f.fight_id.
+    """
     from shukketsu.agent.tool_utils import _get_session
 
     session = await _get_session()
     try:
         result = await session.execute(
             text(
-                "SELECT id FROM fights "
+                "SELECT fight_id FROM fights "
                 "WHERE report_code = :code AND kill = true "
-                "ORDER BY id"
+                "ORDER BY fight_id"
             ),
             {"code": report_code},
         )
