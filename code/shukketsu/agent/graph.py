@@ -19,6 +19,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
+from sqlalchemy import text
 
 from shukketsu.agent.prompts import SYSTEM_PROMPT
 from shukketsu.agent.state import AnalyzerState
@@ -36,6 +37,21 @@ _SPECIFIC_TOOL_KEYWORDS = re.compile(
     r'resource|mana|cast|cancel|dot|phase|overheal|wipe)\b',
     re.IGNORECASE,
 )
+
+# Player name detection: capitalized words 3-15 chars, excluding common English
+# words and boss names that would produce false positives.
+_PLAYER_NAME_RE = re.compile(r'\b([A-Z][a-z]{2,15})\b')
+_COMMON_WORDS = frozenset({
+    "The", "Can", "Please", "What", "How", "Did", "Does", "Show",
+    "Tell", "Analyze", "Report", "Check", "Compare", "Pull", "Get",
+    "Could", "Would", "Should", "Have", "Been", "Will", "Also",
+    "High", "King", "Gruul", "Magtheridon", "Prince", "Maiden",
+    "Moroes", "Nightbane", "Netherspite", "Curator", "Aran",
+    "Attumen", "Opera", "Illhoof", "Shade", "Malchezaar",
+    "Karazhan", "Raid", "Execution", "Summary", "Kills", "Wipes",
+    "Better", "Where", "When", "Which", "Help", "With", "From",
+    "About", "Their", "They", "That", "This", "These", "Those",
+})
 
 
 def _extract_report_code(text: str) -> str | None:
@@ -80,6 +96,33 @@ def _fix_tool_name(name: str, valid_names: set[str]) -> str:
     return name
 
 
+def _extract_player_names(text: str) -> list[str]:
+    """Extract candidate player names from user text."""
+    return [
+        m.group(1) for m in _PLAYER_NAME_RE.finditer(text)
+        if m.group(1) not in _COMMON_WORDS
+    ]
+
+
+async def _get_kill_fight_ids(report_code: str) -> list[int]:
+    """Get fight IDs for kill fights in a report (lightweight DB query)."""
+    from shukketsu.agent.tool_utils import _get_session
+
+    session = await _get_session()
+    try:
+        result = await session.execute(
+            text(
+                "SELECT id FROM fights "
+                "WHERE report_code = :code AND kill = true "
+                "ORDER BY id"
+            ),
+            {"code": report_code},
+        )
+        return [row[0] for row in result.fetchall()]
+    finally:
+        await session.close()
+
+
 async def prefetch_node(state: dict[str, Any]) -> dict[str, Any]:
     """Auto-fetch report data when a report code is detected.
 
@@ -87,6 +130,9 @@ async def prefetch_node(state: dict[str, Any]) -> dict[str, Any]:
     code, this node calls get_raid_execution directly and injects the results
     into the message history. The LLM then sees the data and can analyze it
     immediately without needing to select tools.
+
+    When a player name is also detected, additionally fetches per-fight details
+    for all kill fights so the LLM has player-level data to analyze.
     """
     messages = state["messages"]
 
@@ -122,8 +168,42 @@ async def prefetch_node(state: dict[str, Any]) -> dict[str, Any]:
         }],
     )
     tool_msg = ToolMessage(content=result, tool_call_id=tool_call_id)
+    injected: list = [ai_msg, tool_msg]
 
-    return {"messages": [ai_msg, tool_msg]}
+    # If player names detected, also fetch per-fight details for kills
+    player_names = _extract_player_names(user_text)
+    if player_names:
+        fight_ids = await _get_kill_fight_ids(report_code)
+        if fight_ids:
+            from shukketsu.agent.tools.player_tools import get_fight_details
+
+            logger.info(
+                "Prefetching fight details for %d kills (players: %s)",
+                len(fight_ids), ", ".join(player_names),
+            )
+            for fight_id in fight_ids:
+                detail_result = await get_fight_details.ainvoke({
+                    "report_code": report_code,
+                    "fight_id": fight_id,
+                })
+                detail_id = f"prefetch_fight_{fight_id}"
+                detail_ai = AIMessage(
+                    content="",
+                    tool_calls=[{
+                        "name": "get_fight_details",
+                        "args": {
+                            "report_code": report_code,
+                            "fight_id": fight_id,
+                        },
+                        "id": detail_id,
+                    }],
+                )
+                detail_tool = ToolMessage(
+                    content=detail_result, tool_call_id=detail_id,
+                )
+                injected.extend([detail_ai, detail_tool])
+
+    return {"messages": injected}
 
 
 async def agent_node(

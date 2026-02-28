@@ -4,6 +4,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from shukketsu.agent.graph import (
     _SPECIFIC_TOOL_KEYWORDS,
+    _extract_player_names,
     _extract_report_code,
     _fix_tool_name,
     _normalize_tool_args,
@@ -374,3 +375,109 @@ class TestSpecificToolKeywords:
 
     def test_no_match_for_performance(self):
         assert not _SPECIFIC_TOOL_KEYWORDS.search("how is my DPS on Gruul?")
+
+
+class TestExtractPlayerNames:
+    def test_extracts_player_name(self):
+        names = _extract_player_names("what could Lyroo have done better")
+        assert "Lyroo" in names
+
+    def test_ignores_common_words(self):
+        names = _extract_player_names("Can you Please Analyze the Report")
+        assert names == []
+
+    def test_ignores_boss_names(self):
+        names = _extract_player_names("How did we do on Gruul and Magtheridon")
+        assert names == []
+
+    def test_extracts_multiple_names(self):
+        names = _extract_player_names("Compare Lyroo and Tankboy on Gruul")
+        assert "Lyroo" in names
+        assert "Tankboy" in names
+        assert "Gruul" not in names
+
+
+class TestPrefetchPlayerData:
+    async def test_prefetches_player_fight_details(self):
+        """When player name detected, also fetch fight details for kills."""
+        state = {
+            "messages": [
+                HumanMessage(
+                    content="Analyze report fb61030ba5a20fd5f51475a7533b57aa "
+                    "and tell me what Lyroo could have done better"
+                ),
+            ]
+        }
+
+        mock_raid_tool = AsyncMock()
+        mock_raid_tool.ainvoke = AsyncMock(return_value="Raid data: 3 kills")
+        mock_fight_tool = AsyncMock()
+        mock_fight_tool.ainvoke = AsyncMock(
+            return_value="Fight details: Lyroo DPS 800"
+        )
+
+        with patch(
+            "shukketsu.agent.tools.raid_tools.get_raid_execution",
+            mock_raid_tool,
+        ), patch(
+            "shukketsu.agent.tools.player_tools.get_fight_details",
+            mock_fight_tool,
+        ), patch(
+            "shukketsu.agent.graph._get_kill_fight_ids",
+            return_value=[101, 102],
+        ):
+            result = await prefetch_node(state)
+
+        msgs = result.get("messages", [])
+        # 2 (raid) + 2*2 (fight details for 2 kills) = 6
+        assert len(msgs) == 6
+        assert msgs[0].tool_calls[0]["name"] == "get_raid_execution"
+        assert msgs[2].tool_calls[0]["name"] == "get_fight_details"
+        assert msgs[4].tool_calls[0]["name"] == "get_fight_details"
+
+    async def test_no_player_prefetch_without_player_name(self):
+        """Generic 'analyze report X' should NOT fetch fight details."""
+        state = {
+            "messages": [
+                HumanMessage(
+                    content="Analyze report fb61030ba5a20fd5f51475a7533b57aa"
+                ),
+            ]
+        }
+
+        mock_tool = AsyncMock()
+        mock_tool.ainvoke = AsyncMock(return_value="Raid data")
+        with patch(
+            "shukketsu.agent.tools.raid_tools.get_raid_execution",
+            mock_tool,
+        ):
+            result = await prefetch_node(state)
+
+        msgs = result.get("messages", [])
+        assert len(msgs) == 2  # Only raid execution, no fight details
+
+    async def test_no_fight_details_when_no_kills(self):
+        """Player name present but no kill fights → only raid execution."""
+        state = {
+            "messages": [
+                HumanMessage(
+                    content="Analyze report fb61030ba5a20fd5f51475a7533b57aa "
+                    "for Lyroo"
+                ),
+            ]
+        }
+
+        mock_raid_tool = AsyncMock()
+        mock_raid_tool.ainvoke = AsyncMock(return_value="Raid data")
+
+        with patch(
+            "shukketsu.agent.tools.raid_tools.get_raid_execution",
+            mock_raid_tool,
+        ), patch(
+            "shukketsu.agent.graph._get_kill_fight_ids",
+            return_value=[],
+        ):
+            result = await prefetch_node(state)
+
+        msgs = result.get("messages", [])
+        assert len(msgs) == 2  # Only raid execution

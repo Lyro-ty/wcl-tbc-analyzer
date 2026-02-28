@@ -6,42 +6,50 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from shukketsu.agent.tools import get_encounter_benchmarks, get_spec_benchmark
 
 SAMPLE_BENCHMARKS = {
-    "kill": {
+    "kill_stats": {
+        "kill_count": 15,
         "avg_duration_ms": 245000,
         "median_duration_ms": 240000,
-        "fastest_duration_ms": 198000,
+        "min_duration_ms": 198000,
     },
     "deaths": {
-        "avg_deaths_per_player": 0.3,
-        "pct_zero_death_players": 0.8,
+        "avg_deaths": 0.3,
+        "zero_death_pct": 80.0,
     },
     "by_spec": {
-        "Warlock_Destruction": {
-            "sample_size": 5,
-            "avg_dps": 1420.0,
-            "median_dps": 1380.0,
-            "p75_dps": 1520.0,
-            "avg_hps": 0.0,
-            "median_hps": 0.0,
-            "avg_gcd_uptime": 91.0,
-            "avg_cpm": 28.5,
-            "top_abilities": [
-                {"name": "Shadow Bolt", "avg_damage_pct": 0.62},
-            ],
-            "avg_buff_uptimes": {"Curse of the Elements": 95.0},
-            "avg_cooldown_efficiency": {
-                "Infernal": {"avg_times_used": 1.2, "avg_efficiency": 85.0},
+        "Destruction Warlock": {
+            "dps": {
+                "sample_size": 5,
+                "avg_dps": 1420.0,
+                "median_dps": 1380.0,
+                "p75_dps": 1520.0,
+                "avg_hps": 0.0,
+                "median_hps": 0.0,
+                "p75_hps": 0.0,
             },
+            "gcd": {
+                "avg_gcd_uptime": 91.0,
+                "avg_cpm": 28.5,
+            },
+            "abilities": [
+                {"ability_name": "Shadow Bolt", "avg_damage_pct": 0.62},
+            ],
+            "buffs": [
+                {"buff_name": "Curse of the Elements", "avg_uptime": 95.0},
+            ],
+            "cooldowns": [
+                {"ability_name": "Infernal", "avg_uses": 1.2, "avg_efficiency": 85.0},
+            ],
         },
     },
-    "consumables": {"flask": 0.95, "food": 0.98},
+    "consumables": [
+        {"category": "flask", "usage_pct": 0.95,
+         "players_with": 14, "total_player_fights": 15},
+        {"category": "food", "usage_pct": 0.98,
+         "players_with": 15, "total_player_fights": 15},
+    ],
     "composition": [
-        {
-            "class": "Warlock",
-            "spec": "Destruction",
-            "avg_count": 2.5,
-            "appearances": 10,
-        },
+        {"class": "Warlock", "spec": "Destruction", "avg_count": 2.5},
     ],
 }
 
@@ -133,9 +141,9 @@ class TestGetEncounterBenchmarks:
     async def test_handles_empty_optional_sections(self):
         """Tool should handle missing optional sections gracefully."""
         minimal = {
-            "kill": {"avg_duration_ms": 120000, "median_duration_ms": 115000,
-                     "fastest_duration_ms": 100000},
-            "deaths": {"avg_deaths_per_player": 0.1, "pct_zero_death_players": 0.95},
+            "kill_stats": {"avg_duration_ms": 120000, "median_duration_ms": 115000,
+                           "min_duration_ms": 100000},
+            "deaths": {"avg_deaths": 0.1, "zero_death_pct": 95.0},
         }
         mock_result = MagicMock()
         mock_result.fetchone.return_value = _make_row(benchmarks=minimal)
@@ -179,7 +187,7 @@ class TestGetSpecBenchmark:
                 }
             )
 
-        assert "Warlock Destruction" in result
+        assert "Destruction Warlock" in result
         assert "Gruul the Dragonkiller" in result
         # Performance targets
         assert "1,420.0" in result
@@ -238,9 +246,9 @@ class TestGetSpecBenchmark:
                 }
             )
 
-        assert "No benchmark data for Warrior Arms" in result
+        assert "No benchmark data for Arms Warrior" in result
         assert "Available specs:" in result
-        assert "Warlock Destruction" in result
+        assert "Destruction Warlock" in result
 
     async def test_handles_json_string_benchmarks(self):
         """benchmarks column may be a JSON string."""
