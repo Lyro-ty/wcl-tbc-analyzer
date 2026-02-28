@@ -48,6 +48,7 @@ manage-watched-guilds = "shukketsu.scripts.manage_watched_guilds:main"
 export-training-data = "shukketsu.scripts.export_training_data:main"
 generate-synthetic-data = "shukketsu.scripts.generate_synthetic_data:main"
 prepare-training-data = "shukketsu.scripts.prepare_training_data:main"
+eval-traces = "shukketsu.scripts.eval_traces:main"
 
 [tool.setuptools.packages.find]
 where = ["code"]
