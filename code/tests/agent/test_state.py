@@ -11,6 +11,15 @@ class TestAnalyzerState:
         state = AnalyzerState(messages=[])
         assert isinstance(state["messages"], list)
 
+    def test_has_intent_field(self):
+        assert "intent" in AnalyzerState.__annotations__
+
+    def test_has_detected_context_field(self):
+        assert "detected_context" in AnalyzerState.__annotations__
+
+    def test_has_tool_error_count_field(self):
+        assert "tool_error_count" in AnalyzerState.__annotations__
+
 
 class TestSystemPrompt:
     def test_contains_domain_context(self):
