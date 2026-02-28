@@ -11,6 +11,7 @@ Intent routing covers 7 intents: report_analysis, player_analysis,
 compare_to_top, benchmarks, progression, specific_tool, leaderboard.
 """
 
+import contextlib
 import logging
 import re
 from difflib import get_close_matches
@@ -210,10 +211,8 @@ def _normalize_tool_args(args: dict[str, Any]) -> dict[str, Any]:
         final_key = _ARG_ALIASES.get(snake_key, snake_key)
         # Type coercion for int fields
         if final_key in _INT_FIELDS and isinstance(value, str):
-            try:
+            with contextlib.suppress(ValueError):
                 value = int(value)
-            except ValueError:
-                pass
         # Type coercion for bool fields
         if final_key in _BOOL_FIELDS and isinstance(value, str):
             value = value.lower() in ("true", "1", "yes")
@@ -659,6 +658,34 @@ async def prefetch_node(state: dict[str, Any]) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 
+# Maximum tool errors before graceful fallback
+_MAX_TOOL_ERRORS = 3
+
+_RETRY_HINT = (
+    "The previous tool call failed. Read the error message carefully, "
+    "fix the parameters, and retry with corrected arguments. "
+    "Do NOT apologize or ask the user for help."
+)
+
+_FALLBACK_MESSAGE = (
+    "I wasn't able to retrieve the data needed for this analysis. "
+    "This may be due to missing data in the database. "
+    "Try rephrasing your question or specifying different parameters."
+)
+
+
+def _detect_tool_error(messages: list) -> bool:
+    """Check if the last message is a ToolMessage containing an error."""
+    if not messages:
+        return False
+    last = messages[-1]
+    return (
+        isinstance(last, ToolMessage)
+        and isinstance(last.content, str)
+        and last.content.startswith("Error")
+    )
+
+
 async def agent_node(
     state: dict[str, Any],
     *,
@@ -671,16 +698,39 @@ async def agent_node(
     Dynamically binds a filtered tool set based on the detected intent.
     After the prefetch node has injected data, the LLM receives it and
     can analyze directly. For follow-up questions, tools remain available.
+
+    Includes retry budget: tracks tool errors and injects retry hints.
+    After MAX_TOOL_ERRORS, returns a graceful fallback instead of retrying.
     """
     messages = state["messages"]
     intent = state.get("intent")
+    error_count = state.get("tool_error_count", 0)
+
+    # Detect tool errors and track count
+    has_error = _detect_tool_error(messages)
+    if has_error:
+        error_count += 1
+
+    # Graceful fallback after too many errors
+    if error_count >= _MAX_TOOL_ERRORS:
+        return {
+            "messages": [AIMessage(content=_FALLBACK_MESSAGE)],
+            "tool_error_count": error_count,
+        }
 
     # Filter tools based on intent (reduces hallucination)
     filtered_tools = _get_tools_for_intent(intent, all_tools)
     llm_with_tools = llm.bind_tools(filtered_tools) if filtered_tools else llm
-    filtered_names = {t.name for t in filtered_tools} if filtered_tools else tool_names
+    filtered_names = (
+        {t.name for t in filtered_tools} if filtered_tools else tool_names
+    )
 
     full_messages = [SystemMessage(content=SYSTEM_PROMPT)] + messages
+
+    # Inject retry hint after tool errors
+    if has_error:
+        full_messages.append(SystemMessage(content=_RETRY_HINT))
+
     response = await llm_with_tools.ainvoke(full_messages)
 
     # Fix hallucinated tool names, normalize args, and auto-repair missing args
@@ -692,7 +742,15 @@ async def agent_node(
                 tc["name"], tc["args"], messages,
             )
 
-    return {"messages": [response]}
+    result: dict[str, Any] = {"messages": [response]}
+
+    # Update error count: increment on error, reset on successful response
+    if has_error:
+        result["tool_error_count"] = error_count
+    elif not has_error and error_count > 0:
+        result["tool_error_count"] = 0
+
+    return result
 
 
 # --------------------------------------------------------------------------- #

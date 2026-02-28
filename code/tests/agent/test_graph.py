@@ -750,7 +750,7 @@ class TestContextualToolFiltering:
         from shukketsu.agent.graph import _get_tools_for_intent
 
         mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
-        for t, n in zip(mock_tools, _TOOL_NAMES):
+        for t, n in zip(mock_tools, _TOOL_NAMES, strict=True):
             t.name = n
 
         tools = _get_tools_for_intent("report_analysis", mock_tools)
@@ -764,7 +764,7 @@ class TestContextualToolFiltering:
         from shukketsu.agent.graph import _get_tools_for_intent
 
         mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
-        for t, n in zip(mock_tools, _TOOL_NAMES):
+        for t, n in zip(mock_tools, _TOOL_NAMES, strict=True):
             t.name = n
 
         tools = _get_tools_for_intent("player_analysis", mock_tools)
@@ -777,7 +777,7 @@ class TestContextualToolFiltering:
         from shukketsu.agent.graph import _get_tools_for_intent
 
         mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
-        for t, n in zip(mock_tools, _TOOL_NAMES):
+        for t, n in zip(mock_tools, _TOOL_NAMES, strict=True):
             t.name = n
 
         tools = _get_tools_for_intent("benchmarks", mock_tools)
@@ -790,7 +790,7 @@ class TestContextualToolFiltering:
         from shukketsu.agent.graph import _get_tools_for_intent
 
         mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
-        for t, n in zip(mock_tools, _TOOL_NAMES):
+        for t, n in zip(mock_tools, _TOOL_NAMES, strict=True):
             t.name = n
 
         tools = _get_tools_for_intent(None, mock_tools)
@@ -800,7 +800,7 @@ class TestContextualToolFiltering:
         from shukketsu.agent.graph import _get_tools_for_intent
 
         mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
-        for t, n in zip(mock_tools, _TOOL_NAMES):
+        for t, n in zip(mock_tools, _TOOL_NAMES, strict=True):
             t.name = n
 
         tools = _get_tools_for_intent("specific_tool", mock_tools)
@@ -810,7 +810,7 @@ class TestContextualToolFiltering:
         from shukketsu.agent.graph import _get_tools_for_intent
 
         mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
-        for t, n in zip(mock_tools, _TOOL_NAMES):
+        for t, n in zip(mock_tools, _TOOL_NAMES, strict=True):
             t.name = n
 
         tools = _get_tools_for_intent("compare_to_top", mock_tools)
@@ -822,7 +822,7 @@ class TestContextualToolFiltering:
         from shukketsu.agent.graph import _get_tools_for_intent
 
         mock_tools = [MagicMock(name=n) for n in _TOOL_NAMES]
-        for t, n in zip(mock_tools, _TOOL_NAMES):
+        for t, n in zip(mock_tools, _TOOL_NAMES, strict=True):
             t.name = n
 
         tools = _get_tools_for_intent("progression", mock_tools)
@@ -920,3 +920,156 @@ class TestAutoRepairArgs:
             "get_activity_report", args, messages,
         )
         assert repaired["report_code"] == "Fn2ACKZtyzc1QLJP"
+
+
+class TestRetryBudget:
+    """Tests for retry budget with escalating hints and graceful fallback."""
+
+    async def test_error_detected_increments_count(self):
+        """After a tool error, tool_error_count should increase."""
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "search_fights",
+                "args": {"encounter_name": "Gruul"},
+                "id": "2",
+            }],
+        )
+
+        state = {
+            "messages": [
+                HumanMessage(content="Search for Gruul"),
+                AIMessage(
+                    content="",
+                    tool_calls=[{
+                        "name": "search_fights",
+                        "args": {},
+                        "id": "1",
+                    }],
+                ),
+                ToolMessage(
+                    content="Error: encounter_name: Field required",
+                    tool_call_id="1",
+                ),
+            ],
+            "tool_error_count": 0,
+        }
+        result = await agent_node(
+            state, llm=mock_llm, all_tools=[], tool_names=_TOOL_NAMES,
+        )
+        assert result.get("tool_error_count", 0) == 1
+
+    async def test_retry_hint_injected_on_error(self):
+        """Agent should see a retry hint when a tool error occurred."""
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(content="retrying...")
+
+        state = {
+            "messages": [
+                HumanMessage(content="Search for Gruul"),
+                AIMessage(
+                    content="",
+                    tool_calls=[{
+                        "name": "search_fights",
+                        "args": {},
+                        "id": "1",
+                    }],
+                ),
+                ToolMessage(
+                    content="Error: encounter_name: Field required",
+                    tool_call_id="1",
+                ),
+            ],
+            "tool_error_count": 0,
+        }
+        await agent_node(
+            state, llm=mock_llm, all_tools=[], tool_names=_TOOL_NAMES,
+        )
+
+        # Check that the LLM received a retry hint (separate from SYSTEM_PROMPT)
+        call_args = mock_llm.ainvoke.call_args[0][0]
+        # Count SystemMessages — should have SYSTEM_PROMPT + retry hint = 2
+        sys_msgs = [m for m in call_args if isinstance(m, SystemMessage)]
+        assert len(sys_msgs) == 2
+        retry_hint = sys_msgs[1]
+        assert "failed" in retry_hint.content.lower()
+
+    async def test_graceful_fallback_after_3_errors(self):
+        """After 3 errors, agent should return a fallback message, not retry."""
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "search_fights",
+                "args": {},
+                "id": "4",
+            }],
+        )
+
+        state = {
+            "messages": [
+                HumanMessage(content="Search for Gruul"),
+                ToolMessage(
+                    content="Error: something broke",
+                    tool_call_id="3",
+                ),
+            ],
+            "tool_error_count": 3,
+        }
+        result = await agent_node(
+            state, llm=mock_llm, all_tools=[], tool_names=_TOOL_NAMES,
+        )
+
+        msg = result["messages"][0]
+        assert isinstance(msg, AIMessage)
+        assert not msg.tool_calls  # no more tool calls
+        assert "wasn't able" in msg.content.lower()
+
+    async def test_no_hint_when_no_error(self):
+        """Normal responses should not get extra hint SystemMessages."""
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(content="Analysis here.")
+
+        state = {
+            "messages": [
+                HumanMessage(content="How is my DPS?"),
+            ],
+            "tool_error_count": 0,
+        }
+        await agent_node(
+            state, llm=mock_llm, all_tools=[], tool_names=_TOOL_NAMES,
+        )
+
+        call_args = mock_llm.ainvoke.call_args[0][0]
+        # Only the SYSTEM_PROMPT SystemMessage should be present
+        sys_msgs = [m for m in call_args if isinstance(m, SystemMessage)]
+        assert len(sys_msgs) == 1
+
+    async def test_error_count_resets_on_success(self):
+        """When tool returns non-error data, count should reset."""
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(
+            content="Gruul analysis here."
+        )
+
+        state = {
+            "messages": [
+                HumanMessage(content="Analyze Gruul"),
+                AIMessage(content="", tool_calls=[{
+                    "name": "search_fights",
+                    "args": {"encounter_name": "Gruul"},
+                    "id": "1",
+                }]),
+                ToolMessage(
+                    content="Fight data for Gruul: ...",
+                    tool_call_id="1",
+                ),
+            ],
+            "tool_error_count": 2,
+        }
+        result = await agent_node(
+            state, llm=mock_llm, all_tools=[], tool_names=_TOOL_NAMES,
+        )
+
+        assert result.get("tool_error_count", 0) == 0
