@@ -277,3 +277,62 @@ class TestShortReportCode:
         """13 chars is too short to be a report code."""
         result = classify_intent("Check aBcDeFgHiJkLm")
         assert result.report_code is None
+
+
+class TestPlayerPerformanceIntents:
+    """Queries about player performance without report codes should route."""
+
+    def test_personal_records(self):
+        """'personal records' should route to progression intent."""
+        result = classify_intent(
+            "What are Frostweave's personal records on Magtheridon?"
+        )
+        assert result.intent == "progression"
+        assert "Frostweave" in result.player_names
+
+    def test_how_has_been_doing(self):
+        """'how has X been doing' should route to progression intent."""
+        result = classify_intent(
+            "How has Frostweave been doing on Gruul the Dragonkiller?"
+        )
+        assert result.intent == "progression"
+        assert "Frostweave" in result.player_names
+        assert "Dragonkiller" not in result.player_names
+
+    def test_best_parses(self):
+        """'best parses' should route to progression intent."""
+        result = classify_intent(
+            "What are Tankboy's best parses on Gruul?"
+        )
+        assert result.intent == "progression"
+        assert "Tankboy" in result.player_names
+
+    def test_dragonkiller_not_player(self):
+        """'Dragonkiller' from boss name should not be a player."""
+        result = classify_intent(
+            "How has Lyroo been doing on Gruul the Dragonkiller?"
+        )
+        assert "Dragonkiller" not in result.player_names
+
+    def test_huntsman_not_player(self):
+        """'Huntsman' from boss name should not be a player."""
+        result = classify_intent("Show me stats for Attumen the Huntsman")
+        assert "Huntsman" not in result.player_names
+
+
+class TestMultipleReportCodes:
+    """Queries with two report codes for gear/raid comparison."""
+
+    def test_gear_compare_extracts_both_codes(self):
+        result = classify_intent(
+            "Compare Arrowstorm's gear between "
+            "wX1yZ3aB5cD7eF9g and Hy7KmN9pQ2rS4tU6"
+        )
+        assert result.report_code == "wX1yZ3aB5cD7eF9g"
+        assert len(result.report_codes) == 2
+        assert result.report_codes[1] == "Hy7KmN9pQ2rS4tU6"
+
+    def test_single_report_code_still_works(self):
+        result = classify_intent("Analyze report Fn2ACKZtyzc1QLJP")
+        assert result.report_code == "Fn2ACKZtyzc1QLJP"
+        assert len(result.report_codes) == 1

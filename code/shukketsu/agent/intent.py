@@ -22,6 +22,7 @@ _COMMON_WORDS = frozenset({
     "High", "King", "Gruul", "Magtheridon", "Prince", "Maiden",
     "Moroes", "Nightbane", "Netherspite", "Curator", "Aran",
     "Attumen", "Opera", "Illhoof", "Shade", "Malchezaar",
+    "Dragonkiller", "Huntsman", "Maulgar", "Virtue", "Terestian",
     "Karazhan", "Raid", "Execution", "Summary", "Kills", "Wipes",
     "Better", "Where", "When", "Which", "Help", "With", "From",
     "About", "Their", "They", "That", "This", "These", "Those",
@@ -143,7 +144,9 @@ _LEADERBOARD_RE = re.compile(
     r'\b(leaderboard|top dps|best spec|top spec|ranking)\b', re.IGNORECASE,
 )
 _PROGRESSION_RE = re.compile(
-    r'\b(progression|over time|trend|history)\b', re.IGNORECASE,
+    r'\b(progression|over time|trend|history|been doing|'
+    r'personal records?|best parses?|how.+doing)\b',
+    re.IGNORECASE,
 )
 _PLAYER_ANALYSIS_RE = re.compile(
     r'\b(better|improve|could have|what.+wrong|feedback|analyze\s+\w+\s+in)\b',
@@ -160,6 +163,7 @@ _BEAST_MASTERY_RE = re.compile(r'\bbeast\s+mastery\b', re.IGNORECASE)
 class IntentResult:
     intent: str | None = None
     report_code: str | None = None
+    report_codes: list[str] = field(default_factory=list)
     player_names: list[str] = field(default_factory=list)
     encounter_name: str | None = None
     class_name: str | None = None
@@ -238,6 +242,7 @@ def classify_intent(text: str) -> IntentResult:
     """Classify user message into an intent with extracted context."""
     result = IntentResult()
     codes = _extract_report_codes(text)
+    result.report_codes = codes
     result.report_code = codes[0] if codes else None
     result.player_names = _extract_player_names(text)
     result.encounter_name = _extract_encounter_name(text)

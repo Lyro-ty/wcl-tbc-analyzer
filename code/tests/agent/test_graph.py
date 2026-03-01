@@ -442,6 +442,75 @@ class TestPrefetchNode:
         )
         assert "get_wipe_progression" in all_content
 
+    async def test_prefetch_gear_changes_uses_two_report_codes(self):
+        """Gear compare with 2 report codes → report_code_old + report_code_new."""
+        msg = HumanMessage(
+            content="Compare Arrowstorm's gear between "
+            "wX1yZ3aB5cD7eF9g and Hy7KmN9pQ2rS4tU6"
+        )
+        mock_gear = AsyncMock()
+        mock_gear.ainvoke = AsyncMock(return_value="gear diff data")
+
+        with patch(
+            "shukketsu.agent.tools.event_tools.get_gear_changes",
+            mock_gear,
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        assert result.get("intent") == "specific_tool"
+        # Tool should be called with report_code_old and report_code_new
+        mock_gear.ainvoke.assert_called_once()
+        call_args = mock_gear.ainvoke.call_args[0][0]
+        assert call_args["report_code_old"] == "wX1yZ3aB5cD7eF9g"
+        assert call_args["report_code_new"] == "Hy7KmN9pQ2rS4tU6"
+        assert "report_code" not in call_args
+        assert call_args["player_name"] == "Arrowstorm"
+
+    async def test_prefetch_compare_two_raids(self):
+        """Compare intent with 2 report codes → compare_two_raids."""
+        msg = HumanMessage(
+            content="Compare report wX1yZ3aB5cD7eF9g to report Hy7KmN9pQ2rS4tU6"
+        )
+        mock_compare = AsyncMock()
+        mock_compare.ainvoke = AsyncMock(return_value="comparison data")
+
+        with patch(
+            "shukketsu.agent.tools.raid_tools.compare_two_raids",
+            mock_compare,
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        assert result.get("intent") == "compare_to_top"
+        mock_compare.ainvoke.assert_called_once()
+        call_args = mock_compare.ainvoke.call_args[0][0]
+        assert call_args["report_a"] == "wX1yZ3aB5cD7eF9g"
+        assert call_args["report_b"] == "Hy7KmN9pQ2rS4tU6"
+
+    async def test_prefetch_specific_error_includes_player_reminder(self):
+        """When tool returns error string, append player name reminder."""
+        msg = HumanMessage(
+            content="Show death recap for Tankboy in fight 21 of "
+            "fb61030ba5a20fd5f51475a7533b57aa"
+        )
+        mock_death = AsyncMock()
+        mock_death.ainvoke = AsyncMock(
+            return_value="Error: No data found for this report"
+        )
+
+        with patch(
+            "shukketsu.agent.tools.event_tools.get_death_analysis",
+            mock_death,
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        # The injected ToolMessage should contain the player name reminder
+        msgs = result.get("messages", [])
+        tool_content = " ".join(
+            m.content for m in msgs
+            if isinstance(m, ToolMessage)
+        )
+        assert "Tankboy" in tool_content
+
     async def test_prefetch_specific_without_report_code(self):
         """Specific tool without report code → call tool with available args."""
         msg = HumanMessage(content="Check for performance regressions")
@@ -830,6 +899,13 @@ class TestFixToolName:
         assert (
             _fix_tool_name("pull_rankings", _TOOL_NAMES)
             == "get_top_rankings"
+        )
+
+    def test_alias_get_report_data(self):
+        """LLM sometimes hallucinates get_report_data."""
+        assert (
+            _fix_tool_name("get_report_data", _TOOL_NAMES)
+            == "get_raid_execution"
         )
 
 

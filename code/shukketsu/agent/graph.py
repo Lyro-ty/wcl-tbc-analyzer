@@ -250,6 +250,7 @@ _TOOL_ALIASES: dict[str, str] = {
     "get_buffs": "get_buff_analysis",
     "get_abilities": "get_ability_breakdown",
     "get_gear": "get_gear_changes",
+    "get_report_data": "get_raid_execution",
     "get_enchants": "get_enchant_gem_check",
     "get_resources": "get_resource_usage",
     "get_dots": "get_dot_management",
@@ -471,6 +472,17 @@ async def _prefetch_player(intent: IntentResult) -> list:
 
 async def _prefetch_compare(intent: IntentResult) -> list:
     """Prefetch comparison data."""
+    # Two report codes → side-by-side raid comparison
+    if len(intent.report_codes) >= 2:
+        from shukketsu.agent.tools.raid_tools import compare_two_raids
+
+        args = {
+            "report_a": intent.report_codes[0],
+            "report_b": intent.report_codes[1],
+        }
+        result = await compare_two_raids.ainvoke(args)
+        return _inject_tool_result("compare_two_raids", args, result)
+
     if intent.report_code:
         from shukketsu.agent.tools.raid_tools import compare_raid_to_top
 
@@ -574,17 +586,24 @@ def _inject_prefetch_failure_hint(
     Without this, the LLM doesn't know the tool exists and gives up.
     """
     args_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
+    player = args.get("player_name", "")
+    name_reminder = (
+        f" IMPORTANT: mention {player} by name in your response."
+        if player else ""
+    )
     if error:
         hint = (
             f"Prefetch attempted {tool_name}({args_str}) but it failed: "
             f"{error}. You can retry {tool_name} with corrected arguments, "
             f"or inform the user that the requested data is not available."
+            f"{name_reminder}"
         )
     else:
         hint = (
             f"Prefetch attempted {tool_name}({args_str}) but returned no data. "
             f"You can retry {tool_name} with different arguments, "
             f"or inform the user that the requested data is not available."
+            f"{name_reminder}"
         )
     call_id = f"prefetch_{tool_name}_hint"
     ai_msg = AIMessage(
@@ -609,8 +628,14 @@ async def _prefetch_specific(intent: IntentResult) -> list:
         return []
 
     args: dict[str, Any] = {}
-    if intent.report_code:
+
+    # Gear changes needs two distinct report codes
+    if intent.specific_tool == "get_gear_changes" and len(intent.report_codes) >= 2:
+        args["report_code_old"] = intent.report_codes[0]
+        args["report_code_new"] = intent.report_codes[1]
+    elif intent.report_code:
         args["report_code"] = intent.report_code
+
     if intent.player_names:
         args["player_name"] = intent.player_names[0]
     if intent.encounter_name:
@@ -628,6 +653,18 @@ async def _prefetch_specific(intent: IntentResult) -> list:
     try:
         result = await tool_fn.ainvoke(args)
         if result:
+            # When tool returns an error string and we know the player,
+            # rewrite the error to include their name so the LLM echoes it
+            player = args.get("player_name", "")
+            if (player and isinstance(result, str)
+                    and result.startswith("Error")):
+                result = (
+                    f"Error: Could not retrieve data for {player}. "
+                    f"{result[len('Error: '):]}"
+                    f"\nWhen responding, say: "
+                    f"\"I couldn't find [data type] for {player}\" "
+                    f"— always use {player}'s name."
+                )
             return _inject_tool_result(intent.specific_tool, args, result)
         # Tool returned empty/None — inject a hint
         return _inject_prefetch_failure_hint(intent.specific_tool, args)

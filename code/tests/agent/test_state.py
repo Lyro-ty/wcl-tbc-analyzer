@@ -70,3 +70,11 @@ class TestSystemPrompt:
     def test_progression_example(self):
         """Prompt must have example for progression queries."""
         assert "get_progression" in SYSTEM_PROMPT
+
+    def test_error_response_player_focus_example(self):
+        """Prompt must have example showing player name in error responses."""
+        # Must contain an example where tool returns error but player is named
+        assert "couldn't find" in SYSTEM_PROMPT.lower() or (
+            "no data" in SYSTEM_PROMPT.lower()
+            and "player" in SYSTEM_PROMPT.lower()
+        )
