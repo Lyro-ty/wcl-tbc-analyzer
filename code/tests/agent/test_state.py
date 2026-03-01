@@ -57,3 +57,16 @@ class TestSystemPrompt:
         assert "report_code" in SYSTEM_PROMPT
         assert "fight_id" in SYSTEM_PROMPT
         assert "player_name" in SYSTEM_PROMPT
+
+    def test_player_name_in_response_rule(self):
+        """Prompt must instruct LLM to always name the player in responses."""
+        lower = SYSTEM_PROMPT.lower()
+        assert "name" in lower and "response" in lower
+
+    def test_personal_records_example(self):
+        """Prompt must have example for personal records (bests_only)."""
+        assert "bests_only" in SYSTEM_PROMPT
+
+    def test_progression_example(self):
+        """Prompt must have example for progression queries."""
+        assert "get_progression" in SYSTEM_PROMPT

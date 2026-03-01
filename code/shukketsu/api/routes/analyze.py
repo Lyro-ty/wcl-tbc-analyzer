@@ -51,8 +51,14 @@ _llm_semaphore = asyncio.Semaphore(2)
 _LLM_ACQUIRE_TIMEOUT = 30.0
 
 
+class ToolCallInfo(BaseModel):
+    name: str
+    arguments: dict
+
+
 class AnalyzeResponse(BaseModel):
     answer: str
+    tool_calls: list[ToolCallInfo] = []
 
 
 def set_graph(graph) -> None:
@@ -101,7 +107,16 @@ async def analyze(request: AnalyzeRequest):
     raw = messages[-1].content if messages else "No response generated."
     answer = _strip_tool_refs(_strip_think_tags(raw))
 
-    return AnalyzeResponse(answer=answer)
+    tool_calls = []
+    for msg in messages:
+        if hasattr(msg, "tool_calls") and msg.tool_calls:
+            for tc in msg.tool_calls:
+                tool_calls.append(ToolCallInfo(
+                    name=tc["name"],
+                    arguments=tc.get("args", {}),
+                ))
+
+    return AnalyzeResponse(answer=answer, tool_calls=tool_calls)
 
 
 @router.post("/analyze/stream")

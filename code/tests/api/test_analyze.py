@@ -635,6 +635,69 @@ async def test_analyze_requires_thread_id():
     assert resp.status_code == 422
 
 
+async def test_analyze_returns_tool_calls():
+    """AnalyzeResponse must include tool_calls from the agent's conversation."""
+    graph = AsyncMock()
+    graph.ainvoke.return_value = {
+        "messages": [
+            # Agent decides to call a tool
+            AIMessage(
+                content="",
+                tool_calls=[{
+                    "name": "get_spec_leaderboard",
+                    "args": {"encounter_name": "Gruul the Dragonkiller"},
+                    "id": "tc1",
+                    "type": "tool_call",
+                }],
+            ),
+            # Tool result (not exposed in response)
+            # Final analysis
+            AIMessage(content="Top DPS on Gruul: Destruction Warlock at 1500."),
+        ],
+    }
+
+    with patch("shukketsu.api.routes.analyze._get_graph", return_value=graph):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/analyze",
+                json={"question": "What specs top DPS on Gruul?", "thread_id": "t1"},
+            )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "answer" in body
+    assert "tool_calls" in body
+    assert len(body["tool_calls"]) == 1
+    assert body["tool_calls"][0]["name"] == "get_spec_leaderboard"
+    assert body["tool_calls"][0]["arguments"]["encounter_name"] == "Gruul the Dragonkiller"
+
+
+async def test_analyze_returns_empty_tool_calls_when_none():
+    """AnalyzeResponse returns empty tool_calls list when agent uses no tools."""
+    graph = AsyncMock()
+    graph.ainvoke.return_value = {
+        "messages": [
+            AIMessage(content="I need more information to help you."),
+        ],
+    }
+
+    with patch("shukketsu.api.routes.analyze._get_graph", return_value=graph):
+        from shukketsu.api.app import create_app
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/analyze",
+                json={"question": "Hello", "thread_id": "t1"},
+            )
+
+    body = resp.json()
+    assert body["tool_calls"] == []
+
+
 async def test_analyze_503_when_semaphore_full():
     """POST /analyze returns 503 when the LLM semaphore can't be acquired."""
     graph = AsyncMock()

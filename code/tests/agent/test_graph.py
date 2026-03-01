@@ -818,6 +818,20 @@ class TestFixToolName:
             == "get_my_performance"
         )
 
+    def test_alias_pull_table_data(self):
+        """LLM sometimes hallucinates CLI script name pull_table_data."""
+        assert (
+            _fix_tool_name("pull_table_data", _TOOL_NAMES)
+            == "get_ability_breakdown"
+        )
+
+    def test_alias_pull_rankings(self):
+        """LLM sometimes hallucinates CLI script name pull_rankings."""
+        assert (
+            _fix_tool_name("pull_rankings", _TOOL_NAMES)
+            == "get_top_rankings"
+        )
+
 
 class TestExtractPlayerNames:
     def test_extracts_player_name(self):

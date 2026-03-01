@@ -255,6 +255,12 @@ _TOOL_ALIASES: dict[str, str] = {
     "get_dots": "get_dot_management",
     "get_phases": "get_phase_analysis",
     "get_cancels": "get_cancelled_casts",
+    # CLI script names the LLM sometimes hallucinates
+    "pull_table_data": "get_ability_breakdown",
+    "pull_rankings": "get_top_rankings",
+    "pull_my_logs": "get_raid_execution",
+    "pull_speed_rankings": "get_top_rankings",
+    "pull_benchmarks": "get_encounter_benchmarks",
 }
 
 
