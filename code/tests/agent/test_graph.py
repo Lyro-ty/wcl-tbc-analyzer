@@ -135,8 +135,10 @@ class TestPrefetchNode:
         result = await prefetch_node(state)
         assert result == {}
 
-    async def test_skips_when_tool_results_exist(self):
-        """Follow-up turns with existing ToolMessages skip prefetch."""
+    async def test_prefetch_runs_on_followup_turn(self):
+        """Follow-up turns with a new HumanMessage should still prefetch."""
+        mock_handler = AsyncMock(return_value=[])
+
         state = {
             "messages": [
                 HumanMessage(
@@ -146,11 +148,49 @@ class TestPrefetchNode:
                     "name": "get_raid_execution", "args": {}, "id": "1",
                 }]),
                 ToolMessage(content="data", tool_call_id="1"),
+                AIMessage(content="Here is the analysis."),
+                HumanMessage(
+                    content=(
+                        "Now check Lyroo's rotation on "
+                        "fb61030ba5a20fd5f51475a7533b57aa"
+                    )
+                ),
+            ]
+        }
+
+        with patch.dict(
+            "shukketsu.agent.graph._PREFETCH_DISPATCH",
+            {"specific_tool": mock_handler},
+        ):
+            result = await prefetch_node(state)
+
+        # Should have detected specific_tool intent and called handler
+        mock_handler.assert_called_once()
+        assert result.get("intent") == "specific_tool"
+
+    async def test_prefetch_backfills_report_code_from_history(self):
+        """When follow-up message has no report code, extract from history."""
+        mock_handler = AsyncMock(return_value=[])
+
+        state = {
+            "messages": [
+                HumanMessage(
+                    content="Analyze report fb61030ba5a20fd5f51475a7533b57aa"
+                ),
+                AIMessage(content="Here is the analysis."),
                 HumanMessage(content="Now check Lyroo's rotation"),
             ]
         }
-        result = await prefetch_node(state)
-        assert result == {}
+
+        with patch.dict(
+            "shukketsu.agent.graph._PREFETCH_DISPATCH",
+            {"specific_tool": mock_handler},
+        ):
+            await prefetch_node(state)
+
+        # Handler should have been called with intent that has report_code
+        call_args = mock_handler.call_args[0][0]
+        assert call_args.report_code == "fb61030ba5a20fd5f51475a7533b57aa"
 
     async def test_prefetch_report_analysis(self):
         """Report analysis prefetches raid execution + fight details."""

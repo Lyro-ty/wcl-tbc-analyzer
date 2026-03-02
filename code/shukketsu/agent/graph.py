@@ -726,10 +726,10 @@ async def prefetch_node(state: dict[str, Any]) -> dict[str, Any]:
     """
     messages = state["messages"]
 
-    # Only on first turn (no prior tool results)
+    # Only run when the last message is a new user question.
+    # This covers both first turn and follow-up turns in a conversation.
+    # Mid-tool-loop calls (where last message is ToolMessage) are skipped.
     if not messages or not isinstance(messages[-1], HumanMessage):
-        return {}
-    if any(isinstance(m, ToolMessage) for m in messages):
         return {}
 
     user_text = messages[-1].content
@@ -737,6 +737,16 @@ async def prefetch_node(state: dict[str, Any]) -> dict[str, Any]:
 
     if intent.intent is None:
         return {}
+
+    # Backfill report_code from conversation history if not in current message
+    if not intent.report_code:
+        for m in reversed(messages[:-1]):
+            if hasattr(m, "content") and isinstance(m.content, str):
+                code = _extract_report_code(m.content)
+                if code:
+                    intent.report_code = code
+                    intent.report_codes = [code] + intent.report_codes
+                    break
 
     handler = _PREFETCH_DISPATCH.get(intent.intent)
     if handler is None:
