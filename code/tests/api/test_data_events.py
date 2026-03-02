@@ -203,10 +203,11 @@ async def test_resources_empty(client, mock_session):
 
 async def test_rotation_score_ok(client, mock_session):
     """Returns rotation score using spec-aware thresholds from constants."""
-    # The endpoint makes 3 queries:
+    # The endpoint makes 4 queries:
     # 1. PLAYER_FIGHT_INFO
-    # 2. FIGHT_CAST_METRICS
-    # 3. FIGHT_COOLDOWNS
+    # 2. GET_BENCHMARK_BY_ENCOUNTER_ID (no benchmark = fallback)
+    # 3. FIGHT_CAST_METRICS
+    # 4. FIGHT_COOLDOWNS
     # Arms Warrior thresholds: GCD 88%, CPM 28, CD eff 85% (short) / 60% (long)
     info_row = make_row(
         player_name="Lyro", player_class="Warrior", player_spec="Arms",
@@ -227,13 +228,15 @@ async def test_rotation_score_ok(client, mock_session):
 
     info_result = MagicMock()
     info_result.fetchone.return_value = info_row
+    bench_result = MagicMock()
+    bench_result.fetchone.return_value = None
     cm_result = MagicMock()
     cm_result.fetchone.return_value = cm_row
     cd_result = MagicMock()
     cd_result.fetchall.return_value = [cd_row]
 
     mock_session.execute = AsyncMock(
-        side_effect=[info_result, cm_result, cd_result]
+        side_effect=[info_result, bench_result, cm_result, cd_result]
     )
 
     resp = await client.get(
@@ -279,13 +282,15 @@ async def test_rotation_score_violations(client, mock_session):
 
     info_result = MagicMock()
     info_result.fetchone.return_value = info_row
+    bench_result = MagicMock()
+    bench_result.fetchone.return_value = None
     cm_result = MagicMock()
     cm_result.fetchone.return_value = cm_row
     cd_result = MagicMock()
     cd_result.fetchall.return_value = []
 
     mock_session.execute = AsyncMock(
-        side_effect=[info_result, cm_result, cd_result]
+        side_effect=[info_result, bench_result, cm_result, cd_result]
     )
 
     resp = await client.get(
@@ -302,5 +307,65 @@ async def test_rotation_score_violations(client, mock_session):
     assert "88%" in data["violations_json"]  # Arms GCD target
     assert "CPM" in data["violations_json"]
     assert "28" in data["violations_json"]  # Arms CPM target
+
+
+async def test_rotation_score_uses_benchmark(client, mock_session):
+    """Uses benchmark-derived rules when benchmark data exists."""
+    info_row = make_row(
+        player_name="Lyro", player_class="Warrior", player_spec="Arms",
+        dps=2500.0, encounter_id=50650, fight_duration_ms=120000,
+        encounter_name="High King Maulgar",
+    )
+    # Benchmark with Arms Warrior targets: GCD 90%, CPM 30
+    benchmarks = {
+        "by_spec": {
+            "Arms Warrior": {
+                "gcd": {"avg_gcd_uptime": 90.0, "avg_cpm": 30.0},
+                "dps": {"median_dps": 2800.0},
+                "abilities": [
+                    {"ability_name": "Mortal Strike", "avg_damage_pct": 35.0},
+                ],
+                "cooldowns": [
+                    {"ability_name": "Recklessness", "avg_efficiency": 80.0},
+                ],
+            },
+        },
+    }
+    bench_row = make_row(benchmarks=benchmarks)
+    cm_row = make_row(
+        player_name="Lyro", total_casts=150, casts_per_minute=32.0,
+        gcd_uptime_pct=92.0, active_time_ms=108000, downtime_ms=12000,
+        longest_gap_ms=5000, longest_gap_at_ms=45000,
+        avg_gap_ms=800.0, gap_count=15,
+    )
+    cd_row = make_row(
+        player_name="Lyro", ability_name="Recklessness", spell_id=1719,
+        cooldown_sec=300, times_used=2, max_possible_uses=3,
+        first_use_ms=5000, last_use_ms=305000, efficiency_pct=85.0,
+    )
+
+    info_result = MagicMock()
+    info_result.fetchone.return_value = info_row
+    bench_result = MagicMock()
+    bench_result.fetchone.return_value = bench_row
+    cm_result = MagicMock()
+    cm_result.fetchone.return_value = cm_row
+    cd_result = MagicMock()
+    cd_result.fetchall.return_value = [cd_row]
+
+    mock_session.execute = AsyncMock(
+        side_effect=[info_result, bench_result, cm_result, cd_result]
+    )
+
+    resp = await client.get(
+        "/api/data/reports/abc123/fights/1/rotation/Lyro"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["player_name"] == "Lyro"
+    # Benchmark targets: GCD 90% (92 pass), CPM 30 (32 pass),
+    # Recklessness 300s > 180s -> long CD, hardcoded long_cd_efficiency 60% (85 pass)
+    assert data["rules_passed"] == 3
+    assert data["score_pct"] == 100.0
 
 

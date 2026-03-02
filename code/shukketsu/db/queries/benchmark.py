@@ -18,6 +18,7 @@ __all__ = [
     "BENCHMARK_CONSUMABLE_RATES",
     "BENCHMARK_COMPOSITION",
     "GET_ENCOUNTER_BENCHMARK",
+    "GET_BENCHMARK_BY_ENCOUNTER_ID",
 ]
 
 # -- Discovery queries --
@@ -238,4 +239,8 @@ GET_ENCOUNTER_BENCHMARK = text("""
     FROM encounter_benchmarks eb
     JOIN encounters e ON eb.encounter_id = e.id
     WHERE e.name ILIKE :encounter_name
+""")
+
+GET_BENCHMARK_BY_ENCOUNTER_ID = text("""
+    SELECT benchmarks FROM encounter_benchmarks WHERE encounter_id = :encounter_id
 """)

@@ -1293,13 +1293,14 @@ def _rotation_mocks(
     cd_rows=None,
     ability_rows=None,
 ):
-    """Build the 4 mock execute results for get_rotation_score.
+    """Build the 5 mock execute results for get_rotation_score.
 
     Returns a mock_session with side_effect for:
       1. PLAYER_FIGHT_INFO
-      2. FIGHT_CAST_METRICS
-      3. FIGHT_COOLDOWNS
-      4. ABILITY_BREAKDOWN
+      2. GET_BENCHMARK_BY_ENCOUNTER_ID (returns None = no benchmark)
+      3. FIGHT_CAST_METRICS
+      4. FIGHT_COOLDOWNS
+      5. ABILITY_BREAKDOWN
     """
     # 1. PLAYER_FIGHT_INFO
     info_row = MagicMock(
@@ -1314,7 +1315,11 @@ def _rotation_mocks(
     info_result = MagicMock()
     info_result.fetchone.return_value = info_row
 
-    # 2. FIGHT_CAST_METRICS
+    # 2. GET_BENCHMARK_BY_ENCOUNTER_ID (no benchmark data = fallback)
+    bench_result = MagicMock()
+    bench_result.fetchone.return_value = None
+
+    # 3. FIGHT_CAST_METRICS
     cm_row = MagicMock(
         player_name="TestPlayer",
         total_casts=150,
@@ -1390,7 +1395,7 @@ def _rotation_mocks(
 
     mock_session = AsyncMock()
     mock_session.execute.side_effect = [
-        info_result, cm_result, cd_result, ability_result,
+        info_result, bench_result, cm_result, cd_result, ability_result,
     ]
     return mock_session
 
@@ -1410,9 +1415,10 @@ def _healer_mocks(
 
     Returns a mock_session with side_effect for:
       1. PLAYER_FIGHT_INFO
-      2. OVERHEAL_ANALYSIS
-      3. RESOURCE_USAGE
-      4. ABILITY_BREAKDOWN (if spec has key_abilities)
+      2. GET_BENCHMARK_BY_ENCOUNTER_ID (returns None = no benchmark)
+      3. OVERHEAL_ANALYSIS
+      4. RESOURCE_USAGE
+      5. ABILITY_BREAKDOWN (if spec has key_abilities)
     """
     # 1. PLAYER_FIGHT_INFO
     info_row = MagicMock(
@@ -1427,7 +1433,11 @@ def _healer_mocks(
     info_result = MagicMock()
     info_result.fetchone.return_value = info_row
 
-    # 2. OVERHEAL_ANALYSIS
+    # 2. GET_BENCHMARK_BY_ENCOUNTER_ID (no benchmark data = fallback)
+    bench_result = MagicMock()
+    bench_result.fetchone.return_value = None
+
+    # 3. OVERHEAL_ANALYSIS
     if overheal_rows is None:
         # Compute total/overheal_total from desired pct:
         # oh_pct = overheal_total / (total + overheal_total) * 100
@@ -1486,7 +1496,7 @@ def _healer_mocks(
 
     mock_session = AsyncMock()
     mock_session.execute.side_effect = [
-        info_result, oh_result, res_result, ab_result,
+        info_result, bench_result, oh_result, res_result, ab_result,
     ]
     return mock_session
 
@@ -2042,6 +2052,9 @@ class TestHealerScorer:
         info_result = MagicMock()
         info_result.fetchone.return_value = info_row
 
+        bench_result = MagicMock()
+        bench_result.fetchone.return_value = None
+
         empty_result_1 = MagicMock()
         empty_result_1.fetchall.return_value = []
         empty_result_2 = MagicMock()
@@ -2049,7 +2062,7 @@ class TestHealerScorer:
 
         mock_session = AsyncMock()
         mock_session.execute.side_effect = [
-            info_result, empty_result_1, empty_result_2,
+            info_result, bench_result, empty_result_1, empty_result_2,
         ]
         with patch(
             "shukketsu.agent.tool_utils._get_session",
@@ -2077,9 +2090,10 @@ def _tank_mocks(
 
     Returns a mock_session with side_effect for:
       1. PLAYER_FIGHT_INFO
-      2. ABILITY_BREAKDOWN (key abilities)
-      3. FIGHT_CAST_METRICS (GCD uptime)
-      4. FIGHT_COOLDOWNS (defensive CDs)
+      2. GET_BENCHMARK_BY_ENCOUNTER_ID (returns None = no benchmark)
+      3. ABILITY_BREAKDOWN (key abilities)
+      4. FIGHT_CAST_METRICS (GCD uptime)
+      5. FIGHT_COOLDOWNS (defensive CDs)
     """
     # 1. PLAYER_FIGHT_INFO
     info_row = MagicMock(
@@ -2094,7 +2108,11 @@ def _tank_mocks(
     info_result = MagicMock()
     info_result.fetchone.return_value = info_row
 
-    # 2. ABILITY_BREAKDOWN (key abilities)
+    # 2. GET_BENCHMARK_BY_ENCOUNTER_ID (no benchmark data = fallback)
+    bench_result = MagicMock()
+    bench_result.fetchone.return_value = None
+
+    # 3. ABILITY_BREAKDOWN (key abilities)
     if ability_rows is None:
         ability_rows = [
             MagicMock(ability_name="Shield Slam"),
@@ -2129,7 +2147,7 @@ def _tank_mocks(
 
     mock_session = AsyncMock()
     mock_session.execute.side_effect = [
-        info_result, ab_result, cm_result, cd_result,
+        info_result, bench_result, ab_result, cm_result, cd_result,
     ]
     return mock_session
 
@@ -2303,6 +2321,10 @@ class TestTankScorer:
         info_result = MagicMock()
         info_result.fetchone.return_value = info_row
 
+        # No benchmark data
+        bench_result = MagicMock()
+        bench_result.fetchone.return_value = None
+
         # Empty ability breakdown (Prot Warrior has key abilities, so this
         # will still score that component; we need empty metrics + cd too)
         ab_result = MagicMock()
@@ -2318,7 +2340,7 @@ class TestTankScorer:
 
         mock_session = AsyncMock()
         mock_session.execute.side_effect = [
-            info_result, ab_result, cm_result, cd_result,
+            info_result, bench_result, ab_result, cm_result, cd_result,
         ]
         with patch(
             "shukketsu.agent.tool_utils._get_session",

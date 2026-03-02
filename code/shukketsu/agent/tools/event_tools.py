@@ -1,6 +1,7 @@
 """Event-data agent tools requiring --with-events ingestion (11 tools)."""
 
 import json
+import logging
 from collections import defaultdict
 
 from shukketsu.agent.tool_utils import (
@@ -13,6 +14,7 @@ from shukketsu.agent.tool_utils import (
     wildcard_or_none,
 )
 from shukketsu.db import queries as q
+from shukketsu.db.queries.benchmark import GET_BENCHMARK_BY_ENCOUNTER_ID
 from shukketsu.db.queries.table_data import ABILITY_BREAKDOWN, OVERHEAL_ANALYSIS
 from shukketsu.pipeline.constants import (
     CLASSIC_COOLDOWNS,
@@ -20,7 +22,10 @@ from shukketsu.pipeline.constants import (
     ROLE_BY_SPEC,
     ROLE_DEFAULT_RULES,
     SPEC_ROTATION_RULES,
+    SpecRules,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @db_tool
@@ -445,6 +450,94 @@ async def get_dot_management(
     return "\n".join(lines)
 
 
+async def _fetch_benchmark_rules(
+    session, encounter_id: int, player_class: str, player_spec: str,
+) -> tuple[SpecRules, float | None] | None:
+    """Fetch benchmark-derived rotation rules for an encounter+spec.
+
+    Returns (SpecRules, benchmark_median_dps) if benchmark data exists for
+    the given encounter and spec, otherwise None (caller should fall back
+    to hardcoded SPEC_ROTATION_RULES).
+    """
+    result = await session.execute(
+        GET_BENCHMARK_BY_ENCOUNTER_ID, {"encounter_id": encounter_id},
+    )
+    row = result.fetchone()
+    if not row or not row.benchmarks:
+        return None
+
+    benchmarks = row.benchmarks
+    if isinstance(benchmarks, str):
+        benchmarks = json.loads(benchmarks)
+
+    by_spec = benchmarks.get("by_spec", {})
+    spec_key = f"{player_spec} {player_class}"
+    spec_data = by_spec.get(spec_key)
+    if not spec_data:
+        return None
+
+    # Get role from hardcoded rules (benchmark doesn't track role)
+    hardcoded = SPEC_ROTATION_RULES.get((player_class, player_spec))
+    if hardcoded:
+        role = hardcoded.role
+        healer_overheal = hardcoded.healer_overheal_target
+        long_cd = hardcoded.long_cd_efficiency
+    else:
+        role = ROLE_BY_SPEC.get(player_spec, "melee_dps")
+        defaults = ROLE_DEFAULT_RULES.get(role, ROLE_DEFAULT_RULES["melee_dps"])
+        healer_overheal = defaults.healer_overheal_target
+        long_cd = defaults.long_cd_efficiency
+
+    # GCD targets from benchmark
+    gcd_data = spec_data.get("gcd", {})
+    gcd_target = gcd_data.get("avg_gcd_uptime")
+    cpm_target = gcd_data.get("avg_cpm")
+
+    # Fall back to hardcoded if benchmark lacks GCD data
+    fallback = hardcoded or ROLE_DEFAULT_RULES.get(
+        role, ROLE_DEFAULT_RULES["melee_dps"],
+    )
+    if gcd_target is None:
+        gcd_target = fallback.gcd_target
+    if cpm_target is None:
+        cpm_target = fallback.cpm_target
+
+    # Cooldown efficiency from benchmark (average across all tracked CDs)
+    cooldowns = spec_data.get("cooldowns", [])
+    if cooldowns:
+        cd_eff = sum(cd.get("avg_efficiency", 0) for cd in cooldowns) / len(cooldowns)
+    else:
+        cd_eff = fallback.cd_efficiency_target
+
+    # Key abilities: top 5 by avg_damage_pct
+    abilities = spec_data.get("abilities", [])
+    sorted_abilities = sorted(
+        abilities, key=lambda a: a.get("avg_damage_pct", 0), reverse=True,
+    )
+    key_abilities = tuple(
+        a["ability_name"] for a in sorted_abilities[:5]
+        if "ability_name" in a
+    )
+
+    # DPS benchmark
+    dps_data = spec_data.get("dps", {})
+    benchmark_dps = dps_data.get("median_dps")
+    # For healers, prefer median_hps
+    if role == "healer":
+        benchmark_dps = dps_data.get("median_hps", benchmark_dps)
+
+    rules = SpecRules(
+        gcd_target=float(gcd_target),
+        cpm_target=float(cpm_target),
+        cd_efficiency_target=float(cd_eff),
+        long_cd_efficiency=float(long_cd),
+        key_abilities=key_abilities,
+        role=role,
+        healer_overheal_target=float(healer_overheal),
+    )
+    return rules, benchmark_dps
+
+
 def _letter_grade(score: float) -> str:
     """Return a letter grade for the given score (0-100).
 
@@ -457,7 +550,10 @@ def _letter_grade(score: float) -> str:
     )
 
 
-async def _score_healer(session, report_code, fight_id, player_name, info, rules):
+async def _score_healer(
+    session, report_code, fight_id, player_name, info, rules,
+    *, benchmark_dps: float | None = None, source: str = "default",
+):
     """Score a healer on overheal efficiency, mana management, and spell mix."""
     pn_like = wildcard(player_name)
     encounter_name = info.encounter_name
@@ -569,12 +665,20 @@ async def _score_healer(session, report_code, fight_id, player_name, info, rules
     score = (weighted_score / total_weight) * 100
     grade = _letter_grade(score)
 
+    source_label = (
+        "benchmark (top player data)" if source == "benchmark" else "default"
+    )
     lines = [
         f"Healer score for {player_name} "
         f"({info.player_class} {info.player_spec}) "
         f"on {encounter_name}:",
-        f"  Grade: {grade} ({score:.0f}%) | Weighted score",
+        f"  Grade: {grade} ({score:.0f}%) | Weighted score | "
+        f"Source: {source_label}",
     ] + details
+    if source == "benchmark" and benchmark_dps is not None:
+        lines.append(
+            f"  Top player median HPS: {benchmark_dps:,.1f}"
+        )
     lines.append(
         f"\n  TBC {info.player_spec} {info.player_class} key spells: "
         f"{', '.join(rules.key_abilities) if rules.key_abilities else 'N/A'}"
@@ -586,7 +690,10 @@ async def _score_healer(session, report_code, fight_id, player_name, info, rules
     return "\n".join(lines)
 
 
-async def _score_tank(session, report_code, fight_id, player_name, info, rules):
+async def _score_tank(
+    session, report_code, fight_id, player_name, info, rules,
+    *, benchmark_dps: float | None = None, source: str = "default",
+):
     """Score a tank on key ability usage, GCD uptime, and defensive CD awareness."""
     pn_like = wildcard(player_name)
     encounter_name = info.encounter_name
@@ -622,8 +729,12 @@ async def _score_tank(session, report_code, fight_id, player_name, info, rules):
             details.append("  Key abilities: all present \u2014 OK")
 
     # 2. GCD uptime (30% weight)
-    ctx = ENCOUNTER_CONTEXTS.get(encounter_name)
-    modifier = ctx.gcd_modifier if ctx else 1.0
+    # Skip ENCOUNTER_CONTEXTS when using benchmark data (already per-encounter)
+    if source == "benchmark":
+        modifier = 1.0
+    else:
+        ctx = ENCOUNTER_CONTEXTS.get(encounter_name)
+        modifier = ctx.gcd_modifier if ctx else 1.0
     adjusted_gcd = rules.gcd_target * modifier
 
     metrics_result = await session.execute(
@@ -690,12 +801,21 @@ async def _score_tank(session, report_code, fight_id, player_name, info, rules):
     score = (weighted_score / total_weight) * 100
     grade = _letter_grade(score)
 
+    source_label = (
+        "benchmark (top player data)" if source == "benchmark" else "default"
+    )
     lines = [
         f"Tank score for {player_name} "
         f"({info.player_class} {info.player_spec}) "
         f"on {encounter_name}:",
-        f"  Grade: {grade} ({score:.0f}%) | Weighted score",
+        f"  Grade: {grade} ({score:.0f}%) | Weighted score | "
+        f"Source: {source_label}",
     ] + details
+    if source == "benchmark" and benchmark_dps is not None:
+        lines.append(
+            f"  Top player median DPS: {benchmark_dps:,.1f} | "
+            f"Your DPS: {info.dps:,.1f}"
+        )
     lines.append(
         f"\n  TBC {info.player_spec} {info.player_class} key abilities: "
         f"{', '.join(rules.key_abilities) if rules.key_abilities else 'N/A'}"
@@ -717,6 +837,9 @@ async def _score_dps(
     player_name: str,
     info,
     rules,
+    *,
+    benchmark_dps: float | None = None,
+    source: str = "default",
 ):
     """Score a DPS player's rotation using spec-aware, encounter-aware rules."""
     pn_like = wildcard(player_name)
@@ -725,16 +848,21 @@ async def _score_dps(
     encounter_name = info.encounter_name
 
     # --- Resolve encounter context modifier ---
-    ctx = ENCOUNTER_CONTEXTS.get(encounter_name)
-    role = rules.role
-    is_melee = role == "melee_dps"
-    if ctx:
-        modifier = (
-            ctx.melee_modifier if is_melee and ctx.melee_modifier is not None
-            else ctx.gcd_modifier
-        )
-    else:
+    # Skip ENCOUNTER_CONTEXTS when using benchmark data (already per-encounter)
+    if source == "benchmark":
         modifier = 1.0
+        ctx = None
+    else:
+        ctx = ENCOUNTER_CONTEXTS.get(encounter_name)
+        role = rules.role
+        is_melee = role == "melee_dps"
+        if ctx:
+            modifier = (
+                ctx.melee_modifier if is_melee and ctx.melee_modifier is not None
+                else ctx.gcd_modifier
+            )
+        else:
+            modifier = 1.0
 
     adjusted_gcd = rules.gcd_target * modifier
     adjusted_cpm = rules.cpm_target * modifier
@@ -834,12 +962,22 @@ async def _score_dps(
     grade = _letter_grade(score)
 
     # --- Format output ---
+    source_label = (
+        "benchmark (top player data)" if source == "benchmark" else "default"
+    )
     lines = [
         f"Rotation score for {player_name} ({player_class} {spec}) "
         f"on {encounter_name} [{report_code}#{fight_id}]:\n",
         f"  Grade: {grade} ({score:.0f}%) | "
-        f"Rules passed: {rules_passed}/{rules_checked}",
+        f"Rules passed: {rules_passed}/{rules_checked} | "
+        f"Source: {source_label}",
     ]
+
+    if source == "benchmark" and benchmark_dps is not None:
+        lines.append(
+            f"  Top player median DPS: {benchmark_dps:,.1f} | "
+            f"Your DPS: {info.dps:,.1f}"
+        )
 
     if ctx and modifier < 1.0:
         lines.append(
@@ -900,24 +1038,36 @@ async def get_rotation_score(
     player_class = info_row.player_class
     spec = info_row.player_spec
 
-    # Look up spec rules, fall back to role defaults
-    rules = SPEC_ROTATION_RULES.get((player_class, spec))
-    if not rules:
-        role = ROLE_BY_SPEC.get(spec, "melee_dps")
-        rules = ROLE_DEFAULT_RULES.get(role, ROLE_DEFAULT_RULES["melee_dps"])
+    # Try benchmark-derived rules first, fall back to hardcoded
+    benchmark_dps = None
+    source = "default"
+    benchmark_result = await _fetch_benchmark_rules(
+        session, info_row.encounter_id, player_class, spec,
+    )
+    if benchmark_result:
+        rules, benchmark_dps = benchmark_result
+        source = "benchmark"
+    else:
+        rules = SPEC_ROTATION_RULES.get((player_class, spec))
+        if not rules:
+            role = ROLE_BY_SPEC.get(spec, "melee_dps")
+            rules = ROLE_DEFAULT_RULES.get(role, ROLE_DEFAULT_RULES["melee_dps"])
 
     # Route by role
     if rules.role == "healer":
         return await _score_healer(
             session, report_code, fight_id, player_name, info_row, rules,
+            benchmark_dps=benchmark_dps, source=source,
         )
     if rules.role == "tank":
         return await _score_tank(
             session, report_code, fight_id, player_name, info_row, rules,
+            benchmark_dps=benchmark_dps, source=source,
         )
 
     return await _score_dps(
         session, report_code, fight_id, player_name, info_row, rules,
+        benchmark_dps=benchmark_dps, source=source,
     )
 
 

@@ -250,6 +250,7 @@ async def fight_rotation_score(
     session: AsyncSession = Depends(get_db),
 ):
     """Rule-based rotation scoring for a player in a fight."""
+    from shukketsu.agent.tools.event_tools import _fetch_benchmark_rules
     from shukketsu.pipeline.constants import (
         ENCOUNTER_CONTEXTS,
         ROLE_BY_SPEC,
@@ -274,22 +275,33 @@ async def fight_rotation_score(
         player_class = info_row.player_class
         encounter_name = info_row.encounter_name
 
-        # Look up spec-aware thresholds (same logic as agent tool)
-        rules = SPEC_ROTATION_RULES.get((player_class, spec))
-        if not rules:
-            role = ROLE_BY_SPEC.get(spec, "melee_dps")
-            rules = ROLE_DEFAULT_RULES.get(role, ROLE_DEFAULT_RULES["melee_dps"])
+        # Try benchmark-derived rules, fall back to hardcoded
+        source = "default"
+        benchmark_result = await _fetch_benchmark_rules(
+            session, info_row.encounter_id, player_class, spec,
+        )
+        if benchmark_result:
+            rules, _benchmark_dps = benchmark_result
+            source = "benchmark"
+        else:
+            rules = SPEC_ROTATION_RULES.get((player_class, spec))
+            if not rules:
+                role = ROLE_BY_SPEC.get(spec, "melee_dps")
+                rules = ROLE_DEFAULT_RULES.get(
+                    role, ROLE_DEFAULT_RULES["melee_dps"],
+                )
 
-        # Apply encounter context modifier (match agent tool's _score_dps logic)
-        ctx = ENCOUNTER_CONTEXTS.get(encounter_name)
+        # Apply encounter context modifier (skip when benchmark-sourced)
         modifier = 1.0
-        if ctx:
-            is_melee = rules.role == "melee_dps"
-            modifier = (
-                ctx.melee_modifier
-                if is_melee and ctx.melee_modifier is not None
-                else ctx.gcd_modifier
-            )
+        if source == "default":
+            ctx = ENCOUNTER_CONTEXTS.get(encounter_name)
+            if ctx:
+                is_melee = rules.role == "melee_dps"
+                modifier = (
+                    ctx.melee_modifier
+                    if is_melee and ctx.melee_modifier is not None
+                    else ctx.gcd_modifier
+                )
         gcd_target = rules.gcd_target * modifier
         cpm_target = rules.cpm_target * modifier
 
