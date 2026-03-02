@@ -575,6 +575,14 @@ async def _score_healer(session, report_code, fight_id, player_name, info, rules
         f"on {encounter_name}:",
         f"  Grade: {grade} ({score:.0f}%) | Weighted score",
     ] + details
+    lines.append(
+        f"\n  TBC {info.player_spec} {info.player_class} key spells: "
+        f"{', '.join(rules.key_abilities) if rules.key_abilities else 'N/A'}"
+    )
+    lines.append(
+        "  IMPORTANT: Only reference abilities listed above. "
+        "Do NOT invent abilities from other WoW expansions."
+    )
     return "\n".join(lines)
 
 
@@ -688,6 +696,14 @@ async def _score_tank(session, report_code, fight_id, player_name, info, rules):
         f"on {encounter_name}:",
         f"  Grade: {grade} ({score:.0f}%) | Weighted score",
     ] + details
+    lines.append(
+        f"\n  TBC {info.player_spec} {info.player_class} key abilities: "
+        f"{', '.join(rules.key_abilities) if rules.key_abilities else 'N/A'}"
+    )
+    lines.append(
+        "  IMPORTANT: Only reference abilities listed above. "
+        "Do NOT invent abilities from other WoW expansions."
+    )
     return "\n".join(lines)
 
 
@@ -845,6 +861,16 @@ async def _score_dps(
         lines.append("\n  Notes:")
         for n in notes:
             lines.append(f"    - {n}")
+
+    # Include spec rotation reference so the LLM uses correct TBC abilities
+    lines.append(f"\n  TBC {spec} {player_class} rotation reference:")
+    lines.append(f"    GCD target: {rules.gcd_target}% | CPM target: {rules.cpm_target}")
+    if rules.key_abilities:
+        lines.append(f"    Key abilities: {', '.join(rules.key_abilities)}")
+    lines.append(
+        "    IMPORTANT: Only reference abilities listed above. "
+        "Do NOT invent abilities from other WoW expansions."
+    )
 
     return "\n".join(lines)
 
