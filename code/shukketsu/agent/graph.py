@@ -252,6 +252,7 @@ _TOOL_ALIASES: dict[str, str] = {
     "get_gear": "get_gear_changes",
     "get_report_data": "get_raid_execution",
     "get_enchants": "get_enchant_gem_check",
+    "get_encounter_progress": "get_wipe_progression",
     "get_resources": "get_resource_usage",
     "get_dots": "get_dot_management",
     "get_phases": "get_phase_analysis",
@@ -725,6 +726,8 @@ async def prefetch_node(state: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {"intent": intent.intent}
     if injected:
         result["messages"] = injected
+    if intent.player_names:
+        result["player_names"] = intent.player_names
     return result
 
 
@@ -806,6 +809,16 @@ async def agent_node(
     if has_error:
         full_messages.append(SystemMessage(content=_RETRY_HINT))
 
+        # Inject player focus reminder when we know the player name
+        player_names = state.get("player_names", [])
+        if player_names:
+            names_str = ", ".join(player_names)
+            full_messages.append(SystemMessage(content=(
+                f"CRITICAL: Your response MUST mention {names_str} by name. "
+                f"Even if the data is unavailable, say "
+                f"\"I couldn't find [data type] for {names_str}.\""
+            )))
+
     response = await llm_with_tools.ainvoke(full_messages)
 
     # Fix hallucinated tool names, normalize args, and auto-repair missing args
@@ -816,6 +829,16 @@ async def agent_node(
             tc["args"] = _auto_repair_args(
                 tc["name"], tc["args"], messages,
             )
+
+    # Post-process: ensure player names appear in final text response
+    player_names = state.get("player_names", [])
+    if (isinstance(response, AIMessage) and response.content
+            and not response.tool_calls and player_names):
+        content_lower = response.content.lower()
+        missing = [n for n in player_names if n.lower() not in content_lower]
+        if missing:
+            names = ", ".join(missing)
+            response = AIMessage(content=f"Regarding {names}: {response.content}")
 
     result: dict[str, Any] = {"messages": [response]}
 

@@ -23,7 +23,12 @@ from pathlib import Path
 
 import httpx
 
-from shukketsu.agent.tool_utils import GIVE_UP_PHRASES, VALID_ARGS, VALID_TOOLS
+from shukketsu.agent.tool_utils import (
+    GIVE_UP_PHRASES,
+    VALID_ARGS,
+    VALID_TOOLS,
+    normalize_unicode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,11 +132,11 @@ def score_trace(messages: list[dict], user_query: str | None = None) -> dict:
     # 4. Depth — number of tool calls
     depth = len(tool_calls)
 
-    # 5. No give-up
+    # 5. No give-up (normalize Unicode curly quotes before matching)
     no_give_up = 1.0
     for msg in messages:
         if isinstance(msg, dict) and msg.get("role") == "assistant" and msg.get("content"):
-            content_lower = msg["content"].lower()
+            content_lower = normalize_unicode(msg["content"]).lower()
             for phrase in _GIVE_UP_PHRASES:
                 if phrase in content_lower:
                     no_give_up = 0.0

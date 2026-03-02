@@ -531,6 +531,29 @@ class TestPrefetchNode:
         ]
         assert "get_regressions" in tool_names
 
+    async def test_prefetch_returns_player_names(self):
+        """Prefetch should set player_names in state for agent_node to use."""
+        msg = HumanMessage(
+            content="Show Tankboy's death recap in Fn2ACKZtyzc1QLJP"
+        )
+        mock_death = AsyncMock()
+        mock_death.ainvoke = AsyncMock(return_value="death data")
+
+        with (
+            patch(
+                "shukketsu.agent.tools.event_tools.get_death_analysis",
+                mock_death,
+            ),
+            patch(
+                "shukketsu.agent.graph._get_kill_fight_ids",
+                return_value=[8],
+            ),
+        ):
+            result = await prefetch_node({"messages": [msg]})
+
+        assert "player_names" in result
+        assert "Tankboy" in result["player_names"]
+
 
 class TestAgentNode:
     async def test_prepends_system_message(self):
@@ -1259,3 +1282,123 @@ class TestRetryBudget:
         )
 
         assert result.get("tool_error_count", 0) == 0
+
+    async def test_player_focus_system_message_on_tool_error(self):
+        """When tool error + player_names in state, inject player focus hint."""
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(
+            content="Analysis for Zapzap."
+        )
+
+        state = {
+            "messages": [
+                HumanMessage(content="Show death recap for Zapzap"),
+                AIMessage(content="", tool_calls=[{
+                    "name": "get_death_analysis",
+                    "args": {"player_name": "Zapzap", "report_code": "abc"},
+                    "id": "1",
+                }]),
+                ToolMessage(
+                    content="Error: No death data found.",
+                    tool_call_id="1",
+                ),
+            ],
+            "player_names": ["Zapzap"],
+            "tool_error_count": 0,
+        }
+        result = await agent_node(
+            state, llm=mock_llm, all_tools=[], tool_names=_TOOL_NAMES,
+        )
+
+        # Should have injected a SystemMessage mentioning the player name
+        call_args = mock_llm.ainvoke.call_args[0][0]
+        sys_msgs = [m for m in call_args if isinstance(m, SystemMessage)]
+        # Must have a separate SystemMessage (not SYSTEM_PROMPT) with player name
+        player_msgs = [
+            m for m in sys_msgs
+            if "Zapzap" in m.content
+        ]
+        assert len(player_msgs) >= 1, (
+            "Expected SystemMessage mentioning Zapzap"
+        )
+
+    async def test_player_name_injected_into_response_when_missing(self):
+        """When player_names set but model omits them, prepend to response."""
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(
+            content="No death data found for fight 21."
+        )
+
+        state = {
+            "messages": [
+                HumanMessage(content="Show death recap for Zapzap"),
+                AIMessage(content="", tool_calls=[{
+                    "name": "get_death_analysis",
+                    "args": {"player_name": "Zapzap", "report_code": "abc"},
+                    "id": "1",
+                }]),
+                ToolMessage(
+                    content="Error: No death data found.",
+                    tool_call_id="1",
+                ),
+            ],
+            "player_names": ["Zapzap"],
+            "tool_error_count": 0,
+        }
+        result = await agent_node(
+            state, llm=mock_llm, all_tools=[], tool_names=_TOOL_NAMES,
+        )
+
+        response = result["messages"][0]
+        assert "Zapzap" in response.content
+
+    async def test_player_name_not_duplicated_when_present(self):
+        """When model already mentions the player, don't prepend."""
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(
+            content="Zapzap's death data is not available."
+        )
+
+        state = {
+            "messages": [HumanMessage(content="test")],
+            "player_names": ["Zapzap"],
+        }
+        result = await agent_node(
+            state, llm=mock_llm, all_tools=[], tool_names=_TOOL_NAMES,
+        )
+
+        response = result["messages"][0]
+        # Should NOT have "Regarding Zapzap:" prefix
+        assert not response.content.startswith("Regarding")
+
+    async def test_no_player_focus_msg_without_player_names(self):
+        """No player focus hint when player_names not in state."""
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = AIMessage(
+            content="Analysis."
+        )
+
+        state = {
+            "messages": [
+                HumanMessage(content="Analyze Gruul"),
+                AIMessage(content="", tool_calls=[{
+                    "name": "search_fights",
+                    "args": {"encounter_name": "Gruul"},
+                    "id": "1",
+                }]),
+                ToolMessage(
+                    content="Error: No data found.",
+                    tool_call_id="1",
+                ),
+            ],
+            "tool_error_count": 0,
+        }
+        result = await agent_node(
+            state, llm=mock_llm, all_tools=[], tool_names=_TOOL_NAMES,
+        )
+
+        # Only SYSTEM_PROMPT + retry hint, no player focus message
+        call_args = mock_llm.ainvoke.call_args[0][0]
+        sys_msgs = [m for m in call_args if isinstance(m, SystemMessage)]
+        # Should be exactly 2: SYSTEM_PROMPT + retry hint
+        assert len(sys_msgs) == 2

@@ -17,6 +17,13 @@ class TestAnalyzerState:
     def test_has_tool_error_count_field(self):
         assert "tool_error_count" in AnalyzerState.__annotations__
 
+    def test_has_player_names_field(self):
+        assert "player_names" in AnalyzerState.__annotations__
+
+    def test_player_names_defaults_to_empty_list(self):
+        state = AnalyzerState(messages=[])
+        assert state.get("player_names", []) == []
+
 
 class TestSystemPrompt:
     def test_contains_domain_context(self):

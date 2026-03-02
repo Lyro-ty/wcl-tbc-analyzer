@@ -137,6 +137,28 @@ class TestScoreTrace:
         assert scores["depth"] == 2
         assert scores["tool_name_accuracy"] == 1.0
 
+    def test_which_report_ids_not_give_up(self):
+        """'which report IDs you have' is helpful, not giving up."""
+        messages = [
+            {"role": "assistant", "content": (
+                "I'd be happy to help analyze your wipe progression. "
+                "Just let me know which report IDs you have and I'll "
+                "check the data for you."
+            )},
+        ]
+        scores = score_trace(messages, "Show wipe progression on Gruul")
+        assert scores["no_give_up"] == 1.0
+
+    def test_unicode_apostrophe_give_up_detected(self):
+        """Nemotron uses U+2019 curly apostrophe — must still detect give-up."""
+        messages = [
+            {"role": "assistant", "content": (
+                "I\u2019m sorry, I can\u2019t help with that."
+            )},
+        ]
+        scores = score_trace(messages, "Check my DPS")
+        assert scores["no_give_up"] == 0.0
+
     def test_deep_success_requires_all_metrics(self):
         """Deep success = all binary metrics pass + depth >= 1."""
         messages = [

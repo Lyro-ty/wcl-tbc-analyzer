@@ -32,17 +32,28 @@ VALID_ARGS = frozenset({
     "report_code_old", "report_code_new",
 })
 
-# Phrases indicating the model gave up instead of retrying
+# Phrases indicating the model gave up instead of retrying.
+# Narrowed to avoid false positives (e.g. "which report IDs you have" is helpful).
+# Unicode: Nemotron uses U+2019 curly apostrophe; normalize before matching.
 GIVE_UP_PHRASES = [
     "i need you to provide",
     "could you provide",
     "please provide",
-    "what report",
-    "which report",
+    "what report should",
+    "what report would",
+    "what report code",
+    "which report should",
+    "which report would",
+    "which report code",
     "i'm sorry",
     "i apologize",
     "unfortunately, i",
 ]
+
+
+def normalize_unicode(text: str) -> str:
+    """Normalize Unicode curly quotes to ASCII for phrase matching."""
+    return text.replace("\u2019", "'").replace("\u2018", "'")
 
 # Module-level session provider, set during app startup
 _session_factory = None
