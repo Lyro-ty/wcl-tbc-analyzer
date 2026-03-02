@@ -373,24 +373,43 @@ def _inject_tool_result(
     return [ai_msg, tool_msg]
 
 
-async def _get_kill_fight_ids(report_code: str) -> list[int]:
+async def _get_kill_fight_ids(
+    report_code: str,
+    *,
+    encounter_name: str | None = None,
+) -> list[int]:
     """Get WCL fight IDs for kill fights in a report (lightweight DB query).
 
     Returns fight_id (WCL's per-report fight number), NOT the DB primary key,
     since get_fight_details queries by f.fight_id.
+
+    When encounter_name is provided, filters to fights matching that encounter
+    (via JOIN against the encounters table).
     """
     from shukketsu.agent.tool_utils import _get_session
 
     session = await _get_session()
     try:
-        result = await session.execute(
-            text(
-                "SELECT fight_id FROM fights "
-                "WHERE report_code = :code AND kill = true "
-                "ORDER BY fight_id"
-            ),
-            {"code": report_code},
-        )
+        if encounter_name:
+            result = await session.execute(
+                text(
+                    "SELECT f.fight_id FROM fights f "
+                    "JOIN encounters e ON f.encounter_id = e.id "
+                    "WHERE f.report_code = :code AND f.kill = true "
+                    "AND e.name ILIKE :encounter "
+                    "ORDER BY f.fight_id"
+                ),
+                {"code": report_code, "encounter": f"%{encounter_name}%"},
+            )
+        else:
+            result = await session.execute(
+                text(
+                    "SELECT fight_id FROM fights "
+                    "WHERE report_code = :code AND kill = true "
+                    "ORDER BY fight_id"
+                ),
+                {"code": report_code},
+            )
         return [row[0] for row in result.fetchall()]
     finally:
         await session.close()
@@ -415,7 +434,9 @@ async def _prefetch_report(intent: IntentResult) -> list:
         "get_raid_execution", {"report_code": code}, result,
     )
 
-    fight_ids = await _get_kill_fight_ids(code)
+    fight_ids = await _get_kill_fight_ids(
+        code, encounter_name=intent.encounter_name,
+    )
     for fight_id in fight_ids[:_MAX_PREFETCH_FIGHTS]:
         detail = await get_fight_details.ainvoke({
             "report_code": code, "fight_id": fight_id,
@@ -444,7 +465,9 @@ async def _prefetch_player(intent: IntentResult) -> list:
         "get_raid_execution", {"report_code": code}, result,
     )
 
-    fight_ids = await _get_kill_fight_ids(code)
+    fight_ids = await _get_kill_fight_ids(
+        code, encounter_name=intent.encounter_name,
+    )
     for fight_id in fight_ids[:_MAX_PREFETCH_FIGHTS]:
         detail = await get_fight_details.ainvoke({
             "report_code": code, "fight_id": fight_id,

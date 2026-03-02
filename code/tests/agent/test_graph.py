@@ -193,6 +193,55 @@ class TestPrefetchNode:
         assert "get_fight_details" in tool_names
         assert result.get("intent") == "report_analysis"
 
+    async def test_prefetch_report_with_encounter_filters_fights(self):
+        """When user asks about a specific encounter, only prefetch that fight."""
+        state = {
+            "messages": [
+                HumanMessage(
+                    content=(
+                        "How did we do on High King Maulgar "
+                        "in Fn2ACKZtyzc1QLJP?"
+                    )
+                ),
+            ]
+        }
+
+        mock_raid = AsyncMock()
+        mock_raid.ainvoke = AsyncMock(return_value="raid data")
+        mock_details = AsyncMock()
+        mock_details.ainvoke = AsyncMock(return_value="fight data")
+
+        with (
+            patch(
+                "shukketsu.agent.tools.raid_tools.get_raid_execution",
+                mock_raid,
+            ),
+            patch(
+                "shukketsu.agent.tools.player_tools.get_fight_details",
+                mock_details,
+            ),
+            patch(
+                "shukketsu.agent.graph._get_kill_fight_ids",
+                return_value=[3],
+            ) as mock_kill_ids,
+        ):
+            result = await prefetch_node(state)
+
+        # _get_kill_fight_ids should have been called with encounter filter
+        mock_kill_ids.assert_called_once_with(
+            "Fn2ACKZtyzc1QLJP",
+            encounter_name="High King Maulgar",
+        )
+        # Should still have raid execution + filtered fight details
+        msgs = result["messages"]
+        tool_names = [
+            m.tool_calls[0]["name"]
+            for m in msgs
+            if hasattr(m, "tool_calls") and m.tool_calls
+        ]
+        assert "get_raid_execution" in tool_names
+        assert "get_fight_details" in tool_names
+
     async def test_prefetch_player_analysis_fetches_activity_report(self):
         """When intent=player_analysis, prefetch activity_report for kills."""
         msg = HumanMessage(
