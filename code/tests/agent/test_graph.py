@@ -75,8 +75,14 @@ class TestExtractReportCode:
         assert code == "xHZ4Vd7WpGBTp7q"
 
     def test_extracts_14_char_code(self):
-        code = _extract_report_code("report aBcDeFgHiJkLmN")
-        assert code == "aBcDeFgHiJkLmN"
+        code = _extract_report_code("report aB3cD4eF5gH6iJ")
+        assert code == "aB3cD4eF5gH6iJ"
+
+    def test_rejects_pure_alpha_string(self):
+        """English words like 'administration' must not match as report codes."""
+        assert _extract_report_code("administration is important") is None
+        assert _extract_report_code("Congratulations on the kill") is None
+        assert _extract_report_code("characterization of the boss") is None
 
     def test_extracts_from_url(self):
         code = _extract_report_code(
@@ -1306,7 +1312,7 @@ class TestRetryBudget:
             "player_names": ["Zapzap"],
             "tool_error_count": 0,
         }
-        result = await agent_node(
+        await agent_node(
             state, llm=mock_llm, all_tools=[], tool_names=_TOOL_NAMES,
         )
 
@@ -1393,7 +1399,7 @@ class TestRetryBudget:
             ],
             "tool_error_count": 0,
         }
-        result = await agent_node(
+        await agent_node(
             state, llm=mock_llm, all_tools=[], tool_names=_TOOL_NAMES,
         )
 

@@ -26,6 +26,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from sqlalchemy import text
 
 from shukketsu.agent.intent import (
+    _REPORT_CODE_RE,
     IntentResult,
     _extract_encounter_name,
     _extract_player_names,
@@ -39,10 +40,7 @@ logger = logging.getLogger(__name__)
 # Maximum fight details to prefetch (prevents slow prefetch for large raids)
 _MAX_PREFETCH_FIGHTS = 5
 
-# WCL report codes: 16+ alphanumeric chars (typically 16 or 32 hex).
-# Also matches codes inside URLs like /reports/CODE
-_REPORT_CODE_RE = re.compile(r'(?:reports/)?([a-zA-Z0-9]{14,40})')
-
+# _REPORT_CODE_RE imported from intent.py (single source of truth)
 # _extract_player_names imported from intent.py (single source of truth)
 
 # Tools that require fight_id as an argument
@@ -155,9 +153,15 @@ def _lookup_tool(name: str) -> Any | None:
 
 
 def _extract_report_code(text: str) -> str | None:
-    """Extract a WCL report code from user text."""
-    match = _REPORT_CODE_RE.search(text)
-    return match.group(1) if match else None
+    """Extract a WCL report code from user text.
+
+    Requires at least one digit to avoid false positives on English words.
+    """
+    for match in _REPORT_CODE_RE.finditer(text):
+        code = match.group(1)
+        if any(c.isdigit() for c in code):
+            return code
+    return None
 
 
 # Argument name alias map: hallucinated arg name → correct arg name

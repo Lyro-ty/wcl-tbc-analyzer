@@ -270,8 +270,13 @@ class TestShortReportCode:
         assert result.report_code == "xHZ4Vd7WpGBTp7q"
 
     def test_14_char_report_code(self):
-        result = classify_intent("Analyze report aBcDeFgHiJkLmN")
-        assert result.report_code == "aBcDeFgHiJkLmN"
+        result = classify_intent("Analyze report aB3cD4eF5gH6iJ")
+        assert result.report_code == "aB3cD4eF5gH6iJ"
+
+    def test_pure_alpha_not_matched_as_report_code(self):
+        """Pure-alpha strings must not match (prevents 'administration' etc.)."""
+        result = classify_intent("administration of the raid")
+        assert result.report_code is None
 
     def test_13_char_not_matched(self):
         """13 chars is too short to be a report code."""

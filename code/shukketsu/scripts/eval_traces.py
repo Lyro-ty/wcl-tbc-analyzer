@@ -23,6 +23,7 @@ from pathlib import Path
 
 import httpx
 
+from shukketsu.agent.intent import _extract_player_names
 from shukketsu.agent.tool_utils import (
     GIVE_UP_PHRASES,
     VALID_ARGS,
@@ -53,29 +54,6 @@ def _extract_tool_calls(messages: list[dict]) -> list[dict]:
             for tc in msg["tool_calls"]:
                 calls.append(tc)
     return calls
-
-
-def _extract_player_names_from_query(query: str) -> list[str]:
-    """Extract potential player names from the user query."""
-    import re
-    words = re.findall(r"\b([A-Z][a-z]{2,15})\b", query)
-    common = {
-        "Show", "Tell", "What", "How", "Get", "Check", "Find",
-        "Compare", "Analyze", "Pull", "The", "For", "From", "With",
-        "About", "Their", "Report", "Fight", "Raid", "Boss", "Gruul",
-        "Prince", "Malchezaar", "Nightbane", "Netherspite", "Curator",
-        "Shade", "Aran", "Illhoof", "Maiden", "Moroes", "Attumen",
-        "Opera", "Chess", "Magtheridon", "Maulgar",
-        "Karazhan", "Arms", "Fury", "Protection", "Holy", "Discipline",
-        "Shadow", "Restoration", "Enhancement", "Elemental", "Balance",
-        "Feral", "Retribution", "Beast", "Marksmanship", "Survival",
-        "Assassination", "Combat", "Subtlety", "Affliction", "Demonology",
-        "Destruction", "Arcane", "Fire", "Frost",
-        "Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Shaman",
-        "Mage", "Warlock", "Druid",
-        "Now", "Then", "Just", "Still", "Only", "Next", "Last", "Both",
-    }
-    return [w for w in words if w not in common]
 
 
 def score_trace(messages: list[dict], user_query: str | None = None) -> dict:
@@ -114,7 +92,7 @@ def score_trace(messages: list[dict], user_query: str | None = None) -> dict:
     arg_acc = valid_args / total_args if total_args > 0 else 0.0
 
     # 3. Focus accuracy — did the response address the right player?
-    player_names = _extract_player_names_from_query(user_query)
+    player_names = _extract_player_names(user_query)
     focus = 1.0  # Default to pass if no player mentioned in query
     if player_names:
         # Check if any assistant response mentions the player

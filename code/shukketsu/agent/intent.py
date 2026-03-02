@@ -9,7 +9,9 @@ before the LLM runs.
 import re
 from dataclasses import dataclass, field
 
-# WCL report codes: 16+ alphanumeric chars
+# WCL report codes: 14+ alphanumeric chars containing at least one digit.
+# The digit requirement prevents false positives on English words like
+# "administration" or "Congratulations".
 _REPORT_CODE_RE = re.compile(r'(?:reports/)?([a-zA-Z0-9]{14,40})')
 
 # Player name: capitalized word 3-15 chars, excluding common words/bosses
@@ -181,7 +183,10 @@ def _extract_fight_id(text: str) -> int | None:
 
 
 def _extract_report_codes(text: str) -> list[str]:
-    return [m.group(1) for m in _REPORT_CODE_RE.finditer(text)]
+    return [
+        m.group(1) for m in _REPORT_CODE_RE.finditer(text)
+        if any(c.isdigit() for c in m.group(1))
+    ]
 
 
 def _extract_player_names(text: str) -> list[str]:
